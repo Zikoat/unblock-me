@@ -1,6 +1,7 @@
 import { blockCells, type GameState } from "./game";
 
 export const instructions = "Enter <block-id> <direction> (left, right, up, down), help, or quit.";
+export const legend = "Legend: R/A/B=blocks #=Wall *=Checkpoint .=empty";
 
 export function renderFrame(state: GameState, notice?: string): string {
   const cells = Array.from({ length: state.height }, () => Array.from({ length: state.width }, () => "."));
@@ -13,7 +14,7 @@ export function renderFrame(state: GameState, notice?: string): string {
 
   const board = cells.map((row) => row.join(" ")).join("\n");
   const footer = [
-    "Legend: R/A/B=blocks #=Wall *=Checkpoint .=empty",
+    legend,
     `moves=${state.moves} won=${state.won}`,
     ...(state.won ? ["YOU WIN"] : []),
   ].join("\n");

@@ -40,11 +40,12 @@ test("keeps the current state after invalid input", async () => {
   );
 });
 
-test("prints instructions for help", async () => {
+test("prints instructions and the shared legend for help", async () => {
   const { exitCode, output } = await play(["help", "quit"]);
 
   expect(exitCode).toBe(0);
   expect(output.match(/Enter <block-id> <direction> \(left, right, up, down\), help, or quit\./g)).toHaveLength(2);
+  expect(output.match(/Legend: R\/A\/B=blocks #=Wall \*=Checkpoint \.=empty/g)).toHaveLength(2);
 });
 
 test("returns zero for quit and EOF", async () => {

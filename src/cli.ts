@@ -2,7 +2,7 @@ import { createInterface } from "node:readline";
 import { parseCommand } from "./commands";
 import { applyMove } from "./game";
 import { createPuzzle } from "./puzzle";
-import { instructions, renderFrame } from "./render";
+import { instructions, legend, renderFrame } from "./render";
 
 export async function runCli(
   input: NodeJS.ReadableStream,
@@ -21,7 +21,7 @@ export async function runCli(
       }
 
       if (parsed.command.type === "help") {
-        output.write(`${instructions}\n`);
+        output.write(`${instructions}\n${legend}\n`);
         continue;
       }
 
