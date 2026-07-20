@@ -125,15 +125,9 @@ function Assert-TranscriptContains([string]$marker) {
   }
 }
 
-$repositoryHashAlgorithm = [System.Security.Cryptography.SHA256]::Create()
-try {
-  $repositoryHashBytes = $repositoryHashAlgorithm.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($repositoryRoot.ToLowerInvariant()))
-}
-finally {
-  $repositoryHashAlgorithm.Dispose()
-}
-$repositoryHash = [BitConverter]::ToString($repositoryHashBytes).Replace("-", "")
-$verificationMutex = [System.Threading.Mutex]::new($false, "Local\unblock-me-tmux-$repositoryHash")
+$distroLockScope = [regex]::Replace($distro, "[^A-Za-z0-9_.-]", "_")
+$verificationMutexName = "Local\unblock-me-tmux-distro-$distroLockScope"
+$verificationMutex = [System.Threading.Mutex]::new($false, $verificationMutexName)
 $lockAcquired = $false
 try {
   $lockAcquired = $verificationMutex.WaitOne(0)
@@ -142,7 +136,7 @@ catch [System.Threading.AbandonedMutexException] {
   $lockAcquired = $true
 }
 if (-not $lockAcquired) {
-  [Console]::Error.WriteLine("Another tmux verification is already running for $repositoryRoot")
+  [Console]::Error.WriteLine("Another tmux verification is already running for WSL distribution $distro")
   try {
     $verificationMutex.Dispose()
   }
