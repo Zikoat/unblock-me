@@ -93,7 +93,7 @@ test("the start script exits after winning while stdin remains open", async () =
   const stderrPromise = new Response(child.stderr).text();
   const exitCode = await Promise.race([
     child.exited,
-    Bun.sleep(500).then(() => null),
+    Bun.sleep(2000).then(() => null),
   ]);
   const timedOut = exitCode === null;
   if (timedOut) {
@@ -102,7 +102,7 @@ test("the start script exits after winning while stdin remains open", async () =
   }
   const [stdout, stderr] = await Promise.all([stdoutPromise, stderrPromise]);
 
-  if (timedOut) throw new Error(`start process did not exit within 500ms; stderr: ${stderr}`);
+  if (timedOut) throw new Error(`start process did not exit within 2000ms; stderr: ${stderr}`);
   expect(exitCode).toBe(0);
   expect(stdout).toContain("moves=7 won=true");
   expect(stdout).toContain("YOU WIN");

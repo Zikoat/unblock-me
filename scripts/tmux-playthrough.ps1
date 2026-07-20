@@ -3,16 +3,23 @@ $ErrorActionPreference = "Stop"
 $distro = "Ubuntu-24.04"
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $artifactRoot = Join-Path $repositoryRoot "artifacts\tmux"
-$paneRoot = Join-Path $artifactRoot "panes"
 $bunWindowsPath = (Get-Command bun -ErrorAction Stop).Source
 $sessionName = "unblock-me-verify-$PID-$([DateTime]::UtcNow.ToString('yyyyMMddHHmmssfff'))"
 $solution = @("A up", "B down", "R right", "R right", "R right", "R right", "R right")
 $frames = [System.Collections.Generic.List[object]]::new()
 $transcriptSections = [System.Collections.Generic.List[string]]::new()
-$shimRoot = Join-Path $artifactRoot "runs\$sessionName"
+$runRoot = Join-Path $artifactRoot "runs\$sessionName"
+$evidenceRoot = Join-Path $runRoot "evidence"
+$paneRoot = Join-Path $evidenceRoot "panes"
+$runManifestPath = Join-Path $evidenceRoot "manifest.json"
+$runTranscriptPath = Join-Path $evidenceRoot "transcript.txt"
+$authoritativeManifestPath = Join-Path $artifactRoot "manifest.json"
+$authoritativeTranscriptPath = Join-Path $artifactRoot "transcript.txt"
+$shimRoot = Join-Path $runRoot "shim"
 $shimPath = Join-Path $shimRoot "bun"
 $shimDirectoryCreated = $false
 $wslInteropAdded = $false
+$tmuxSessionCreated = $false
 
 function ConvertTo-BashLiteral([string]$value) {
   return "'" + $value.Replace("'", "'`"'`"'") + "'"
@@ -65,6 +72,38 @@ function Write-Utf8([string]$path, [string]$content) {
   [System.IO.File]::WriteAllText($path, $content, [System.Text.UTF8Encoding]::new($false))
 }
 
+function Publish-AtomicFile([string]$sourcePath, [string]$destinationPath) {
+  $temporaryPath = "$destinationPath.$sessionName.tmp"
+  $backupPath = "$destinationPath.$sessionName.bak"
+  try {
+    [System.IO.File]::Copy($sourcePath, $temporaryPath, $true)
+    if (Test-Path -LiteralPath $destinationPath) {
+      [System.IO.File]::Replace($temporaryPath, $destinationPath, $backupPath)
+    }
+    else {
+      [System.IO.File]::Move($temporaryPath, $destinationPath)
+    }
+  }
+  finally {
+    if (Test-Path -LiteralPath $temporaryPath) {
+      try {
+        Remove-Item -LiteralPath $temporaryPath -Force
+      }
+      catch {
+        Write-Warning "Atomic publication cleanup failed: $_"
+      }
+    }
+    if (Test-Path -LiteralPath $backupPath) {
+      try {
+        Remove-Item -LiteralPath $backupPath -Force
+      }
+      catch {
+        Write-Warning "Atomic publication backup cleanup failed: $_"
+      }
+    }
+  }
+}
+
 function Capture-Frame([string]$label, [int]$durationMs) {
   Start-Sleep -Milliseconds $durationMs
   $capturedLines = Invoke-WslBash "tmux capture-pane -p -t $(ConvertTo-BashLiteral "$sessionName`:0.0")"
@@ -86,9 +125,36 @@ function Assert-TranscriptContains([string]$marker) {
   }
 }
 
+$repositoryHashAlgorithm = [System.Security.Cryptography.SHA256]::Create()
+try {
+  $repositoryHashBytes = $repositoryHashAlgorithm.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($repositoryRoot.ToLowerInvariant()))
+}
+finally {
+  $repositoryHashAlgorithm.Dispose()
+}
+$repositoryHash = [BitConverter]::ToString($repositoryHashBytes).Replace("-", "")
+$verificationMutex = [System.Threading.Mutex]::new($false, "Local\unblock-me-tmux-$repositoryHash")
+$lockAcquired = $false
+try {
+  $lockAcquired = $verificationMutex.WaitOne(0)
+}
+catch [System.Threading.AbandonedMutexException] {
+  $lockAcquired = $true
+}
+if (-not $lockAcquired) {
+  [Console]::Error.WriteLine("Another tmux verification is already running for $repositoryRoot")
+  try {
+    $verificationMutex.Dispose()
+  }
+  catch {
+    Write-Warning "Verification lock disposal failed: $_"
+  }
+  exit 1
+}
+
 $exitCode = 1
 try {
-  New-Item -ItemType Directory -Force -Path $artifactRoot, $paneRoot, $shimRoot | Out-Null
+  New-Item -ItemType Directory -Force -Path $artifactRoot, $evidenceRoot, $paneRoot, $shimRoot | Out-Null
   $shimDirectoryCreated = $true
   $repositoryWslPath = ConvertTo-WslPath $repositoryRoot
   $bunWslPath = ConvertTo-WslPath $bunWindowsPath
@@ -100,6 +166,7 @@ try {
 
   $paneCommand = "cd $(ConvertTo-BashLiteral $repositoryWslPath) && PATH=$(ConvertTo-BashLiteral $shimRootWslPath):`$PATH bun run start; app_status=`$?; printf '\n__APP_EXIT__=%s\n' `"`$app_status`"; exec bash"
   Invoke-WslBash "tmux new-session -d -s $(ConvertTo-BashLiteral $sessionName) $(ConvertTo-BashLiteral $paneCommand)" | Out-Null
+  $tmuxSessionCreated = $true
 
   Capture-Frame "initial" 1000
   for ($moveIndex = 0; $moveIndex -lt $solution.Count; $moveIndex += 1) {
@@ -115,32 +182,44 @@ try {
   Capture-Frame "won-hold" 1500
 
   $transcript = $transcriptSections -join "`n"
-  Write-Utf8 (Join-Path $artifactRoot "transcript.txt") $transcript
+  Write-Utf8 $runTranscriptPath $transcript
   Assert-TranscriptContains "moves=0 won=false"
   1..7 | ForEach-Object { Assert-TranscriptContains "moves=$_ won=" }
   Assert-TranscriptContains "moves=7 won=true"
   Assert-TranscriptContains "YOU WIN"
   Assert-TranscriptContains "__APP_EXIT__=0"
 
-  $tmuxVersion = (Invoke-WslBash "tmux -V" -join "`n").Trim()
+  $tmuxVersion = ((Invoke-WslBash "tmux -V") -join "`n").Trim()
+  $bunVersionOutput = & bun --version 2>&1
+  if ($LASTEXITCODE -ne 0) {
+    throw "Unable to read Windows Bun version: $($bunVersionOutput -join "`n")"
+  }
+  $bunVersion = ($bunVersionOutput -join "`n").Trim()
+  $transcriptRelativePath = $runTranscriptPath.Substring($artifactRoot.Length + 1).Replace("\", "/")
   $manifest = [ordered]@{
+    runId = $sessionName
     distro = $distro
     tmuxVersion = $tmuxVersion
-    bunVersion = (& bun --version).Trim()
+    bunVersion = $bunVersion
     repositoryWslPath = $repositoryWslPath
     bunWslPath = $bunWslPath
+    transcriptPath = $transcriptRelativePath
     frames = $frames
   } | ConvertTo-Json -Depth 5
-  Write-Utf8 (Join-Path $artifactRoot "manifest.json") ($manifest + "`n")
+  Write-Utf8 $runManifestPath ($manifest + "`n")
+  Publish-AtomicFile $runTranscriptPath $authoritativeTranscriptPath
+  Publish-AtomicFile $runManifestPath $authoritativeManifestPath
 
   Write-Output "$tmuxVersion moves=7 won=true YOU WIN __APP_EXIT__=0"
   $exitCode = 0
 }
 catch {
-  Write-Error $_
+  [Console]::Error.WriteLine($_.Exception.Message)
 }
 finally {
-  Invoke-CleanupWslBash "tmux kill-session -t $(ConvertTo-BashLiteral $sessionName)" "tmux session $sessionName"
+  if ($tmuxSessionCreated) {
+    Invoke-CleanupWslBash "tmux kill-session -t $(ConvertTo-BashLiteral $sessionName)" "tmux session $sessionName"
+  }
   if ($wslInteropAdded) {
     Invoke-CleanupWslBash "if [ -e /proc/sys/fs/binfmt_misc/WSLInterop ]; then printf -- '-1\n' > /proc/sys/fs/binfmt_misc/WSLInterop; fi" "WSLInterop handler"
   }
@@ -151,6 +230,20 @@ finally {
     catch {
       Write-Warning "Shim directory cleanup failed: $_"
     }
+  }
+  if ($lockAcquired) {
+    try {
+      $verificationMutex.ReleaseMutex()
+    }
+    catch {
+      Write-Warning "Verification lock cleanup failed: $_"
+    }
+  }
+  try {
+    $verificationMutex.Dispose()
+  }
+  catch {
+    Write-Warning "Verification lock disposal failed: $_"
   }
 }
 
