@@ -85,6 +85,14 @@ test.each([
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
+test("rejects an uncontained pane path even when the transcript is valid", async () => {
+  const { generateReport } = await import("../scripts/generate-report");
+  const root = await mkdtemp(join(tmpdir(), "unblock-me-report-"));
+  try {
+    await expect(generateReport({ manifestPath: await writeFixture(root, { frames: [{ label: "bad", path: "runs/other/evidence/pane.txt", durationMs: 800 }] }), outputPath: join(root, "out.html"), evidence: passedEvidence })).rejects.toThrow("manifest path");
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 test("marks missing or failed evidence truthfully", async () => {
   const { renderReport } = await import("../scripts/report-template");
   const html = renderReport({ bunVersion: "bun", gitCommit: "c", runId: "r", terminalTranscript: "t", tmuxVersion: "tmux", videoBase64: "AA==", videoBytes: 2, videoDurationSeconds: 1, workingDirectory: "C:/long/path", evidence: { ...passedEvidence, tests: { status: "Failed", output: "1 fail" }, tmux: { status: "Unavailable", output: "missing" } } });
