@@ -93,6 +93,19 @@ test("rejects an uncontained pane path even when the transcript is valid", async
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
+test("matches a dotted runId literally in tmux evidence", async () => {
+  const { generateReport } = await import("../scripts/generate-report");
+  const root = await mkdtemp(join(tmpdir(), "unblock-me-report-"));
+  try {
+    const manifestPath = await writeFixture(root, {
+      runId: "fixture.run",
+      transcriptPath: "runs/fixture.run/evidence/transcript.txt",
+      frames: [{ label: "initial", path: "runs/fixture.run/evidence/panes/001-initial.txt", durationMs: 800 }],
+    });
+    await expect(generateReport({ manifestPath, outputPath: join(root, "out.html"), evidence: { ...passedEvidence, tmux: { status: "Passed", output: "runId=fixtureXrun moves=7 won=true YOU WIN __APP_EXIT__=0" } } })).rejects.toThrow("tmux runId does not match");
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 test("marks missing or failed evidence truthfully", async () => {
   const { renderReport } = await import("../scripts/report-template");
   const html = renderReport({ bunVersion: "bun", gitCommit: "c", runId: "r", terminalTranscript: "t", tmuxVersion: "tmux", videoBase64: "AA==", videoBytes: 2, videoDurationSeconds: 1, workingDirectory: "C:/long/path", evidence: { ...passedEvidence, tests: { status: "Failed", output: "1 fail" }, tmux: { status: "Unavailable", output: "missing" } } });
