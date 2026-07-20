@@ -389,7 +389,7 @@ bun run start
 
 Also document `bun run check`, `bun run verify:tmux`, and `bun run report` after each has passed.
 
-- [ ] **Step 2: Run the full completion gate from a clean state**
+- [x] **Step 2: Run the full completion gate from a clean state**
 
 Run `bun install --frozen-lockfile`, `bun run check`, the known stdin solution, `bun run verify:tmux`, `bun run report`, `git diff --check`, and `git status --short`. Read every output before making a completion claim.
 
