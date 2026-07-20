@@ -1,0 +1,127 @@
+$ErrorActionPreference = "Stop"
+
+$distro = "Ubuntu-24.04"
+$repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$artifactRoot = Join-Path $repositoryRoot "artifacts\tmux"
+$paneRoot = Join-Path $artifactRoot "panes"
+$bunWindowsPath = (Get-Command bun -ErrorAction Stop).Source
+$sessionName = "unblock-me-verify-$PID-$([DateTime]::UtcNow.ToString('yyyyMMddHHmmssfff'))"
+$solution = @("A up", "B down", "R right", "R right", "R right", "R right", "R right")
+$frames = [System.Collections.Generic.List[object]]::new()
+$transcriptSections = [System.Collections.Generic.List[string]]::new()
+$shimPath = Join-Path $artifactRoot "bun"
+
+function ConvertTo-BashLiteral([string]$value) {
+  return "'" + $value.Replace("'", "'`"'`"'") + "'"
+}
+
+function ConvertTo-WslPath([string]$windowsPath) {
+  $wslInput = $windowsPath.Replace("\", "/")
+  $output = & wsl.exe -d $distro -- wslpath -a $wslInput 2>&1
+  if ($LASTEXITCODE -ne 0) {
+    throw "Unable to convert Windows path to WSL path: $windowsPath`n$($output -join "`n")"
+  }
+  return ($output -join "`n").Trim()
+}
+
+function Invoke-WslBash([string]$command) {
+  $encodedCommand = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($command))
+  $output = & wsl.exe -d $distro -- bash -lc "printf %s $encodedCommand | base64 --decode | bash" 2>&1
+  if ($LASTEXITCODE -ne 0) {
+    throw "WSL command failed: $command`n$($output -join "`n")"
+  }
+  return @($output)
+}
+
+function Enable-WslInterop {
+  Invoke-WslBash "if [ ! -e /proc/sys/fs/binfmt_misc/WSLInterop ]; then printf ':WSLInterop:M::MZ::/init:PF\n' > /proc/sys/fs/binfmt_misc/register; fi; test -e /proc/sys/fs/binfmt_misc/WSLInterop" | Out-Null
+}
+
+function Write-Utf8([string]$path, [string]$content) {
+  [System.IO.File]::WriteAllText($path, $content, [System.Text.UTF8Encoding]::new($false))
+}
+
+function Capture-Frame([string]$label, [int]$durationMs) {
+  Start-Sleep -Milliseconds $durationMs
+  $capturedLines = Invoke-WslBash "tmux capture-pane -p -t $(ConvertTo-BashLiteral "$sessionName`:0.0")"
+  $timestamp = [DateTime]::UtcNow.ToString("yyyyMMddTHHmmssfffZ")
+  $frameNumber = $frames.Count + 1
+  $fileName = "{0:D3}-{1}-{2}.txt" -f $frameNumber, $timestamp, ($label -replace "[^A-Za-z0-9-]", "-")
+  $framePath = Join-Path $paneRoot $fileName
+  $frameText = ($capturedLines -join "`n") + "`n"
+  Write-Utf8 $framePath $frameText
+  $relativePath = $framePath.Substring($artifactRoot.Length + 1).Replace("\", "/")
+  $frames.Add([ordered]@{ label = $label; path = $relativePath; durationMs = $durationMs })
+  $transcriptSections.Add("--- $label ---`n$frameText")
+}
+
+function Assert-TranscriptContains([string]$marker) {
+  $transcript = $transcriptSections -join "`n"
+  if (-not $transcript.Contains($marker)) {
+    throw "Transcript assertion failed: missing $marker"
+  }
+}
+
+$exitCode = 1
+try {
+  New-Item -ItemType Directory -Force -Path $artifactRoot, $paneRoot | Out-Null
+  $repositoryWslPath = ConvertTo-WslPath $repositoryRoot
+  $bunWslPath = ConvertTo-WslPath $bunWindowsPath
+  $artifactWslPath = ConvertTo-WslPath $artifactRoot
+  $shimWslPath = ConvertTo-WslPath $shimPath
+  Enable-WslInterop
+  Write-Utf8 $shimPath "#!/usr/bin/env bash`nexec $(ConvertTo-BashLiteral $bunWslPath) `"`$@`"`n"
+  Invoke-WslBash "chmod +x $(ConvertTo-BashLiteral $shimWslPath)" | Out-Null
+
+  $paneCommand = "cd $(ConvertTo-BashLiteral $repositoryWslPath) && PATH=$(ConvertTo-BashLiteral $artifactWslPath):`$PATH bun run start; app_status=`$?; printf '\n__APP_EXIT__=%s\n' `"`$app_status`"; exec bash"
+  Invoke-WslBash "tmux new-session -d -s $(ConvertTo-BashLiteral $sessionName) $(ConvertTo-BashLiteral $paneCommand)" | Out-Null
+
+  Capture-Frame "initial" 1000
+  for ($moveIndex = 0; $moveIndex -lt $solution.Count; $moveIndex += 1) {
+    $line = $solution[$moveIndex]
+    for ($characterIndex = 0; $characterIndex -lt $line.Length; $characterIndex += 1) {
+      $character = $line[$characterIndex]
+      Invoke-WslBash "tmux send-keys -t $(ConvertTo-BashLiteral "$sessionName`:0.0") -l $(ConvertTo-BashLiteral $character)" | Out-Null
+      Capture-Frame "move-$($moveIndex + 1)-char-$($characterIndex + 1)" 80
+    }
+    Invoke-WslBash "tmux send-keys -t $(ConvertTo-BashLiteral "$sessionName`:0.0") Enter" | Out-Null
+    Capture-Frame "move-$($moveIndex + 1)-submitted" 700
+  }
+  Capture-Frame "won-hold" 1500
+
+  $transcript = $transcriptSections -join "`n"
+  Write-Utf8 (Join-Path $artifactRoot "transcript.txt") $transcript
+  Assert-TranscriptContains "moves=0 won=false"
+  1..7 | ForEach-Object { Assert-TranscriptContains "moves=$_ won=" }
+  Assert-TranscriptContains "moves=7 won=true"
+  Assert-TranscriptContains "YOU WIN"
+  Assert-TranscriptContains "__APP_EXIT__=0"
+
+  $tmuxVersion = (Invoke-WslBash "tmux -V" -join "`n").Trim()
+  $manifest = [ordered]@{
+    distro = $distro
+    tmuxVersion = $tmuxVersion
+    bunVersion = (& bun --version).Trim()
+    repositoryWslPath = $repositoryWslPath
+    bunWslPath = $bunWslPath
+    frames = $frames
+  } | ConvertTo-Json -Depth 5
+  Write-Utf8 (Join-Path $artifactRoot "manifest.json") ($manifest + "`n")
+
+  Write-Output "$tmuxVersion moves=7 won=true YOU WIN __APP_EXIT__=0"
+  $exitCode = 0
+}
+catch {
+  Write-Error $_
+}
+finally {
+  $cleanupErrorActionPreference = $ErrorActionPreference
+  $ErrorActionPreference = "SilentlyContinue"
+  & wsl.exe -d $distro -- tmux kill-session -t $sessionName 2>$null
+  $ErrorActionPreference = $cleanupErrorActionPreference
+  if (Test-Path -LiteralPath $shimPath) {
+    Remove-Item -LiteralPath $shimPath -Force
+  }
+}
+
+exit $exitCode

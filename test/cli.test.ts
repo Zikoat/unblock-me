@@ -79,3 +79,25 @@ test("the start script accepts the known solution on stdin", async () => {
   expect(stdout).toContain("moves=7 won=true");
   expect(stdout).toContain("YOU WIN");
 });
+
+test("the start script exits after winning while stdin remains open", async () => {
+  const child = Bun.spawn(["bun", "run", "start"], {
+    cwd: import.meta.dir + "/..",
+    stdin: "pipe",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  child.stdin.write("A up\nB down\nR right\nR right\nR right\nR right\nR right\n");
+
+  try {
+    const exited = await Promise.race([
+      child.exited.then(() => true),
+      Bun.sleep(500).then(() => false),
+    ]);
+
+    expect(exited).toBe(true);
+  } finally {
+    child.kill();
+    await child.exited;
+  }
+});

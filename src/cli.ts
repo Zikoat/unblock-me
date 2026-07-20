@@ -12,25 +12,29 @@ export async function runCli(
   output.write(`Unblock Me\n\n${instructions}\n\n${renderFrame(state)}\n`);
 
   const readline = createInterface({ input, crlfDelay: Infinity });
-  for await (const line of readline) {
-    const parsed = parseCommand(line);
-    if (!parsed.ok) {
-      output.write(`${renderFrame(state, parsed.message)}\n`);
-      continue;
+  try {
+    for await (const line of readline) {
+      const parsed = parseCommand(line);
+      if (!parsed.ok) {
+        output.write(`${renderFrame(state, parsed.message)}\n`);
+        continue;
+      }
+
+      if (parsed.command.type === "help") {
+        output.write(`${instructions}\n`);
+        continue;
+      }
+
+      if (parsed.command.type === "quit") return 0;
+
+      const result = applyMove(state, parsed.command);
+      state = result.state;
+      output.write(`${renderFrame(state, result.ok ? undefined : result.message)}\n`);
+      if (state.won) return 0;
     }
 
-    if (parsed.command.type === "help") {
-      output.write(`${instructions}\n`);
-      continue;
-    }
-
-    if (parsed.command.type === "quit") return 0;
-
-    const result = applyMove(state, parsed.command);
-    state = result.state;
-    output.write(`${renderFrame(state, result.ok ? undefined : result.message)}\n`);
-    if (state.won) return 0;
+    return 0;
+  } finally {
+    readline.close();
   }
-
-  return 0;
 }
