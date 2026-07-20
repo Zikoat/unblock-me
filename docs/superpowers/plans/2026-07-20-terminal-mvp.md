@@ -377,7 +377,7 @@ git commit -m "feat: generate terminal MVP verification report"
 - Consumes: all production code, tests, tmux evidence, report, GitHub issue/map, and authenticated Git remote.
 - Produces: verified instructions, pushed branch, and private GitHub Release asset.
 
-- [ ] **Step 1: Add only verified usage instructions**
+- [x] **Step 1: Add only verified usage instructions**
 
 Document:
 
@@ -397,7 +397,7 @@ Run `bun install --frozen-lockfile`, `bun run check`, the known stdin solution, 
 
 Use the required requesting-code-review workflow against the design and plan. Re-run the full completion gate after any change.
 
-- [ ] **Step 4: Commit the handoff**
+- [x] **Step 4: Commit the handoff**
 
 ```powershell
 git add README.md docs/superpowers/plans/2026-07-20-terminal-mvp.md
