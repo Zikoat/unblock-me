@@ -4,7 +4,8 @@
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "check": "bun run typecheck && bun test",
-    "verify:tmux": "bun -e \"const p='scripts/tmux-playthrough.ps1'; if (!require('node:fs').existsSync(p)) { console.error('Missing ' + p); process.exit(1); }\" && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/tmux-playthrough.ps1"
+    "verify:tmux": "bun -e \"const p='scripts/tmux-playthrough.ps1'; if (!require('node:fs').existsSync(p)) { console.error('Missing ' + p); process.exit(1); }\" && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/tmux-playthrough.ps1",
+    "report": "bun scripts/generate-report.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",
