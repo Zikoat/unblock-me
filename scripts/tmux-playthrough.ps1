@@ -9,7 +9,10 @@ $sessionName = "unblock-me-verify-$PID-$([DateTime]::UtcNow.ToString('yyyyMMddHH
 $solution = @("A up", "B down", "R right", "R right", "R right", "R right", "R right")
 $frames = [System.Collections.Generic.List[object]]::new()
 $transcriptSections = [System.Collections.Generic.List[string]]::new()
-$shimPath = Join-Path $artifactRoot "bun"
+$shimRoot = Join-Path $artifactRoot "runs\$sessionName"
+$shimPath = Join-Path $shimRoot "bun"
+$shimDirectoryCreated = $false
+$wslInteropAdded = $false
 
 function ConvertTo-BashLiteral([string]$value) {
   return "'" + $value.Replace("'", "'`"'`"'") + "'"
@@ -34,7 +37,28 @@ function Invoke-WslBash([string]$command) {
 }
 
 function Enable-WslInterop {
-  Invoke-WslBash "if [ ! -e /proc/sys/fs/binfmt_misc/WSLInterop ]; then printf ':WSLInterop:M::MZ::/init:PF\n' > /proc/sys/fs/binfmt_misc/register; fi; test -e /proc/sys/fs/binfmt_misc/WSLInterop" | Out-Null
+  $status = ((Invoke-WslBash "if [ -e /proc/sys/fs/binfmt_misc/WSLInterop ]; then printf existing; elif printf ':WSLInterop:M::MZ::/init:PF\n' > /proc/sys/fs/binfmt_misc/register 2>/dev/null; then printf added; elif [ -e /proc/sys/fs/binfmt_misc/WSLInterop ]; then printf existing; else exit 1; fi") -join "`n").Trim()
+  if ($status -eq "added") { return $true }
+  if ($status -eq "existing") { return $false }
+  throw "Unexpected WSLInterop state: $status"
+}
+
+function Invoke-CleanupWslBash([string]$command, [string]$description) {
+  $encodedCommand = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($command))
+  $cleanupErrorActionPreference = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  try {
+    $output = & wsl.exe -d $distro -- bash -lc "printf %s $encodedCommand | base64 --decode | bash" 2>&1
+    if ($LASTEXITCODE -ne 0) {
+      Write-Warning "$description cleanup failed: $($output -join "`n")"
+    }
+  }
+  catch {
+    Write-Warning "$description cleanup failed: $_"
+  }
+  finally {
+    $ErrorActionPreference = $cleanupErrorActionPreference
+  }
 }
 
 function Write-Utf8([string]$path, [string]$content) {
@@ -64,16 +88,17 @@ function Assert-TranscriptContains([string]$marker) {
 
 $exitCode = 1
 try {
-  New-Item -ItemType Directory -Force -Path $artifactRoot, $paneRoot | Out-Null
+  New-Item -ItemType Directory -Force -Path $artifactRoot, $paneRoot, $shimRoot | Out-Null
+  $shimDirectoryCreated = $true
   $repositoryWslPath = ConvertTo-WslPath $repositoryRoot
   $bunWslPath = ConvertTo-WslPath $bunWindowsPath
-  $artifactWslPath = ConvertTo-WslPath $artifactRoot
+  $shimRootWslPath = ConvertTo-WslPath $shimRoot
   $shimWslPath = ConvertTo-WslPath $shimPath
-  Enable-WslInterop
+  $wslInteropAdded = Enable-WslInterop
   Write-Utf8 $shimPath "#!/usr/bin/env bash`nexec $(ConvertTo-BashLiteral $bunWslPath) `"`$@`"`n"
   Invoke-WslBash "chmod +x $(ConvertTo-BashLiteral $shimWslPath)" | Out-Null
 
-  $paneCommand = "cd $(ConvertTo-BashLiteral $repositoryWslPath) && PATH=$(ConvertTo-BashLiteral $artifactWslPath):`$PATH bun run start; app_status=`$?; printf '\n__APP_EXIT__=%s\n' `"`$app_status`"; exec bash"
+  $paneCommand = "cd $(ConvertTo-BashLiteral $repositoryWslPath) && PATH=$(ConvertTo-BashLiteral $shimRootWslPath):`$PATH bun run start; app_status=`$?; printf '\n__APP_EXIT__=%s\n' `"`$app_status`"; exec bash"
   Invoke-WslBash "tmux new-session -d -s $(ConvertTo-BashLiteral $sessionName) $(ConvertTo-BashLiteral $paneCommand)" | Out-Null
 
   Capture-Frame "initial" 1000
@@ -115,12 +140,17 @@ catch {
   Write-Error $_
 }
 finally {
-  $cleanupErrorActionPreference = $ErrorActionPreference
-  $ErrorActionPreference = "SilentlyContinue"
-  & wsl.exe -d $distro -- tmux kill-session -t $sessionName 2>$null
-  $ErrorActionPreference = $cleanupErrorActionPreference
-  if (Test-Path -LiteralPath $shimPath) {
-    Remove-Item -LiteralPath $shimPath -Force
+  Invoke-CleanupWslBash "tmux kill-session -t $(ConvertTo-BashLiteral $sessionName)" "tmux session $sessionName"
+  if ($wslInteropAdded) {
+    Invoke-CleanupWslBash "if [ -e /proc/sys/fs/binfmt_misc/WSLInterop ]; then printf -- '-1\n' > /proc/sys/fs/binfmt_misc/WSLInterop; fi" "WSLInterop handler"
+  }
+  if ($shimDirectoryCreated -and (Test-Path -LiteralPath $shimRoot)) {
+    try {
+      Remove-Item -LiteralPath $shimRoot -Recurse -Force
+    }
+    catch {
+      Write-Warning "Shim directory cleanup failed: $_"
+    }
   }
 }
 
