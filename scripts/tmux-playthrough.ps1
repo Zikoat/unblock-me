@@ -204,7 +204,7 @@ try {
   Publish-AtomicFile $runTranscriptPath $authoritativeTranscriptPath
   Publish-AtomicFile $runManifestPath $authoritativeManifestPath
 
-  Write-Output "$tmuxVersion moves=7 won=true YOU WIN __APP_EXIT__=0"
+  Write-Output "runId=$sessionName $tmuxVersion moves=7 won=true YOU WIN __APP_EXIT__=0"
   $exitCode = 0
 }
 catch {

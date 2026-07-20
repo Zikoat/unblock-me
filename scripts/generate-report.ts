@@ -1,178 +1,45 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 import sharp from "sharp";
-import { renderReport } from "./report-template";
+import { renderReport, type EvidenceSet } from "./report-template";
 
-const execFileAsync = promisify(execFile);
+const exec = promisify(execFile);
 const ffmpegPath = require("ffmpeg-static") as string | null;
+const FPS = 25;
+const FRAME_MS = 1000 / FPS;
+type Frame = { durationMs: number; label: string; path: string };
+type Manifest = { bunVersion: string; distro: string; frames: Frame[]; runId: string; tmuxVersion: string; transcriptPath: string };
+export type VideoMetadata = { codec: string; durationSeconds: number; pixelFormat: string };
+export interface GenerateReportOptions { evidence: EvidenceSet; gitCommit?: string; manifestPath: string; outputPath: string; videoPath?: string; workingDirectory?: string }
+export interface GeneratedReport { htmlPath: string; videoBytes: number; videoPath: string; video: VideoMetadata; testSummary: string; tmuxSuccess: "yes" | "no" }
 
-interface Frame {
-  durationMs: number;
-  label: string;
-  path: string;
+function escapeXml(value: string) { return value.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" })[c]!); }
+function svg(label: string, text: string) { const lines = text.replace(/\r/g, "").split("\n").slice(0, 29).map((line, i) => `<text x="48" y="${110 + i * 21}">${escapeXml(line)}</text>`).join(""); return `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720"><rect width="100%" height="100%" fill="#090d14"/><text x="48" y="64" fill="#c8d7ef" font-family="monospace" font-size="22">tmux capture · ${escapeXml(label)}</text><g fill="#d8f6e5" font-family="monospace" font-size="18" xml:space="preserve">${lines}</g></svg>`; }
+function safeRunId(runId: string) { if (!/^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(runId)) throw new Error("manifest path: unsafe runId"); }
+function containedPath(manifestPath: string, runId: string, value: string) {
+  if (isAbsolute(value) || value.includes("\\")) throw new Error("manifest path: absolute or backslash path rejected");
+  const normalized = value.replace(/\\/g, "/"); const prefix = `runs/${runId}/evidence/`;
+  if (!normalized.startsWith(prefix) || normalized.includes("..") || normalized.slice(prefix.length).length === 0) throw new Error("manifest path: path is outside the declared run evidence");
+  const root = dirname(resolve(manifestPath)); const target = resolve(root, normalized);
+  if (relative(root, target).startsWith("..") || relative(root, target).includes(`${sep}..${sep}`)) throw new Error("manifest path: path escapes manifest directory");
+  return target;
 }
-
-interface TmuxManifest {
-  bunVersion: string;
-  distro: string;
-  frames: Frame[];
-  runId: string;
-  tmuxVersion: string;
-  transcriptPath: string;
+function parseManifest(manifestPath: string, raw: string) { const manifest = JSON.parse(raw) as Manifest; safeRunId(manifest.runId); if (!Array.isArray(manifest.frames) || manifest.frames.length === 0) throw new Error("manifest path: no frames"); containedPath(manifestPath, manifest.runId, manifest.transcriptPath); for (const f of manifest.frames) { if (!Number.isFinite(f.durationMs) || f.durationMs <= 0) throw new Error("manifest path: invalid duration"); containedPath(manifestPath, manifest.runId, f.path); } return manifest; }
+async function atomicWrite(path: string, data: string | Buffer) { await mkdir(dirname(path), { recursive: true }); const temp = join(dirname(path), `.${basename(path)}.${process.pid}.tmp`); try { await writeFile(temp, data); await rename(temp, path); } finally { await rm(temp, { force: true }); } }
+async function probe(path: string): Promise<VideoMetadata> { try { await exec(ffmpegPath!, ["-hide_banner", "-i", path]); } catch (e) { const stderr = String((e as { stderr?: string }).stderr ?? ""); const duration = /Duration: (\d+):(\d+):(\d+\.\d+)/.exec(stderr); const video = /Video: ([^ ]+).*?, ([a-z0-9]+)/.exec(stderr); if (!duration || !video) throw e; return { durationSeconds: Number(duration[1]) * 3600 + Number(duration[2]) * 60 + Number(duration[3]), codec: video[1], pixelFormat: video[2] }; } throw new Error("ffmpeg probe unexpectedly succeeded"); }
+async function encode(manifest: Manifest, manifestPath: string, output: string) {
+  if (!ffmpegPath) throw new Error("ffmpeg-static unavailable"); const temp = await mkdtemp(join(tmpdir(), "unblock-me-report-")); const encoded = `${output}.${process.pid}.tmp.mp4`;
+  try { const images: string[] = []; for (const [i, frame] of manifest.frames.entries()) { const p = join(temp, `${i}.png`); const pane = await readFile(containedPath(manifestPath, manifest.runId, frame.path), "utf8"); await sharp(Buffer.from(svg(frame.label, pane))).png().toFile(p); images.push(p); }
+    let emitted = 0; const lines: string[] = []; let accumulated = 0; for (const [i, frame] of manifest.frames.entries()) { accumulated += frame.durationMs; const count = Math.max(1, Math.round(accumulated / FRAME_MS) - emitted); emitted += count; for (let n = 0; n < count; n++) { lines.push(`file '${images[i].replace(/\\/g, "/").replace(/'/g, "'\\''")}'`); lines.push("duration 0.040"); } }
+    const concat = join(temp, "frames.ffconcat"); await writeFile(concat, `ffconcat version 1.0\n${lines.join("\n")}\n`); await mkdir(dirname(output), { recursive: true }); await exec(ffmpegPath, ["-y", "-safe", "0", "-f", "concat", "-i", concat, "-r", String(FPS), "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart", encoded]); const meta = await probe(encoded); const expected = manifest.frames.reduce((n, f) => n + f.durationMs, 0) / 1000; if (meta.codec !== "h264" || meta.pixelFormat !== "yuv420p" || Math.abs(meta.durationSeconds - expected) > 1 / FPS + 0.001) throw new Error(`encoded video failed metadata or timing validation: ${JSON.stringify({ meta, expected })}`); await rename(encoded, output); return meta;
+  } finally { await rm(encoded, { force: true }); await rm(temp, { recursive: true, force: true }); }
 }
-
-export interface GenerateReportOptions {
-  gitCommit?: string;
-  manifestPath?: string;
-  outputPath?: string;
-  testOutput?: string;
-  tmuxOutput?: string;
-  typecheckOutput?: string;
-  videoPath?: string;
-  workingDirectory?: string;
-}
-
-export interface GeneratedReport {
-  htmlPath: string;
-  testSummary: string;
-  tmuxSuccess: "yes" | "no";
-  videoBytes: number;
-  videoPath: string;
-}
-
-const terminalWidth = 1280;
-const terminalHeight = 720;
-
-function escapeXml(value: string): string {
-  return value.replace(/[&<>\"']/g, (character) => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    "\"": "&quot;",
-    "'": "&apos;",
-  })[character]!);
-}
-
-function paneSvg(label: string, paneText: string): string {
-  const lines = paneText.replace(/\r/g, "").split("\n");
-  const displayLines = lines.slice(0, 29);
-  const text = displayLines.map((line, index) => `<text x="48" y="${110 + index * 21}">${escapeXml(line)}</text>`).join("");
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${terminalWidth}" height="${terminalHeight}" viewBox="0 0 ${terminalWidth} ${terminalHeight}">
-  <rect width="100%" height="100%" fill="#090d14"/>
-  <rect x="28" y="28" width="1224" height="56" rx="10" fill="#172234"/>
-  <circle cx="58" cy="56" r="8" fill="#f87171"/><circle cx="84" cy="56" r="8" fill="#fbbf24"/><circle cx="110" cy="56" r="8" fill="#4ade80"/>
-  <text x="146" y="63" fill="#c8d7ef" font-family="ui-monospace, Consolas, monospace" font-size="22">tmux capture · ${escapeXml(label)}</text>
-  <g fill="#d8f6e5" font-family="ui-monospace, Consolas, monospace" font-size="18" xml:space="preserve">${text}</g>
-</svg>`;
-}
-
-function absoluteFromManifest(manifestPath: string, relativePath: string): string {
-  return isAbsolute(relativePath) ? relativePath : resolve(dirname(manifestPath), relativePath);
-}
-
-function ffconcatPath(value: string): string {
-  return value.replace(/\\/g, "/").replace(/'/g, "'\\''");
-}
-
-async function readOptional(path: string): Promise<string> {
-  try {
-    return await readFile(path, "utf8");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return "Not captured before report generation.";
-    throw error;
-  }
-}
-
-async function currentCommit(workingDirectory: string): Promise<string> {
-  try {
-    const { stdout } = await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: workingDirectory });
-    return stdout.trim();
-  } catch {
-    return "Unavailable";
-  }
-}
-
-export function summarizeEvidence(testOutput: string, tmuxOutput: string): { testSummary: string; tmuxSuccess: "yes" | "no" } {
-  const passes = testOutput.match(/(\d+) pass/);
-  const failures = testOutput.match(/(\d+) fail/);
-  return {
-    testSummary: `${passes?.[1] ?? "unknown"} pass, ${failures?.[1] ?? "unknown"} fail`,
-    tmuxSuccess: /moves=7 won=true[\s\S]*YOU WIN[\s\S]*__APP_EXIT__=0/.test(tmuxOutput) ? "yes" : "no",
-  };
-}
-
-async function encodeVideo(manifest: TmuxManifest, manifestPath: string, videoPath: string): Promise<void> {
-  if (!ffmpegPath) throw new Error("ffmpeg-static did not provide an ffmpeg executable path.");
-  if (manifest.frames.length === 0) throw new Error("The tmux manifest has no frames.");
-
-  const temporaryRoot = await mkdtemp(join(tmpdir(), "unblock-me-report-"));
-  try {
-    const pngPaths: string[] = [];
-    for (const [index, frame] of manifest.frames.entries()) {
-      const paneText = await readFile(absoluteFromManifest(manifestPath, frame.path), "utf8");
-      const pngPath = join(temporaryRoot, `${String(index + 1).padStart(3, "0")}-${basename(frame.path, ".txt")}.png`);
-      await sharp(Buffer.from(paneSvg(frame.label, paneText))).png().toFile(pngPath);
-      pngPaths.push(pngPath);
-    }
-
-    const concatLines = manifest.frames.flatMap((frame, index) => [
-      `file '${ffconcatPath(pngPaths[index])}'`,
-      `duration ${(frame.durationMs / 1000).toFixed(3)}`,
-    ]);
-    concatLines.push(`file '${ffconcatPath(pngPaths.at(-1)!)}'`);
-    const concatPath = join(temporaryRoot, "frames.ffconcat");
-    await writeFile(concatPath, `ffconcat version 1.0\n${concatLines.join("\n")}\n`, "utf8");
-    await mkdir(dirname(videoPath), { recursive: true });
-    await execFileAsync(ffmpegPath, [
-      "-y", "-safe", "0", "-f", "concat", "-i", concatPath,
-      "-vsync", "vfr", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart", videoPath,
-    ]);
-  } finally {
-    await rm(temporaryRoot, { recursive: true, force: true });
-  }
-}
-
-export async function generateReport(options: GenerateReportOptions = {}): Promise<GeneratedReport> {
-  const workingDirectory = resolve(options.workingDirectory ?? process.cwd());
-  const manifestPath = resolve(options.manifestPath ?? join(workingDirectory, "artifacts", "tmux", "manifest.json"));
-  const outputPath = resolve(options.outputPath ?? join(workingDirectory, "artifacts", "terminal-mvp-verification.html"));
-  const videoPath = resolve(options.videoPath ?? join(dirname(outputPath), "terminal-mvp.mp4"));
-  const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as TmuxManifest;
-  const transcript = await readFile(absoluteFromManifest(manifestPath, manifest.transcriptPath), "utf8");
-
-  await encodeVideo(manifest, manifestPath, videoPath);
-  const video = await readFile(videoPath);
-  const [typecheckOutput, testOutput, tmuxOutput, gitCommit] = await Promise.all([
-    options.typecheckOutput ?? readOptional(join(workingDirectory, "artifacts", "typecheck.txt")),
-    options.testOutput ?? readOptional(join(workingDirectory, "artifacts", "tests.txt")),
-    options.tmuxOutput ?? readOptional(join(workingDirectory, "artifacts", "tmux-verification.txt")),
-    options.gitCommit ?? currentCommit(workingDirectory),
-  ]);
-  const html = renderReport({
-    bunVersion: manifest.bunVersion,
-    gitCommit,
-    runId: manifest.runId,
-    terminalTranscript: transcript,
-    testOutput,
-    tmuxOutput,
-    tmuxVersion: `${manifest.tmuxVersion} on ${manifest.distro}`,
-    typecheckOutput,
-    videoBase64: video.toString("base64"),
-    videoBytes: video.byteLength,
-    workingDirectory,
-  });
-  await mkdir(dirname(outputPath), { recursive: true });
-  await writeFile(outputPath, html, "utf8");
-  return { htmlPath: outputPath, videoBytes: video.byteLength, videoPath, ...summarizeEvidence(testOutput, tmuxOutput) };
-}
-
-if (import.meta.main) {
-  const result = await generateReport();
-  console.log(`Report: ${result.htmlPath}`);
-  console.log(`Embedded video bytes: ${result.videoBytes}`);
-  console.log(`Test summary: ${result.testSummary}`);
-  console.log(`tmux success: ${result.tmuxSuccess}`);
-}
+export function summarizeEvidence(testOutput: string, tmuxOutput: string) { const p = testOutput.match(/(\d+) pass/)?.[1] ?? "unknown"; const f = testOutput.match(/(\d+) fail/)?.[1] ?? "unknown"; return { testSummary: `${p} pass, ${f} fail`, tmuxSuccess: /moves=7 won=true[\s\S]*YOU WIN[\s\S]*__APP_EXIT__=0/.test(tmuxOutput) ? "yes" as const : "no" as const }; }
+export async function generateReport(options: GenerateReportOptions): Promise<GeneratedReport> { const manifestPath = resolve(options.manifestPath); const outputPath = resolve(options.outputPath); const manifest = parseManifest(manifestPath, await readFile(manifestPath, "utf8")); const tmux = options.evidence.tmux; if (Object.values(options.evidence).some(v => v.status !== "Passed")) throw new Error("required evidence is not passed"); if (!new RegExp(`runId=${manifest.runId}(?:\\s|$)`).test(tmux.output)) throw new Error("tmux runId does not match manifest"); const videoPath = resolve(options.videoPath ?? join(dirname(outputPath), "terminal-mvp.mp4")); const video = await encode(manifest, manifestPath, videoPath); const transcript = await readFile(containedPath(manifestPath, manifest.runId, manifest.transcriptPath), "utf8"); const bytes = await readFile(videoPath); const summary = summarizeEvidence(options.evidence.tests.output, tmux.output); await atomicWrite(outputPath, renderReport({ bunVersion: manifest.bunVersion, gitCommit: options.gitCommit ?? "fixture", runId: manifest.runId, terminalTranscript: transcript, tmuxVersion: `${manifest.tmuxVersion} on ${manifest.distro}`, videoBase64: bytes.toString("base64"), videoBytes: bytes.length, videoDurationSeconds: video.durationSeconds, workingDirectory: options.workingDirectory ?? process.cwd(), evidence: options.evidence })); return { htmlPath: outputPath, videoPath, videoBytes: bytes.length, video, ...summary }; }
+async function runChecked(args: string[]) { try { const r = await exec("bun", args); return `${r.stdout}${r.stderr}`; } catch (e) { throw new Error(`required command failed: bun ${args.join(" ")}\n${String((e as { stdout?: string }).stdout ?? "")}${String((e as { stderr?: string }).stderr ?? "")}`); } }
+async function head(cwd: string) { return (await exec("git", ["rev-parse", "HEAD"], { cwd })).stdout.trim(); }
+export async function generateProductionReport(cwd = process.cwd()) { const before = await head(cwd); const typecheck = await runChecked(["run", "typecheck"]); const tests = await runChecked(["test"]); const tmux = await runChecked(["run", "verify:tmux"]); if (before !== await head(cwd)) throw new Error("Git HEAD changed during evidence capture"); const evidence: EvidenceSet = { typecheck: { status: "Passed", output: typecheck }, tests: { status: "Passed", output: tests }, tmux: { status: "Passed", output: tmux } }; await Promise.all([atomicWrite(join(cwd, "artifacts/typecheck.txt"), typecheck), atomicWrite(join(cwd, "artifacts/tests.txt"), tests), atomicWrite(join(cwd, "artifacts/tmux-verification.txt"), tmux)]); return generateReport({ manifestPath: join(cwd, "artifacts/tmux/manifest.json"), outputPath: join(cwd, "artifacts/terminal-mvp-verification.html"), evidence, gitCommit: before, workingDirectory: cwd }); }
+if (import.meta.main) { const r = await generateProductionReport(); console.log(`Report: ${r.htmlPath}\nEmbedded video bytes: ${r.videoBytes}\nTest summary: ${r.testSummary}\ntmux success: ${r.tmuxSuccess}`); }
