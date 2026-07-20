@@ -28,9 +28,16 @@ test("prints the title, instructions, and initial frame on startup", async () =>
 test("keeps the current state after invalid input", async () => {
   const { output } = await play(["A up", "nonsense", "quit"]);
 
-  expect(output).toContain("moves=1 won=false");
-  expect(output).toContain("Enter a block and direction, or help or quit.\n\n. . A . . # #");
-  expect(output).toContain("moves=1 won=false");
+  expect(output).toEndWith(
+    "Enter a block and direction, or help or quit.\n\n" +
+      ". . A . . # #\n" +
+      ". . A . . # #\n" +
+      "R R . . B * *\n" +
+      ". . . . B # #\n" +
+      ". . . . . # #\n\n" +
+      "Legend: R/A/B=blocks #=Wall *=Checkpoint .=empty\n" +
+      "moves=1 won=false\n",
+  );
 });
 
 test("prints instructions for help", async () => {
