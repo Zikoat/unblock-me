@@ -47,6 +47,7 @@ test("generates a self-contained responsive verification report from a fixture c
     const html = await readFile(outputPath, "utf8");
     expect(html).toContain('<meta name="viewport" content="width=device-width, initial-scale=1">');
     expect(html).toContain("Request and scope");
+    expect(html).toContain("Run <code>fixture-run</code>, commit <code>fixture-commit</code>");
     expect(html).toContain("bun run start");
     expect(html).toContain("Verification evidence");
     expect(html).toContain("fixture-bun");
@@ -56,8 +57,8 @@ test("generates a self-contained responsive verification report from a fixture c
     expect(html).toContain("Android phone verification");
     expect(html).toContain("Pending human verification");
     expect(html).toContain('<video controls src="data:video/mp4;base64,');
-    expect(html).toContain("max-width: 100%");
-    expect(html).toContain("main, section, table, pre, video");
+    expect(html).toContain("max-width:100%");
+    expect(html).toContain("main,section,table,pre,video");
     expect(result.video.durationSeconds).toBeGreaterThanOrEqual(1.56);
     expect(result.video.durationSeconds).toBeLessThanOrEqual(1.64);
     expect(result.video.codec).toBe("h264");
