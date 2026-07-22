@@ -21,7 +21,7 @@ export const pageHtml = `<!doctype html>
     .meta { display:flex; flex-wrap:wrap; gap:.6rem; align-items:center; margin:1rem 0; }
     .badge, button { border-radius:999px; padding:.55rem .8rem; border:1px solid #526178; background:#202936; color:inherit; }
     button { cursor:pointer; font-weight:700; }
-    button:hover { background:#303c4d; }
+    .meta button:hover { background:#303c4d; }
     #status { min-height:1.5rem; color:#bdc6d5; }
     #win { display:none; margin-top:1rem; padding:1rem; border-radius:10px; background:#d8ff7a; color:#17210a; font-weight:850; }
     #win.visible { display:block; }

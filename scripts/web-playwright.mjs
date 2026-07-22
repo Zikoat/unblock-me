@@ -97,6 +97,7 @@ async function solveWithTouch(page, session, humanPace) {
 
 async function assertCanceledPreview(page, screenshots) {
   const locator = page.locator("[data-block-id='A']");
+  const originalColor = await locator.evaluate((element) => getComputedStyle(element).backgroundColor);
   const box = await locator.boundingBox();
   const x = box.x + box.width / 2;
   const y = box.y + box.height / 2;
@@ -114,6 +115,8 @@ async function assertCanceledPreview(page, screenshots) {
   assert(await locator.getAttribute("data-drag-preview") !== "true", "Canceled drag left its preview active.");
   const restoredBox = await locator.boundingBox();
   assert(Math.abs(restoredBox.x - box.x) < 1 && Math.abs(restoredBox.y - box.y) < 1, `Canceled drag did not restore its visual position: ${JSON.stringify({ box, restoredBox })}.`);
+  const restoredColor = await locator.evaluate((element) => getComputedStyle(element).backgroundColor);
+  assert(restoredColor === originalColor, `Canceled drag changed the block's visual color: ${JSON.stringify({ originalColor, restoredColor })}.`);
   assert((await page.locator("#moves").textContent()) === "0 moves", "Canceled drag committed engine state.");
   if (screenshots) await page.screenshot({ path: screenshots[2].path, fullPage: true });
 }
