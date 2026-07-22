@@ -40,7 +40,12 @@ async function desktopFlow(browser, url, videoDir, humanPace) {
   const page = await context.newPage();
   const video = page.video();
   await page.goto(url, { waitUntil: "domcontentloaded" });
+  const checkpointBefore = await checkpointPositions(page);
+  assert(checkpointBefore[1].x - checkpointBefore[0].x < checkpointBefore[0].width * 1.2, "Checkpoint cells are not adjacent at their engine coordinates.");
+  await assertCanceledPreview(page);
   await solveWithMouse(page, humanPace);
+  const checkpointAfter = await checkpointPositions(page);
+  assert(JSON.stringify(checkpointAfter) === JSON.stringify(checkpointBefore), `Checkpoint moved while blocks moved: ${JSON.stringify({ checkpointBefore, checkpointAfter })}.`);
   assert((await page.locator("#win").textContent())?.includes("you win"), "Desktop mouse drag did not reach the Checkpoint.");
   await pause(page, humanPace, 600);
   await context.close();
@@ -69,13 +74,34 @@ async function mobileFlow(browser, url, videoDir, humanPace) {
 async function solveWithMouse(page, humanPace) {
   await mouseDrag(page, "A", 0, -70, humanPace);
   await mouseDrag(page, "B", 0, 70, humanPace);
-  for (let index = 0; index < 5; index += 1) await mouseDrag(page, "R", 70, 0, humanPace);
+  await mouseDrag(page, "R", 420, 0, humanPace);
 }
 
 async function solveWithTouch(page, session, humanPace) {
   await touchDrag(page, session, "A", 0, -70, humanPace);
   await touchDrag(page, session, "B", 0, 70, humanPace);
-  for (let index = 0; index < 5; index += 1) await touchDrag(page, session, "R", 70, 0, humanPace);
+  await touchDrag(page, session, "R", 300, 0, humanPace);
+}
+
+async function assertCanceledPreview(page) {
+  const locator = page.locator("[data-block-id='R']");
+  const box = await locator.boundingBox();
+  const x = box.x + box.width / 2;
+  const y = box.y + box.height / 2;
+  await page.mouse.move(x, y); await page.mouse.down(); await page.mouse.move(x + 35, y, { steps: 6 });
+  assert(await locator.getAttribute("data-drag-preview") === "true", "Half drag did not expose an in-progress preview.");
+  assert((await page.locator("#moves").textContent()) === "0 moves", "Half drag committed engine state before release.");
+  await locator.dispatchEvent("pointercancel", { pointerId: 1 });
+  await page.mouse.up();
+  assert(await locator.getAttribute("data-drag-preview") !== "true", "Canceled drag left its preview active.");
+  assert((await page.locator("#moves").textContent()) === "0 moves", "Canceled drag committed engine state.");
+}
+
+async function checkpointPositions(page) {
+  return page.locator(".checkpoint").evaluateAll((nodes) => nodes.map((node) => {
+    const box = node.getBoundingClientRect();
+    return { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width) };
+  }));
 }
 
 async function mouseDrag(page, id, dx, dy, humanPace) {
