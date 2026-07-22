@@ -150,7 +150,9 @@ class TmuxWorker:
             if marker in text:
                 return text, captured_ms, captured_utc
             if captured_ms >= deadline:
-                raise RuntimeError(f"timed out waiting for pane marker: {marker}")
+                raise RuntimeError(
+                    f"timed out waiting for pane marker: {marker}\nLast pane:\n{text.rstrip()}"
+                )
             time.sleep(0.015)
 
     def record_capture(
@@ -251,7 +253,11 @@ class TmuxWorker:
 
     def run(self) -> dict[str, Any]:
         self.pane_root.mkdir(parents=True, exist_ok=True)
-        initial_text, initial_ms, initial_utc = self.wait_for_marker("moves=0 won=false")
+        # WSL interop and the Windows Bun executable can cold-start slowly. This
+        # readiness wait precedes the measured interaction and is condition-based.
+        initial_text, initial_ms, initial_utc = self.wait_for_marker(
+            "moves=0 won=false", timeout_ms=15000.0
+        )
         self.record_capture("initial", initial_text, initial_ms, initial_utc)
 
         first_character_deadline = initial_ms + INITIAL_HOLD_MS

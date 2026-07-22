@@ -54,11 +54,23 @@ function Invoke-WslBash([string]$command) {
   return @($output)
 }
 
-function Enable-WslInterop {
-  $status = ((Invoke-WslBash "if [ -e /proc/sys/fs/binfmt_misc/WSLInterop ]; then printf existing; elif printf ':WSLInterop:M::MZ::/init:PF\n' > /proc/sys/fs/binfmt_misc/register 2>/dev/null; then printf added; elif [ -e /proc/sys/fs/binfmt_misc/WSLInterop ]; then printf existing; else exit 1; fi") -join "`n").Trim()
-  if ($status -eq "added") { return $true }
-  if ($status -eq "existing") { return $false }
-  throw "Unexpected WSLInterop state: $status"
+function Initialize-WslSession([string]$command) {
+  $encodedCommand = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($command))
+  $output = & wsl.exe -d $distro -- bash -lc "printf %s $encodedCommand | base64 --decode | bash" 2>&1
+  $exitCode = $LASTEXITCODE
+  $statusLine = @($output) | Where-Object { $_ -match '^__INTEROP_STATUS__=(added|existing)$' } | Select-Object -Last 1
+  if ($statusLine -eq "__INTEROP_STATUS__=added") {
+    $script:wslInteropAdded = $true
+  }
+  elseif ($statusLine -eq "__INTEROP_STATUS__=existing") {
+    $script:wslInteropAdded = $false
+  }
+  else {
+    throw "WSL session initialization did not report WSLInterop ownership:`n$($output -join "`n")"
+  }
+  if ($exitCode -ne 0) {
+    throw "WSL session initialization failed:`n$($output -join "`n")"
+  }
 }
 
 function Add-CleanupFailure([string]$message) {
@@ -151,6 +163,8 @@ if (-not $lockAcquired) {
   exit 1
 }
 
+Write-Output "runId=$sessionName verification-started"
+
 try {
   New-Item -ItemType Directory -Force -Path $artifactRoot, $evidenceRoot, $paneRoot, $shimRoot | Out-Null
   $shimDirectoryCreated = $true
@@ -165,14 +179,13 @@ try {
   Write-Utf8 $solutionPath (($solution | ConvertTo-Json -Compress) + "`n")
   $solutionWslPath = ConvertTo-WslPath $solutionPath
 
-  $wslInteropAdded = Enable-WslInterop
   Write-Utf8 $shimPath "#!/usr/bin/env bash`nexec $(ConvertTo-BashLiteral $bunWslPath) `"`$@`"`n"
-  Invoke-WslBash "chmod +x $(ConvertTo-BashLiteral $shimWslPath)" | Out-Null
 
   # Keep this literal command in the tmux pane: it is the production entry point under test.
   $paneCommand = "cd $(ConvertTo-BashLiteral $repositoryWslPath) && PATH=$(ConvertTo-BashLiteral $shimRootWslPath):`$PATH bun run start; app_status=`$?; printf '\n__APP_EXIT__=%s\n' `"`$app_status`"; exec bash"
   $newSessionCommand = "tmux new-session -d -s $(ConvertTo-BashLiteral $sessionName) $(ConvertTo-BashLiteral $paneCommand)"
-  Invoke-WslBash $newSessionCommand | Out-Null
+  $initializationCommand = "if [ -e /proc/sys/fs/binfmt_misc/WSLInterop ]; then interop_status=existing; elif printf ':WSLInterop:M::MZ::/init:PF\n' > /proc/sys/fs/binfmt_misc/register 2>/dev/null; then interop_status=added; elif [ -e /proc/sys/fs/binfmt_misc/WSLInterop ]; then interop_status=existing; else exit 1; fi; printf '__INTEROP_STATUS__=%s\n' `"`$interop_status`"; chmod +x $(ConvertTo-BashLiteral $shimWslPath); $(ConvertTo-BashLiteral $bunWslPath) --version >/dev/null; $newSessionCommand"
+  Initialize-WslSession $initializationCommand
   $tmuxSessionCreated = $true
 
   if ($env:UNBLOCK_ME_VERIFY_INJECT_PRIMARY_FAILURE) {
