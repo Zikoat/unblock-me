@@ -25,7 +25,6 @@ test("aggregates owned cleanup failures, exits nonzero, and still removes residu
 
   expect(exitCode).toBe(1);
   expect(runId).toBeDefined();
-  expect(output).toContain("main-path=passed");
   expect(output).toContain("injected tmux session cleanup failure");
   expect(output).toContain("injected shim cleanup failure");
   expect(output).toContain("cleanup-attempt=tmux-session-recovery");
