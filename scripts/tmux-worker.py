@@ -44,7 +44,10 @@ def validate_timing(timing: dict[str, Any]) -> None:
     _assert_range(
         "inter-character capture delta",
         timing.get("interCharacterCaptureDeltasMs", []),
-        40.0,
+        # Send deadlines remain the cadence proof. Captures can complete just
+        # before the next deadline after a slow prior capture, so their visible
+        # dwell may be shorter without accelerating input.
+        15.0,
         200.0,
     )
     _assert_range(
@@ -62,7 +65,7 @@ def validate_timing(timing: dict[str, Any]) -> None:
     _assert_range(
         "character-to-submit capture delta",
         timing.get("characterToSubmitCaptureDeltasMs", []),
-        40.0,
+        15.0,
         250.0,
     )
     _assert_range(
