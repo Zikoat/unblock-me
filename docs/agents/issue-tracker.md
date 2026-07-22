@@ -39,4 +39,4 @@ Add command guidance here only after exercising the operation in this repository
 
 For locally recorded Playwright videos on this Windows setup, run `npx playwright install ffmpeg` once after adding Playwright. The installed Edge browser is sufficient for browser control, but Playwright's recorder separately requires its FFmpeg helper. `bunx` was not available on PATH here, so use `npx` for this setup command.
 
-GitHub Pages cannot be enabled directly for this private repository on the current account plan. Publish the static web build under the public `Zikoat/zikoat.github.io` repository instead.
+GitHub Pages was unavailable while this repository was private on the current account plan. The repository was made public so its own workflow can deploy directly to Pages.
