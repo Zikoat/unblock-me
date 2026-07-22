@@ -4,12 +4,17 @@
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "check": "bun run typecheck && bun test",
+    "build:web": "bun scripts/build-web.ts",
+    "web": "bun run build:web && bun src/web/server.ts",
+    "test:web": "node scripts/verify-web.mjs",
+    "report:web": "bun scripts/generate-web-report.ts",
     "verify:tmux": "bun -e \"const p='scripts/tmux-playthrough.ps1'; if (!require('node:fs').existsSync(p)) { console.error('Missing ' + p); process.exit(1); }\" && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/tmux-playthrough.ps1",
     "report": "bun scripts/generate-report.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",
     "ffmpeg-static": "latest",
+    "playwright": "latest",
     "sharp": "latest",
     "typescript": "latest"
   }
