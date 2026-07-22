@@ -275,7 +275,9 @@ class TmuxWorker:
                         character,
                     )
                 )
-                character_deadline += CHARACTER_CADENCE_MS
+                # Never catch up by sending two characters too quickly after a
+                # slow capture. Cadence is relative to the last real send.
+                character_deadline = character_records[-1]["event"] + CHARACTER_CADENCE_MS
             self.move_characters.append(character_records)
 
             _wait_until(character_deadline)
