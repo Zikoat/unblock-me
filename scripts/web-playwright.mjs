@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
+import sharp from "sharp";
 
 const execFile = promisify(execFileCallback);
 const root = resolve(import.meta.dirname, "..");
@@ -95,17 +96,24 @@ async function solveWithTouch(page, session, humanPace) {
 }
 
 async function assertCanceledPreview(page, screenshots) {
-  const locator = page.locator("[data-block-id='R']");
+  const locator = page.locator("[data-block-id='A']");
   const box = await locator.boundingBox();
   const x = box.x + box.width / 2;
   const y = box.y + box.height / 2;
-  await page.mouse.move(x, y); await page.mouse.down(); await page.mouse.move(x + 35, y, { steps: 6 });
+  await page.mouse.move(x, y); await page.mouse.down(); await page.mouse.move(x, y - 35, { steps: 6 });
   assert(await locator.getAttribute("data-drag-preview") === "true", "Half drag did not expose an in-progress preview.");
+  const previewBox = await locator.boundingBox();
+  assert(previewBox.y < box.y - 20, `Half drag did not visually follow the pointer: ${JSON.stringify({ box, previewBox })}.`);
   assert((await page.locator("#moves").textContent()) === "0 moves", "Half drag committed engine state before release.");
-  if (screenshots) await page.screenshot({ path: screenshots[1].path, fullPage: true });
+  if (screenshots) {
+    await page.screenshot({ path: screenshots[1].path, fullPage: true });
+    await assertScreenshotHasDetail(screenshots[1].path);
+  }
   await locator.dispatchEvent("pointercancel", { pointerId: 1 });
   await page.mouse.up();
   assert(await locator.getAttribute("data-drag-preview") !== "true", "Canceled drag left its preview active.");
+  const restoredBox = await locator.boundingBox();
+  assert(Math.abs(restoredBox.x - box.x) < 1 && Math.abs(restoredBox.y - box.y) < 1, `Canceled drag did not restore its visual position: ${JSON.stringify({ box, restoredBox })}.`);
   assert((await page.locator("#moves").textContent()) === "0 moves", "Canceled drag committed engine state.");
   if (screenshots) await page.screenshot({ path: screenshots[2].path, fullPage: true });
 }
@@ -195,6 +203,11 @@ async function waitForServer(url) {
 }
 
 function assert(condition, message) { if (!condition) throw new Error(message); }
+
+async function assertScreenshotHasDetail(path) {
+  const statistics = await sharp(path).stats();
+  assert(Math.max(...statistics.channels.slice(0, 3).map((channel) => channel.stdev)) > 8, `Screenshot is visually blank: ${path}`);
+}
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const recordVideo = process.argv.includes("--record");
