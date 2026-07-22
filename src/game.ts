@@ -1,4 +1,5 @@
 export type Axis = "horizontal" | "vertical";
+export type Movement = Axis | "both";
 export type Direction = "left" | "right" | "up" | "down";
 
 export interface Point {
@@ -8,8 +9,9 @@ export interface Point {
 
 export interface Block {
   id: string;
-  axis: Axis;
-  length: number;
+  width: number;
+  height: number;
+  movement: Movement;
   x: number;
   y: number;
 }
@@ -34,17 +36,21 @@ export type MoveErrorCode =
   | "wrong-axis"
   | "blocked"
   | "out-of-bounds"
-  | "already-won";
+  | "already-won"
+  | "invalid-steps";
 
 export type MoveResult =
   | { ok: true; state: GameState }
   | { ok: false; state: GameState; code: MoveErrorCode; message: string };
 
+export type MultiMoveResult =
+  | { ok: true; state: GameState; movedSteps: number; requestedSteps: number; stoppedBy?: MoveErrorCode }
+  | { ok: false; state: GameState; code: MoveErrorCode; message: string; movedSteps: 0; requestedSteps: number };
+
 export function blockCells(block: Block): Point[] {
-  return Array.from({ length: block.length }, (_, offset) => ({
-    x: block.x + (block.axis === "horizontal" ? offset : 0),
-    y: block.y + (block.axis === "vertical" ? offset : 0),
-  }));
+  return Array.from({ length: block.height }, (_, row) =>
+    Array.from({ length: block.width }, (_, column) => ({ x: block.x + column, y: block.y + row })),
+  ).flat();
 }
 
 export function applyMove(state: GameState, action: MoveAction): MoveResult {
@@ -54,7 +60,7 @@ export function applyMove(state: GameState, action: MoveAction): MoveResult {
   if (!block) return reject(state, "unknown-block", `Unknown block: ${action.blockId}.`);
 
   const movesHorizontally = action.direction === "left" || action.direction === "right";
-  if ((block.axis === "horizontal") !== movesHorizontally) {
+  if (block.movement !== "both" && (block.movement === "horizontal") !== movesHorizontally) {
     return reject(state, "wrong-axis", `Block ${block.id} cannot move ${action.direction}.`);
   }
 
@@ -88,6 +94,33 @@ export function applyMove(state: GameState, action: MoveAction): MoveResult {
   return { ok: true, state: { ...state, blocks, moves: state.moves + 1, won } };
 }
 
+export function applyMoves(state: GameState, action: MoveAction, requestedSteps: number): MultiMoveResult {
+  if (!Number.isInteger(requestedSteps) || requestedSteps <= 0) {
+    return { ok: false, state, code: "invalid-steps", message: "Step count must be a positive integer.", movedSteps: 0, requestedSteps };
+  }
+
+  let current = state;
+  for (let movedSteps = 0; movedSteps < requestedSteps; movedSteps += 1) {
+    const result = applyMove(current, action);
+    if (!result.ok) {
+      if (movedSteps === 0) return { ...result, movedSteps: 0, requestedSteps };
+      return { ok: true, state: current, movedSteps, requestedSteps, stoppedBy: result.code };
+    }
+    current = result.state;
+  }
+  return { ok: true, state: current, movedSteps: requestedSteps, requestedSteps };
+}
+
+export function projectState(state: GameState): string[][] {
+  const cells = Array.from({ length: state.height }, () => Array.from({ length: state.width }, () => "."));
+  for (const wall of state.walls) cells[wall.y]![wall.x] = "#";
+  for (const checkpoint of state.checkpoint) cells[checkpoint.y]![checkpoint.x] = "*";
+  for (const block of state.blocks) {
+    for (const cell of blockCells(block)) cells[cell.y]![cell.x] = block.id;
+  }
+  return cells;
+}
+
 export function validateState(state: GameState): string[] {
   const errors: string[] = [];
   const occupied = new Set<string>();
@@ -105,7 +138,8 @@ export function validateState(state: GameState): string[] {
   }
 
   for (const block of state.blocks) {
-    if (block.length <= 0) errors.push(`Block ${block.id} must have a positive length.`);
+    if (block.width <= 0 || block.height <= 0) errors.push(`Block ${block.id} must have positive dimensions.`);
+    if (block.movement === "both" && block.width !== block.height) errors.push(`Block ${block.id} may move on both axes only when square.`);
     for (const cell of blockCells(block)) {
       const key = pointKey(cell);
       if (!isInBounds(state, cell)) errors.push(`Block ${block.id} cell ${key} is out of bounds.`);

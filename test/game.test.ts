@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { applyMove } from "../src/game";
+import { applyMove, blockCells } from "../src/game";
 import { createPuzzle as createInitialPuzzle } from "../src/puzzle";
 
 test("creates the specified valid initial puzzle", async () => {
@@ -102,6 +102,49 @@ test("wins after the seven-move solution fully occupies the Checkpoint", () => {
     state,
     code: "already-won",
   });
+});
+
+test("projects every cell of a rectangular block", () => {
+  expect(blockCells({ id: "S", width: 2, height: 2, movement: "both", x: 1, y: 1 } as never)).toEqual([
+    { x: 1, y: 1 },
+    { x: 2, y: 1 },
+    { x: 1, y: 2 },
+    { x: 2, y: 2 },
+  ]);
+});
+
+test("moves a square block on both axes", () => {
+  const puzzle = createInitialPuzzle();
+  const state = {
+    ...puzzle,
+    blocks: [{ id: "S", width: 1, height: 1, movement: "both", x: 1, y: 1 }],
+  } as never;
+
+  const right = applyMove(state, { blockId: "S", direction: "right" });
+  expect(right.ok).toBe(true);
+  if (!right.ok) return;
+  const down = applyMove(right.state, { blockId: "S", direction: "down" });
+  expect(down).toMatchObject({ ok: true, state: { moves: 2 } });
+});
+
+test("repeated movement stops at the furthest legal cell and counts cells", async () => {
+  const { applyMoves } = await import("../src/game") as typeof import("../src/game") & { applyMoves?: Function };
+  expect(typeof applyMoves).toBe("function");
+  const state = move(move(createInitialPuzzle(), "A", "up"), "B", "down");
+  const result = applyMoves!(state, { blockId: "R", direction: "right" }, 9);
+  expect(result).toMatchObject({ ok: true, movedSteps: 5, requestedSteps: 9, state: { moves: 7, won: true } });
+});
+
+test("projects engine occupancy into a coordinate matrix", async () => {
+  const { projectState } = await import("../src/game") as typeof import("../src/game") & { projectState?: Function };
+  expect(typeof projectState).toBe("function");
+  expect(projectState!(createInitialPuzzle())).toEqual([
+    [".", ".", ".", ".", ".", "#", "#"],
+    [".", ".", "A", ".", ".", "#", "#"],
+    ["R", "R", "A", ".", "B", "*", "*"],
+    [".", ".", ".", ".", "B", "#", "#"],
+    [".", ".", ".", ".", ".", "#", "#"],
+  ]);
 });
 
 function move(state: Awaited<ReturnType<typeof createInitialPuzzle>>, blockId: string, direction: "left" | "right" | "up" | "down") {

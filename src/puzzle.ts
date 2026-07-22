@@ -16,9 +16,9 @@ export function createPuzzle(): GameState {
     width: 7,
     height: 5,
     blocks: [
-      { id: "R", axis: "horizontal", length: 2, x: 0, y: 2 },
-      { id: "A", axis: "vertical", length: 2, x: 2, y: 1 },
-      { id: "B", axis: "vertical", length: 2, x: 4, y: 2 },
+      { id: "R", width: 2, height: 1, movement: "horizontal", x: 0, y: 2 },
+      { id: "A", width: 1, height: 2, movement: "vertical", x: 2, y: 1 },
+      { id: "B", width: 1, height: 2, movement: "vertical", x: 4, y: 2 },
     ],
     walls: corridorWalls.map((wall) => ({ ...wall })),
     checkpoint: [

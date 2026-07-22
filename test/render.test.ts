@@ -9,7 +9,7 @@ test("renders the exact initial grid with state and legend", () => {
   expect(frame).toContain(". . . . . # #\n. . A . . # #\nR R A . B * *\n. . . . B # #\n. . . . . # #");
   expect(frame).toContain("moves=0 won=false");
   expect(frame).toContain("Legend: R/A/B=blocks #=Wall *=Checkpoint .=empty");
-  expect(instructions).toBe("Enter <block-id> <direction> (left, right, up, down), help, or quit.");
+  expect(instructions).toBe("Enter <block-id> <direction> [steps] (left, right, up, down), help, or quit.");
 });
 
 test("places an error notice above the complete board", () => {

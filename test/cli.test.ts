@@ -21,7 +21,7 @@ test("prints the title, instructions, and initial frame on startup", async () =>
   const { exitCode, output } = await play([]);
 
   expect(exitCode).toBe(0);
-  expect(output).toStartWith("Unblock Me\n\nEnter <block-id> <direction> (left, right, up, down), help, or quit.\n\n. . . . . # #");
+  expect(output).toStartWith("Unblock Me\n\nEnter <block-id> <direction> [steps] (left, right, up, down), help, or quit.\n\n. . . . . # #");
   expect(output).toContain("moves=0 won=false");
 });
 
@@ -44,7 +44,7 @@ test("prints instructions and the shared legend for help", async () => {
   const { exitCode, output } = await play(["help", "quit"]);
 
   expect(exitCode).toBe(0);
-  expect(output.match(/Enter <block-id> <direction> \(left, right, up, down\), help, or quit\./g)).toHaveLength(2);
+  expect(output.match(/Enter <block-id> <direction> \[steps\] \(left, right, up, down\), help, or quit\./g)).toHaveLength(2);
   expect(output.match(/Legend: R\/A\/B=blocks #=Wall \*=Checkpoint \.=empty/g)).toHaveLength(2);
 });
 
@@ -59,6 +59,13 @@ test("renders the winning frame after the known solution", async () => {
   expect(exitCode).toBe(0);
   expect(output).toContain("moves=7 won=true");
   expect(output).toContain("YOU WIN");
+});
+
+test("moves multiple cells and reports a partial request", async () => {
+  const { output } = await play(["A up", "B down", "R right 9"]);
+
+  expect(output).toContain("Moved 5 of 9 cells before already won.");
+  expect(output).toContain("moves=7 won=true");
 });
 
 test("the start script accepts the known solution on stdin", async () => {
