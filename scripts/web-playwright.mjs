@@ -25,7 +25,7 @@ export async function runWebVerification({ recordVideo = false, humanPace = fals
     browser = await chromium.launch({ executablePath: await browserPath(), headless: true });
     const desktop = await desktopFlow(browser, `http://127.0.0.1:${port}`, videoDir, humanPace);
     const mobile = await mobileFlow(browser, `http://127.0.0.1:${port}`, videoDir, humanPace);
-    return { desktopVideoPath: desktop, mobileVideoPath: mobile.videoPath, generatedSeed: mobile.seed, videoDir };
+    return { desktopVideoPath: desktop.videoPath, mobileVideoPath: mobile.videoPath, generatedSeed: mobile.seed, screenshots: desktop.screenshots, videoDir };
   } catch (error) {
     if (videoDir) await rm(videoDir, { recursive: true, force: true });
     throw error;
@@ -39,17 +39,28 @@ async function desktopFlow(browser, url, videoDir, humanPace) {
   const context = await browser.newContext({ viewport: { width: 900, height: 760 }, recordVideo: videoDir ? { dir: videoDir, size: { width: 900, height: 760 } } : undefined });
   const page = await context.newPage();
   const video = page.video();
+  const screenshots = videoDir ? screenshotSet(videoDir) : undefined;
   await page.goto(url, { waitUntil: "domcontentloaded" });
+  if (screenshots) await page.screenshot({ path: screenshots[0].path, fullPage: true });
   const checkpointBefore = await checkpointPositions(page);
   assert(checkpointBefore[1].x - checkpointBefore[0].x < checkpointBefore[0].width * 1.2, "Checkpoint cells are not adjacent at their engine coordinates.");
-  await assertCanceledPreview(page);
+  await assertCanceledPreview(page, screenshots);
   await solveWithMouse(page, humanPace);
   const checkpointAfter = await checkpointPositions(page);
   assert(JSON.stringify(checkpointAfter) === JSON.stringify(checkpointBefore), `Checkpoint moved while blocks moved: ${JSON.stringify({ checkpointBefore, checkpointAfter })}.`);
   assert((await page.locator("#win").textContent())?.includes("you win"), "Desktop mouse drag did not reach the Checkpoint.");
+  if (screenshots) await page.screenshot({ path: screenshots[3].path, fullPage: true });
+  await page.locator("[data-action='new-level']").click();
+  await page.waitForTimeout(100);
+  if (screenshots) await page.screenshot({ path: screenshots[4].path, fullPage: true });
+  if (screenshots) {
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await addParityPanel(page);
+    await page.screenshot({ path: screenshots[5].path, fullPage: true });
+  }
   await pause(page, humanPace, 600);
   await context.close();
-  return video ? await video.path() : undefined;
+  return { videoPath: video ? await video.path() : undefined, screenshots: screenshots ?? [] };
 }
 
 async function mobileFlow(browser, url, videoDir, humanPace) {
@@ -83,7 +94,7 @@ async function solveWithTouch(page, session, humanPace) {
   await touchDrag(page, session, "R", 300, 0, humanPace);
 }
 
-async function assertCanceledPreview(page) {
+async function assertCanceledPreview(page, screenshots) {
   const locator = page.locator("[data-block-id='R']");
   const box = await locator.boundingBox();
   const x = box.x + box.width / 2;
@@ -91,10 +102,45 @@ async function assertCanceledPreview(page) {
   await page.mouse.move(x, y); await page.mouse.down(); await page.mouse.move(x + 35, y, { steps: 6 });
   assert(await locator.getAttribute("data-drag-preview") === "true", "Half drag did not expose an in-progress preview.");
   assert((await page.locator("#moves").textContent()) === "0 moves", "Half drag committed engine state before release.");
+  if (screenshots) await page.screenshot({ path: screenshots[1].path, fullPage: true });
   await locator.dispatchEvent("pointercancel", { pointerId: 1 });
   await page.mouse.up();
   assert(await locator.getAttribute("data-drag-preview") !== "true", "Canceled drag left its preview active.");
   assert((await page.locator("#moves").textContent()) === "0 moves", "Canceled drag committed engine state.");
+  if (screenshots) await page.screenshot({ path: screenshots[2].path, fullPage: true });
+}
+
+function screenshotSet(directory) {
+  return [
+    ["Initial board", "The fixed board before interaction", "initial-board.png"],
+    ["Half drag in progress", "The Red Block following a held pointer between cells", "half-drag.png"],
+    ["Canceled drag restored", "The Red Block restored after pointer cancellation", "canceled-drag.png"],
+    ["Completed multi-cell drag", "One drag completed the Red Block's five-cell move", "completed-drag.png"],
+    ["Generated level", "A level with randomized dimensions, Walls, Checkpoint, and blocks", "generated-level.png"],
+    ["Terminal/web parity", "The web board beside its terminal occupancy projection", "terminal-web-parity.png"],
+  ].map(([caption, alt, filename]) => ({ caption, alt, path: join(directory, filename) }));
+}
+
+async function addParityPanel(page) {
+  await page.evaluate(() => {
+    const board = document.querySelector("#board");
+    const width = Number(board.dataset.width);
+    const height = Number(board.dataset.height);
+    const matrix = Array.from({ length: height }, () => Array.from({ length: width }, () => "."));
+    for (const cell of board.querySelectorAll(".cell")) {
+      const x = Number(cell.dataset.x); const y = Number(cell.dataset.y);
+      matrix[y][x] = cell.dataset.kind === "wall" ? "#" : cell.dataset.kind === "checkpoint" ? "*" : ".";
+    }
+    for (const block of board.querySelectorAll(".block")) {
+      const x = Number(block.dataset.x); const y = Number(block.dataset.y);
+      const blockWidth = Number(block.dataset.width); const blockHeight = Number(block.dataset.height);
+      for (let row = 0; row < blockHeight; row += 1) for (let column = 0; column < blockWidth; column += 1) matrix[y + row][x + column] = block.dataset.blockId;
+    }
+    const panel = document.createElement("section");
+    panel.style.cssText = "margin-top:16px;padding:14px;border:1px solid #526178;border-radius:12px;background:#090d14";
+    panel.innerHTML = `<strong>Terminal projection from the shared engine state</strong><pre style="font:16px/1.45 monospace;white-space:pre;color:#d8f6e5">${matrix.map((row) => row.join(" ")).join("\n")}</pre>`;
+    board.insertAdjacentElement("afterend", panel);
+  });
 }
 
 async function checkpointPositions(page) {
