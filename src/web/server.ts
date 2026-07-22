@@ -2,7 +2,7 @@ import { join, resolve } from "node:path";
 
 const dist = resolve(import.meta.dir, "..", "..", "dist");
 const port = Number(Bun.env.PORT ?? 3000);
-const files: Record<string, string> = { "/": "index.html", "/index.html": "index.html", "/app.js": "client.js" };
+const files: Record<string, string> = { "/": "index.html", "/index.html": "index.html", "/app.js": "app.js" };
 
 export function startServer(serverPort = port): ReturnType<typeof Bun.serve> {
   return Bun.serve({
