@@ -27,6 +27,7 @@ export interface BrowserSession {
   moveHistory: SemanticMove[];
   playState: GameState;
   version: 1;
+  worldView: { x: number; y: number };
   worldState: PrototypeState;
   zoom: number;
 }
@@ -57,6 +58,11 @@ export function decodeBrowserSession(value: string | null): BrowserSession | und
         : candidate.playState.won,
       feedbackDraft: isFeedbackDraft(candidate.feedbackDraft) ? candidate.feedbackDraft : { comment: "" },
       feedbackEntries: Array.isArray(candidate.feedbackEntries) ? candidate.feedbackEntries : [],
+      worldView: candidate.worldView
+        && typeof candidate.worldView.x === "number"
+        && typeof candidate.worldView.y === "number"
+        ? candidate.worldView
+        : { x: candidate.worldState.camera.x, y: candidate.worldState.camera.y },
     } as BrowserSession;
   } catch {
     return undefined;

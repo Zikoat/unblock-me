@@ -137,8 +137,8 @@ function moveCamera(state: PrototypeState, direction: Direction, steps: number):
   const movement = delta[direction];
   const camera = {
     ...state.camera,
-    x: clamp(state.camera.x + movement.x, 0, state.worldWidth - state.camera.width),
-    y: clamp(state.camera.y + movement.y, 0, state.worldHeight - state.camera.height),
+    x: state.camera.x + movement.x,
+    y: state.camera.y + movement.y,
   };
   const moved = { ...state, camera };
   const committed = commitViewportRequest(moved);
@@ -155,8 +155,8 @@ function moveCamera(state: PrototypeState, direction: Direction, steps: number):
 function panCamera(state: PrototypeState, deltaX: number, deltaY: number): PrototypeState {
   const camera = {
     ...state.camera,
-    x: clamp(state.camera.x + deltaX, 0, state.worldWidth - state.camera.width),
-    y: clamp(state.camera.y + deltaY, 0, state.worldHeight - state.camera.height),
+    x: state.camera.x + deltaX,
+    y: state.camera.y + deltaY,
   };
   const moved = { ...state, camera };
   const committed = commitViewportRequest(moved);
@@ -176,7 +176,7 @@ function commitViewportRequest(state: PrototypeState): PrototypeState {
     x: state.camera.x + Math.floor(state.camera.width / 2),
     y: state.camera.y + Math.floor(state.camera.height / 2),
   };
-  const newCells = viewportRequestCells(state.camera, REQUEST_MARGIN, state.worldWidth, state.worldHeight)
+  const newCells = viewportRequestCells(state.camera, REQUEST_MARGIN)
     .filter((cell) => !existingCells.has(key(cell)))
     .map((cell): RegionCell => ({ ...cell, regionId }));
   if (newCells.length === 0) return state;
@@ -243,11 +243,10 @@ function findPosition(
   return undefined;
 }
 
-function viewportRequestCells(camera: Camera, margin: number, width: number, height: number): Point[] {
+function viewportRequestCells(camera: Camera, margin: number): Point[] {
   const cells: Point[] = [];
   for (let y = camera.y - margin; y < camera.y + camera.height + margin; y += 1) {
     for (let x = camera.x - margin; x < camera.x + camera.width + margin; x += 1) {
-      if (x < 0 || y < 0 || x >= width || y >= height) continue;
       const horizontalDistance = x < camera.x
         ? camera.x - x
         : x >= camera.x + camera.width
@@ -282,8 +281,4 @@ function blockId(index: number): string {
 
 function key(point: Point): string {
   return `${point.x},${point.y}`;
-}
-
-function clamp(value: number, minimum: number, maximum: number): number {
-  return Math.max(minimum, Math.min(maximum, value));
 }

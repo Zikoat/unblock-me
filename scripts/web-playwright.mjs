@@ -165,8 +165,8 @@ function mobileScreenshotSet(directory) {
 
 async function exerciseWorldAndClosureWithMouse(page, screenshots, humanPace) {
   await page.locator("[data-mode='world']").click();
-  assert((await page.locator("#moves").textContent()) === "Camera 0,0", "World mode did not start at camera 0,0.");
-  assert((await page.locator(".cell").count()) === 100, "World mode did not render exactly the 10×10 Viewport.");
+  assert((await page.locator("#moves").textContent()) === "Camera 0.0,0.0", "World mode did not start at camera 0,0.");
+  assert((await page.locator(".cell").count()) === 400, "World mode did not render its edge-hiding overscan.");
   if (screenshots) await page.screenshot({ path: screenshots[6].path, fullPage: true });
 
   const empty = await emptyWorldCell(page);
@@ -174,8 +174,8 @@ async function exerciseWorldAndClosureWithMouse(page, screenshots, humanPace) {
   await page.mouse.down();
   await page.mouse.move(empty.x - 170, empty.y, { steps: 8 });
   await page.mouse.up();
-  assert((await page.locator("#moves").textContent()) !== "Camera 0,0", "Desktop empty-space drag did not pan the World camera.");
-  assert((await page.locator(".cell").count()) === 100, "World pan rendered more than the Viewport.");
+  assert((await page.locator("#moves").textContent()) !== "Camera 0.0,0.0", "Desktop empty-space drag did not pan the World camera.");
+  assert((await page.locator(".cell").count()) === 400, "World pan lost its edge-hiding overscan.");
   if (screenshots) await page.screenshot({ path: screenshots[7].path, fullPage: true });
 
   await page.locator("[data-mode='closure']").click();
@@ -198,7 +198,7 @@ async function exerciseWorldAndClosureWithTouch(page, session, screenshots, huma
   await session.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: empty.x, y: empty.y, id: 7 }] });
   await session.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: empty.x - 150, y: empty.y, id: 7 }] });
   await session.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
-  assert((await page.locator("#moves").textContent()) !== "Camera 0,0", "Phone empty-space drag did not pan the World camera.");
+  assert((await page.locator("#moves").textContent()) !== "Camera 0.0,0.0", "Phone empty-space drag did not pan the World camera.");
   if (screenshots[2]) await page.screenshot({ path: screenshots[2].path, fullPage: true });
 
   await touchTap(page, session, "[data-mode='closure']");
@@ -212,7 +212,14 @@ async function exerciseWorldAndClosureWithTouch(page, session, screenshots, huma
 async function emptyWorldCell(page) {
   const point = await page.locator(".cell").evaluateAll((cells) => {
     const occupied = new Set([...document.querySelectorAll("[data-world-block]")].map((node) => `${node.dataset.worldX},${node.dataset.worldY}`));
-    const cell = cells.find((candidate) => !occupied.has(`${candidate.dataset.worldX},${candidate.dataset.worldY}`));
+    const frame = document.querySelector("#board-frame")?.getBoundingClientRect();
+    const cell = cells.find((candidate) => {
+      if (occupied.has(`${candidate.dataset.worldX},${candidate.dataset.worldY}`) || !frame) return false;
+      const box = candidate.getBoundingClientRect();
+      const x = box.x + box.width / 2;
+      const y = box.y + box.height / 2;
+      return x > frame.left && x < frame.right && y > frame.top && y < frame.bottom;
+    });
     if (!cell) return undefined;
     const box = cell.getBoundingClientRect();
     return { x: box.x + box.width / 2, y: box.y + box.height / 2 };

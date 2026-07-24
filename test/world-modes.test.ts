@@ -50,3 +50,15 @@ test("offers finite Play, World generation, and Dependency closure browser modes
   expect(pageHtml).toContain('data-mode="world"');
   expect(pageHtml).toContain('data-mode="closure"');
 });
+
+test("World camera can pan diagonally beyond the original 40×40 experiment", () => {
+  const state = worldPrototype.reducePrototype(
+    worldPrototype.createPrototypeState(),
+    { type: "pan-camera", deltaX: -12, deltaY: 45 },
+  );
+
+  expect(state.camera).toMatchObject({ x: -12, y: 45 });
+  expect(worldPrototype.projectWorldViewport(state)).toSatisfy((cells: ViewCell[]) =>
+    cells.length === 100 && cells.every((cell) => cell.committed)
+  );
+});

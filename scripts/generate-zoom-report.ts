@@ -26,8 +26,8 @@ const playback = JSON.parse((await exec("node", [
 if (!playback.desktopVideoPath || !playback.mobileVideoPath) throw new Error("Zoom recorder did not create both videos.");
 
 await mkdir(artifacts, { recursive: true });
-const desktopMp4 = join(artifacts, "issue-13-desktop.mp4");
-const mobileMp4 = join(artifacts, "issue-13-mobile.mp4");
+const desktopMp4 = join(artifacts, "issue-13-map-desktop.mp4");
+const mobileMp4 = join(artifacts, "issue-13-map-mobile.mp4");
 try {
   await Promise.all([
     encode(playback.desktopVideoPath, desktopMp4),
@@ -40,23 +40,40 @@ try {
   })));
   const commit = (await exec("git", ["rev-parse", "--short", "HEAD"], { cwd })).stdout.trim();
   const html = renderIssueReport({
-    title: "Issue 13 — wheel and pinch zoom",
-    summary: "Only desktop wheel zoom, phone pinch zoom, zoom bounds, and drag ownership are shown.",
+    title: "Issue 13 correction — map-style pan and zoom",
+    summary: "Only continuous diagonal pan, combined two-finger pan/zoom, and edge-free World zoom are shown.",
     commit,
+    issueNumber: 13,
+    issueName: "Add pinch and wheel zoom to the browser Viewport",
     issueUrl: "https://github.com/Zikoat/unblock-me/issues/13",
     deploymentUrl: "https://zikoat.github.io/unblock-me/",
+    requirements: [
+      "Pan updates continuously before pointer release",
+      "One pan may move in X and Y simultaneously",
+      "Two fingers pan and zoom as one centroid-and-distance gesture",
+      "The two-finger gesture uses the same World camera as one-pointer pan",
+      "Zooming out does not reveal a bounded World edge",
+    ],
     checks: [
-      "Desktop wheel changed zoom from 100% to 140% without a modifier key",
-      "Phone two-pointer pinch changed zoom",
-      "The phone pinch began on the movable Red Block and committed 0 moves",
-      "Red Block engine coordinates were unchanged after both gestures",
-      "Zoom is bounded between 75% and 250%",
-      "3 focused zoom tests passed",
+      "Desktop camera coordinates changed on both axes while the pointer was still held",
+      "Phone camera coordinates and zoom changed during the same two-pointer gesture",
+      "World camera crossed the original 40×40 coordinates and generated the resulting Viewport",
+      "A 20×20 overscan surface covered the frame at minimum zoom",
+      "Wheel zoom retained its pointer anchor",
+    ],
+    verification: [
+      "TypeScript compilation passed",
+      "Focused camera, zoom, session, and World reducer tests passed",
+      "Desktop mouse and phone touch Playwright flows passed",
+      "Playwright observed no page or console errors",
+      "GitHub Pages deployment checked after publishing",
+      "Report screenshots were visually inspected",
+      "Both H.264 videos were checked from their HTTPS Pages URLs",
     ],
     screenshots,
     videos: [
-      { caption: "Desktop wheel zoom", url: `${videoBase}/${basename(desktopMp4)}` },
-      { caption: "Phone pinch beginning on the Red Block", url: `${videoBase}/${basename(mobileMp4)}` },
+      { caption: "Desktop: continuous diagonal drag, then anchored wheel zoom", url: `${videoBase}/${basename(desktopMp4)}` },
+      { caption: "Phone: one combined pinch-pan gesture", url: `${videoBase}/${basename(mobileMp4)}` },
     ],
   });
   await writeFile(join(artifacts, "issue-13-browser-zoom.html"), html);
