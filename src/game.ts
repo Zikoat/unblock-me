@@ -36,7 +36,6 @@ export type MoveErrorCode =
   | "wrong-axis"
   | "blocked"
   | "out-of-bounds"
-  | "already-won"
   | "invalid-steps";
 
 export type MoveResult =
@@ -54,8 +53,6 @@ export function blockCells(block: Block): Point[] {
 }
 
 export function applyMove(state: GameState, action: MoveAction): MoveResult {
-  if (state.won) return reject(state, "already-won", "The puzzle is already won.");
-
   const block = state.blocks.find((candidate) => candidate.id.toLowerCase() === action.blockId.toLowerCase());
   if (!block) return reject(state, "unknown-block", `Unknown block: ${action.blockId}.`);
 
@@ -89,7 +86,8 @@ export function applyMove(state: GameState, action: MoveAction): MoveResult {
   const blocks = state.blocks.map((candidate) => (candidate === block ? movedBlock : candidate));
   const checkpointCells = new Set(state.checkpoint.map(pointKey));
   const redBlock = blocks.find((candidate) => candidate.id.toLowerCase() === "r");
-  const won = redBlock !== undefined && blockCells(redBlock).every((cell) => checkpointCells.has(pointKey(cell)));
+  const won = state.won
+    || (redBlock !== undefined && blockCells(redBlock).every((cell) => checkpointCells.has(pointKey(cell))));
 
   return { ok: true, state: { ...state, blocks, moves: state.moves + 1, won } };
 }

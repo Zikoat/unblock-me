@@ -1,6 +1,7 @@
 import type { Direction, GameState } from "../game";
 import type { ClosureState } from "../world/closure";
 import type { PrototypeState } from "../world/generation";
+import type { FeedbackDraft, LevelFeedback } from "./feedback";
 
 export const BROWSER_SESSION_KEY = "unblock-me.browser-session.v1";
 
@@ -17,6 +18,10 @@ export interface SemanticMove {
 export interface BrowserSession {
   closureState: ClosureState;
   currentSeed?: number;
+  currentLevelId: string;
+  currentLevelSolved: boolean;
+  feedbackDraft: FeedbackDraft;
+  feedbackEntries: LevelFeedback[];
   initialState: GameState;
   mode: "play" | "world" | "closure";
   moveHistory: SemanticMove[];
@@ -44,10 +49,25 @@ export function decodeBrowserSession(value: string | null): BrowserSession | und
       || !candidate.closureState
       || !Array.isArray(candidate.moveHistory)
     ) return undefined;
-    return candidate as BrowserSession;
+    return {
+      ...candidate,
+      currentLevelId: typeof candidate.currentLevelId === "string" ? candidate.currentLevelId : "restored-level",
+      currentLevelSolved: typeof candidate.currentLevelSolved === "boolean"
+        ? candidate.currentLevelSolved
+        : candidate.playState.won,
+      feedbackDraft: isFeedbackDraft(candidate.feedbackDraft) ? candidate.feedbackDraft : { comment: "" },
+      feedbackEntries: Array.isArray(candidate.feedbackEntries) ? candidate.feedbackEntries : [],
+    } as BrowserSession;
   } catch {
     return undefined;
   }
+}
+
+function isFeedbackDraft(value: unknown): value is FeedbackDraft {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<FeedbackDraft>;
+  return typeof candidate.comment === "string"
+    && (candidate.rating === undefined || candidate.rating === "up" || candidate.rating === "down");
 }
 
 function isMode(value: unknown): value is BrowserSession["mode"] {

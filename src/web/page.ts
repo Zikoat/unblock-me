@@ -3,6 +3,7 @@ export const pageHtml = `<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
   <title>Unblock Me</title>
   <style>
     :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; background:#11151c; color:#f4f0e5; }
@@ -32,6 +33,12 @@ export const pageHtml = `<!doctype html>
     #status { min-height:1.5rem; color:#bdc6d5; }
     #win { display:none; margin-top:1rem; padding:1rem; border-radius:10px; background:#d8ff7a; color:#17210a; font-weight:850; }
     #win.visible { display:block; }
+    #feedback-panel { margin:.8rem 0; padding:.8rem; border:1px solid #526178; border-radius:12px; background:#171e28; }
+    #feedback-panel[hidden] { display:none; }
+    .feedback-actions { display:flex; gap:.5rem; margin-bottom:.65rem; }
+    .feedback-actions button[aria-pressed="true"] { background:#d8ff7a; border-color:#d8ff7a; color:#17210a; }
+    #feedback-comment { width:100%; min-height:4.5rem; margin-top:.35rem; padding:.65rem; resize:vertical; border:1px solid #526178; border-radius:8px; background:#090d13; color:inherit; font:inherit; }
+    #feedback-state { margin:.45rem 0 0; color:#bdc6d5; font-size:.9rem; }
     .instructions { color:#bdc6d5; font-size:.93rem; }
   </style>
 </head>
@@ -46,6 +53,15 @@ export const pageHtml = `<!doctype html>
     </nav>
     <div id="board-frame"><div id="board" aria-label="Sliding block puzzle"></div></div>
     <div id="mode-controls"></div>
+    <section id="feedback-panel" aria-label="Level feedback">
+      <div class="feedback-actions">
+        <button data-rating="up" aria-pressed="false" aria-label="Thumbs up">👍 Thumbs up</button>
+        <button data-rating="down" aria-pressed="false" aria-label="Thumbs down">👎 Thumbs down</button>
+      </div>
+      <label for="feedback-comment">Optional comment</label>
+      <textarea id="feedback-comment" placeholder="What made this level good or bad?"></textarea>
+      <p id="feedback-state">You can rate this level now or after solving it.</p>
+    </section>
     <div class="meta">
       <span class="badge" id="moves">0 moves</span>
       <span class="badge" id="seed">Fixed level</span>

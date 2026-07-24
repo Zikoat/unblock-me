@@ -18,10 +18,14 @@ export interface IssueReportData {
   checks: readonly string[];
   commit: string;
   deploymentUrl: string;
+  issueName?: string;
+  issueNumber?: number;
   issueUrl: string;
+  requirements?: readonly string[];
   screenshots: readonly ScreenshotEvidence[];
   summary: string;
   title: string;
+  verification?: readonly string[];
   videos?: readonly { caption: string; url: string }[];
 }
 
@@ -30,6 +34,8 @@ export function renderIssueReport(data: IssueReportData): string {
     `<figure><img alt="${escapeHtml(screenshot.alt)}" src="data:image/png;base64,${screenshot.base64}"><figcaption>${escapeHtml(screenshot.caption)}</figcaption></figure>`,
   ).join("");
   const checks = data.checks.map((check) => `<li>${escapeHtml(check)}</li>`).join("");
+  const requirements = (data.requirements ?? []).map((requirement) => `<li>${escapeHtml(requirement)}</li>`).join("");
+  const verification = (data.verification ?? []).map((step) => `<li>${escapeHtml(step)}</li>`).join("");
   const videos = (data.videos ?? []).map((video) =>
     `<figure><video controls preload="metadata"><source src="${escapeHtml(video.url)}" type="video/mp4"><a href="${escapeHtml(video.url)}">Open the MP4</a></video><figcaption>${escapeHtml(video.caption)} · <a href="${escapeHtml(video.url)}">Open or download MP4</a></figcaption></figure>`,
   ).join("");
@@ -47,11 +53,14 @@ code{background:#090d13;padding:.15rem .35rem;border-radius:4px}
 </style></head><body><main>
 <h1>${escapeHtml(data.title)}</h1>
 <p>${escapeHtml(data.summary)}</p>
+<section class="card"><p><strong>Issue:</strong> <a href="${escapeHtml(data.issueUrl)}">#${data.issueNumber ?? "?"} ${escapeHtml(data.issueName ?? data.title)}</a></p>
+${requirements ? `<h2>Requirements</h2><ul>${requirements}</ul>` : ""}</section>
 <section class="card"><div class="shots">${screenshots}</div></section>
-<section class="card"><h2>Checks</h2><ul class="pass">${checks}</ul></section>
+<section class="card"><h2>Implementation evidence</h2><ul class="pass">${checks}</ul></section>
 ${videos ? `<section class="card"><h2>Interaction video</h2>${videos}</section>` : ""}
-<section class="card"><h2>Build</h2><p>Commit <code>${escapeHtml(data.commit)}</code></p>
-<p><a href="${escapeHtml(data.deploymentUrl)}">Open deployed app</a> · <a href="${escapeHtml(data.issueUrl)}">Open issue</a></p></section>
+<section class="card"><h2>Verification</h2>${verification ? `<ul>${verification}</ul>` : ""}
+<p>Commit <code>${escapeHtml(data.commit)}</code></p>
+<p><a href="${escapeHtml(data.deploymentUrl)}">Open deployed app</a> · <a href="${escapeHtml(data.issueUrl)}">Open #${data.issueNumber ?? "issue"} ${escapeHtml(data.issueName ?? "")}</a></p></section>
 </main></body></html>`;
 }
 

@@ -64,7 +64,7 @@ test("renders the winning frame after the known solution", async () => {
 test("moves multiple cells and reports a partial request", async () => {
   const { output } = await play(["A up", "B down", "R right 9"]);
 
-  expect(output).toContain("Moved 5 of 9 cells before already won.");
+    expect(output).toContain("Moved 5 of 9 cells before out of bounds.");
   expect(output).toContain("moves=7 won=true");
 });
 

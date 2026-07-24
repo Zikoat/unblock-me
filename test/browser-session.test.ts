@@ -33,6 +33,10 @@ test("round-trips exact Play, World, Closure, camera, zoom, and move snapshots",
     }],
     worldState: createPrototypeState(),
     closureState: createClosureState("separator"),
+    currentLevelId: "level-42",
+    currentLevelSolved: false,
+    feedbackDraft: { rating: "up", comment: "Good corridor" },
+    feedbackEntries: [],
   };
 
   expect(codec.decodeBrowserSession!(codec.encodeBrowserSession!(session))).toEqual(session);
@@ -48,4 +52,25 @@ test("rejects corrupt and unsupported browser sessions", () => {
 
 test("shows the retained semantic move count", () => {
   expect(pageHtml).toContain('id="history"');
+});
+
+test("migrates a stored session without feedback fields", () => {
+  const play = createPuzzle();
+  const decoded = sessionModule.decodeBrowserSession(JSON.stringify({
+    version: 1,
+    mode: "play",
+    zoom: 1,
+    initialState: play,
+    playState: play,
+    moveHistory: [],
+    worldState: createPrototypeState(),
+    closureState: createClosureState(),
+  }));
+
+  expect(decoded).toMatchObject({
+    currentLevelId: "restored-level",
+    currentLevelSolved: false,
+    feedbackDraft: { comment: "" },
+    feedbackEntries: [],
+  });
 });

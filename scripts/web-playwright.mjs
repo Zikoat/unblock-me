@@ -57,6 +57,7 @@ async function desktopFlow(browser, url, videoDir, humanPace) {
   assert(JSON.stringify(checkpointAfter) === JSON.stringify(checkpointBefore), `Checkpoint moved while blocks moved: ${JSON.stringify({ checkpointBefore, checkpointAfter })}.`);
   assert((await page.locator("#win").textContent())?.includes("you win"), "Desktop mouse drag did not reach the Checkpoint.");
   if (screenshots) await page.screenshot({ path: screenshots[3].path, fullPage: true });
+  await page.locator("[data-rating='up']").click();
   await page.locator("[data-action='new-level']").click();
   await page.waitForTimeout(100);
   if (screenshots) await page.screenshot({ path: screenshots[4].path, fullPage: true });
@@ -85,6 +86,7 @@ async function mobileFlow(browser, url, videoDir, humanPace) {
   const session = await context.newCDPSession(page);
   await solveWithTouch(page, session, humanPace);
   assert((await page.locator("#win").textContent())?.includes("you win"), "Mobile touch drag did not reach the Checkpoint.");
+  await touchTap(page, session, "[data-rating='up']");
   await touchTap(page, session, "[data-action='new-level']");
   await page.waitForTimeout(350);
   const seed = await page.locator("#seed").textContent() ?? "";
