@@ -60,6 +60,7 @@ async function desktopFlow(browser, url, videoDir, humanPace) {
   await page.locator("[data-action='new-level']").click();
   await page.waitForTimeout(100);
   if (screenshots) await page.screenshot({ path: screenshots[4].path, fullPage: true });
+  await exerciseWorldAndClosureWithMouse(page, screenshots, humanPace);
   if (screenshots) {
     await page.reload({ waitUntil: "domcontentloaded" });
     await addParityPanel(page);
@@ -91,6 +92,7 @@ async function mobileFlow(browser, url, videoDir, humanPace) {
   await assertSquareCells(page);
   await assertConnectedCheckpoint(page);
   if (screenshots[1]) await page.screenshot({ path: screenshots[1].path, fullPage: true });
+  await exerciseWorldAndClosureWithTouch(page, session, screenshots, humanPace);
   await pause(page, humanPace, 600);
   await context.close();
   return { videoPath: video ? await video.path() : undefined, seed, screenshots };
@@ -142,6 +144,11 @@ function screenshotSet(directory) {
     ["Completed multi-cell drag", "One drag completed the Red Block's five-cell move", "completed-drag.png"],
     ["Generated level", "A level with randomized dimensions, Walls, Checkpoint, and blocks", "generated-level.png"],
     ["Terminal/web parity", "The web board beside its terminal occupancy projection", "terminal-web-parity.png"],
+    ["World initial Viewport", "The initially generated 10 by 10 browser Viewport", "world-initial.png"],
+    ["World after empty-space pan", "A disconnected Generated Region after an empty-space camera drag", "world-panned.png"],
+    ["Natural Dependency closure", "Natural closure stopped at a clear committed corridor", "closure-natural.png"],
+    ["Capped Dependency closure", "Runaway closure stopped at its explicit safety cap", "closure-runaway.png"],
+    ["Separated Dependency closure", "Dependency closure stopped at an immovable separator", "closure-separator.png"],
   ].map(([caption, alt, filename]) => ({ caption, alt, path: join(directory, filename) }));
 }
 
@@ -149,7 +156,75 @@ function mobileScreenshotSet(directory) {
   return [
     ["Phone square-cell board", "Uniform square cells and a connected Checkpoint on a phone viewport", "phone-square-board.png"],
     ["Phone generated board", "A generated level retaining square cells and a connected Checkpoint", "phone-generated-board.png"],
+    ["Phone World pan", "The World Viewport after a phone empty-space drag", "phone-world-pan.png"],
+    ["Phone Dependency closure", "The separated Dependency closure outcome on a phone", "phone-closure.png"],
   ].map(([caption, alt, filename]) => ({ caption, alt, path: join(directory, filename) }));
+}
+
+async function exerciseWorldAndClosureWithMouse(page, screenshots, humanPace) {
+  await page.locator("[data-mode='world']").click();
+  assert((await page.locator("#moves").textContent()) === "Camera 0,0", "World mode did not start at camera 0,0.");
+  assert((await page.locator(".cell").count()) === 100, "World mode did not render exactly the 10×10 Viewport.");
+  if (screenshots) await page.screenshot({ path: screenshots[6].path, fullPage: true });
+
+  const empty = await emptyWorldCell(page);
+  await page.mouse.move(empty.x, empty.y);
+  await page.mouse.down();
+  await page.mouse.move(empty.x - 170, empty.y, { steps: 8 });
+  await page.mouse.up();
+  assert((await page.locator("#moves").textContent()) !== "Camera 0,0", "Desktop empty-space drag did not pan the World camera.");
+  assert((await page.locator(".cell").count()) === 100, "World pan rendered more than the Viewport.");
+  if (screenshots) await page.screenshot({ path: screenshots[7].path, fullPage: true });
+
+  await page.locator("[data-mode='closure']").click();
+  for (const [scenario, expected, screenshotIndex] of [
+    ["natural", "closed", 8],
+    ["runaway", "capped", 9],
+    ["separator", "separated", 10],
+  ]) {
+    await page.getByRole("button", { name: scenario, exact: true }).click();
+    await page.getByRole("button", { name: "Run", exact: true }).click();
+    assert((await page.locator("#moves").textContent()) === expected, `${scenario} closure did not stop as ${expected}.`);
+    if (screenshots) await page.screenshot({ path: screenshots[screenshotIndex].path, fullPage: true });
+  }
+  await pause(page, humanPace, 400);
+}
+
+async function exerciseWorldAndClosureWithTouch(page, session, screenshots, humanPace) {
+  await touchTap(page, session, "[data-mode='world']");
+  const empty = await emptyWorldCell(page);
+  await session.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: empty.x, y: empty.y, id: 7 }] });
+  await session.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: empty.x - 150, y: empty.y, id: 7 }] });
+  await session.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  assert((await page.locator("#moves").textContent()) !== "Camera 0,0", "Phone empty-space drag did not pan the World camera.");
+  if (screenshots[2]) await page.screenshot({ path: screenshots[2].path, fullPage: true });
+
+  await touchTap(page, session, "[data-mode='closure']");
+  await touchTapByText(page, session, "separator");
+  await touchTapByText(page, session, "Run");
+  assert((await page.locator("#moves").textContent()) === "separated", "Phone Closure controls did not reach the separator outcome.");
+  if (screenshots[3]) await page.screenshot({ path: screenshots[3].path, fullPage: true });
+  await pause(page, humanPace, 400);
+}
+
+async function emptyWorldCell(page) {
+  const point = await page.locator(".cell").evaluateAll((cells) => {
+    const occupied = new Set([...document.querySelectorAll("[data-world-block]")].map((node) => `${node.dataset.worldX},${node.dataset.worldY}`));
+    const cell = cells.find((candidate) => !occupied.has(`${candidate.dataset.worldX},${candidate.dataset.worldY}`));
+    if (!cell) return undefined;
+    const box = cell.getBoundingClientRect();
+    return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  });
+  if (!point) throw new Error("World Viewport has no empty cell for camera pan.");
+  return point;
+}
+
+async function touchTapByText(page, session, label) {
+  const selector = await page.getByRole("button", { name: label, exact: true }).evaluate((element) => {
+    element.dataset.playwrightTap = "true";
+    return "[data-playwright-tap='true']";
+  });
+  await touchTap(page, session, selector);
 }
 
 async function addParityPanel(page) {
