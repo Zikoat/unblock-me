@@ -31,6 +31,10 @@ Verified with `gh` 2.96.0 in this repository:
 
 Comma-separated issue numbers work for both relationship flags. Create issues first, then wire relationships in a second pass.
 
+`gh issue close` does not accept `--comment-file` in gh 2.96.0. For a multiline
+resolution, pipe the text to `gh issue comment <number> --body-file -`, then run
+`gh issue close <number> --reason completed` separately.
+
 In PowerShell, a single-quoted `--body 'line one`nline two'` sends the backtick and `n` literally. For multiline bodies, use a here-string piped to `--body-file -`; repair an affected issue with the same pattern through `gh issue edit`.
 
 Use issue titles as names in human-facing text. Include the issue link behind the title rather than referring to an issue only by number.

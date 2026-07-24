@@ -14,6 +14,47 @@ export interface WebReportData {
   typecheck: string;
 }
 
+export interface IssueReportData {
+  checks: readonly string[];
+  commit: string;
+  deploymentUrl: string;
+  issueUrl: string;
+  screenshots: readonly ScreenshotEvidence[];
+  summary: string;
+  title: string;
+  videos?: readonly { caption: string; url: string }[];
+}
+
+export function renderIssueReport(data: IssueReportData): string {
+  const screenshots = data.screenshots.map((screenshot) =>
+    `<figure><img alt="${escapeHtml(screenshot.alt)}" src="data:image/png;base64,${screenshot.base64}"><figcaption>${escapeHtml(screenshot.caption)}</figcaption></figure>`,
+  ).join("");
+  const checks = data.checks.map((check) => `<li>${escapeHtml(check)}</li>`).join("");
+  const videos = (data.videos ?? []).map((video) =>
+    `<figure><video controls preload="metadata"><source src="${escapeHtml(video.url)}" type="video/mp4"><a href="${escapeHtml(video.url)}">Open the MP4</a></video><figcaption>${escapeHtml(video.caption)} · <a href="${escapeHtml(video.url)}">Open or download MP4</a></figcaption></figure>`,
+  ).join("");
+  return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${escapeHtml(data.title)}</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#10151d;color:#eef2f8;font:16px/1.45 system-ui,sans-serif}
+main{max-width:880px;margin:auto;padding:16px}h1{font-size:clamp(1.7rem,7vw,2.6rem);line-height:1.05}
+.card{margin:14px 0;padding:14px;background:#1b2430;border:1px solid #44536a;border-radius:12px}
+.shots{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+figure{margin:0}img,video{display:block;width:100%;max-height:70vh;object-fit:contain;background:#090d13;border-radius:8px}
+figcaption{margin-top:7px;font-weight:700}a{color:#b9ddff}.pass{color:#d8ff7a;font-weight:800}
+code{background:#090d13;padding:.15rem .35rem;border-radius:4px}
+</style></head><body><main>
+<h1>${escapeHtml(data.title)}</h1>
+<p>${escapeHtml(data.summary)}</p>
+<section class="card"><div class="shots">${screenshots}</div></section>
+<section class="card"><h2>Checks</h2><ul class="pass">${checks}</ul></section>
+${videos ? `<section class="card"><h2>Interaction video</h2>${videos}</section>` : ""}
+<section class="card"><h2>Build</h2><p>Commit <code>${escapeHtml(data.commit)}</code></p>
+<p><a href="${escapeHtml(data.deploymentUrl)}">Open deployed app</a> · <a href="${escapeHtml(data.issueUrl)}">Open issue</a></p></section>
+</main></body></html>`;
+}
+
 export function renderWebReport(data: WebReportData): string {
   const screenshots = data.screenshots.map((screenshot) =>
     `<figure><img alt="${escapeHtml(screenshot.alt)}" src="data:image/png;base64,${screenshot.base64}"><figcaption>${escapeHtml(screenshot.caption)}</figcaption></figure>`,
