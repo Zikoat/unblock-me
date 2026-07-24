@@ -35,6 +35,10 @@ Comma-separated issue numbers work for both relationship flags. Create issues fi
 resolution, pipe the text to `gh issue comment <number> --body-file -`, then run
 `gh issue close <number> --reason completed` separately.
 
+`gh release create --target` rejected a seven-character commit with
+`Release.target_commitish is invalid`. Pass the full `git rev-parse HEAD` value
+or the branch name.
+
 In PowerShell, a single-quoted `--body 'line one`nline two'` sends the backtick and `n` literally. For multiline bodies, use a here-string piped to `--body-file -`; repair an affected issue with the same pattern through `gh issue edit`.
 
 Use issue titles as names in human-facing text. Include the issue link behind the title rather than referring to an issue only by number.
