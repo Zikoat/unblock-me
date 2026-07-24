@@ -15,9 +15,11 @@ import {
 } from "../world/generation";
 import { blockColor, rgbCss } from "../world/palette";
 import { createCellViews } from "./view-model";
+import { zoomFromPinch, zoomFromWheel } from "./zoom";
 
 type AppMode = "play" | "world" | "closure";
 type DragPreview = {
+  block: Block;
   direction?: Direction;
   element: HTMLElement;
   pointerId: number;
@@ -33,10 +35,12 @@ type PanPreview = {
 };
 
 const board = document.querySelector<HTMLDivElement>("#board")!;
+const boardFrame = document.querySelector<HTMLDivElement>("#board-frame")!;
 const moves = document.querySelector<HTMLSpanElement>("#moves")!;
 const seed = document.querySelector<HTMLSpanElement>("#seed")!;
 const status = document.querySelector<HTMLDivElement>("#status")!;
 const win = document.querySelector<HTMLDivElement>("#win")!;
+const zoomBadge = document.querySelector<HTMLSpanElement>("#zoom")!;
 const lede = document.querySelector<HTMLParagraphElement>("#lede")!;
 const instructions = document.querySelector<HTMLParagraphElement>("#instructions")!;
 const modeControls = document.querySelector<HTMLDivElement>("#mode-controls")!;
@@ -49,6 +53,13 @@ let currentSeed: number | undefined;
 let worldState: PrototypeState = createPrototypeState();
 let closureState: ClosureState = createClosureState();
 let panPreview: PanPreview | undefined;
+let dragPreview: DragPreview | undefined;
+let zoom = 1;
+const pointerPositions = new Map<number, { x: number; y: number }>();
+let pinchStartDistance = 0;
+let pinchStartZoom = 1;
+let pinchActive = false;
+let suppressDragUntilPointersClear = false;
 
 function render(): void {
   updateModeChrome();
@@ -130,9 +141,11 @@ function configureBoard(width: number, height: number, label: string): void {
   board.style.gridTemplateColumns = `repeat(${width}, minmax(0, 1fr))`;
   board.style.gridTemplateRows = `repeat(${height}, minmax(0, 1fr))`;
   board.style.aspectRatio = `${width} / ${height}`;
+  boardFrame.style.aspectRatio = `${width} / ${height}`;
   board.dataset.width = String(width);
   board.dataset.height = String(height);
   board.ariaLabel = label;
+  applyZoom();
 }
 
 function createCell(x: number, y: number, kind: string): HTMLDivElement {
@@ -184,10 +197,10 @@ function createBlock(block: Block): HTMLButtonElement {
 }
 
 function attachDrag(element: HTMLElement, block: Block): void {
-  let preview: DragPreview | undefined;
   element.addEventListener("pointerdown", (event) => {
-    if (state.won) return;
-    preview = {
+    if (state.won || pinchActive || suppressDragUntilPointersClear) return;
+    dragPreview = {
+      block,
       element,
       pointerId: event.pointerId,
       startState: state,
@@ -198,13 +211,26 @@ function attachDrag(element: HTMLElement, block: Block): void {
     element.setPointerCapture(event.pointerId);
   });
   element.addEventListener("pointermove", (event) => {
-    if (!preview || preview.pointerId !== event.pointerId) return;
-    updatePreview(preview, block, event.clientX - preview.startX, event.clientY - preview.startY);
+    if (!dragPreview || dragPreview.pointerId !== event.pointerId) return;
+    if (pinchActive || suppressDragUntilPointersClear) {
+      cancelActiveInteractions();
+      return;
+    }
+    updatePreview(
+      dragPreview,
+      block,
+      event.clientX - dragPreview.startX,
+      event.clientY - dragPreview.startY,
+    );
   });
   element.addEventListener("pointerup", (event) => {
-    if (!preview || preview.pointerId !== event.pointerId) return;
-    const completed = preview;
-    preview = undefined;
+    if (!dragPreview || dragPreview.pointerId !== event.pointerId) return;
+    if (pinchActive || suppressDragUntilPointersClear) {
+      cancelActiveInteractions();
+      return;
+    }
+    const completed = dragPreview;
+    dragPreview = undefined;
     clearPreview(completed.element);
     if (!completed.direction || completed.steps === 0) {
       status.textContent = "Drag farther to cross a cell.";
@@ -227,9 +253,9 @@ function attachDrag(element: HTMLElement, block: Block): void {
     render();
   });
   element.addEventListener("pointercancel", (event) => {
-    if (!preview || preview.pointerId !== event.pointerId) return;
-    clearPreview(preview.element);
-    preview = undefined;
+    if (!dragPreview || dragPreview.pointerId !== event.pointerId) return;
+    clearPreview(dragPreview.element);
+    dragPreview = undefined;
     status.textContent = "Drag canceled.";
   });
 }
@@ -282,6 +308,23 @@ function clearPreview(element: HTMLElement): void {
   element.style.removeProperty("transform");
 }
 
+function cancelActiveInteractions(): void {
+  if (dragPreview) clearPreview(dragPreview.element);
+  dragPreview = undefined;
+  panPreview = undefined;
+}
+
+function applyZoom(): void {
+  board.style.setProperty("--board-zoom", String(zoom));
+  zoomBadge.textContent = `${Math.round(zoom * 100)}% zoom`;
+}
+
+function pointerDistance(): number {
+  const [first, second] = [...pointerPositions.values()];
+  if (!first || !second) return 0;
+  return Math.hypot(first.x - second.x, first.y - second.y);
+}
+
 function updateModeChrome(): void {
   for (const button of document.querySelectorAll<HTMLButtonElement>("[data-mode]")) {
     button.ariaPressed = String(button.dataset.mode === mode);
@@ -331,6 +374,39 @@ board.addEventListener("pointerdown", (event) => {
   panPreview = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY };
   board.setPointerCapture(event.pointerId);
 });
+
+board.addEventListener("pointerdown", (event) => {
+  pointerPositions.set(event.pointerId, { x: event.clientX, y: event.clientY });
+  if (pointerPositions.size !== 2) return;
+  pinchActive = true;
+  suppressDragUntilPointersClear = true;
+  pinchStartDistance = pointerDistance();
+  pinchStartZoom = zoom;
+  cancelActiveInteractions();
+}, { capture: true });
+
+board.addEventListener("pointermove", (event) => {
+  if (!pointerPositions.has(event.pointerId)) return;
+  pointerPositions.set(event.pointerId, { x: event.clientX, y: event.clientY });
+  if (!pinchActive || pointerPositions.size < 2) return;
+  event.preventDefault();
+  zoom = zoomFromPinch(pinchStartZoom, pinchStartDistance, pointerDistance());
+  applyZoom();
+}, { capture: true });
+
+for (const eventName of ["pointerup", "pointercancel"] as const) {
+  board.addEventListener(eventName, (event) => {
+    pointerPositions.delete(event.pointerId);
+    if (pointerPositions.size < 2) pinchActive = false;
+    if (pointerPositions.size === 0) suppressDragUntilPointersClear = false;
+  }, { capture: true });
+}
+
+boardFrame.addEventListener("wheel", (event) => {
+  event.preventDefault();
+  zoom = zoomFromWheel(zoom, event.deltaY);
+  applyZoom();
+}, { passive: false });
 
 board.addEventListener("pointerup", (event) => {
   if (mode !== "world" || !panPreview || panPreview.pointerId !== event.pointerId) return;

@@ -13,7 +13,8 @@ export const pageHtml = `<!doctype html>
     .lede { color:#bdc6d5; margin:.45rem 0 1rem; }
     .mode-switch { display:flex; gap:.45rem; margin:0 0 .8rem; }
     .mode-switch button[aria-pressed="true"] { background:#d8ff7a; color:#17210a; border-color:#d8ff7a; }
-    #board { width:min(100%, 560px); display:grid; gap:4px; padding:4px; background:#202936; border:2px solid #5c6c80; border-radius:14px; position:relative; touch-action:none; user-select:none; }
+    #board-frame { width:min(100%, 560px); overflow:hidden; border-radius:14px; background:#090d13; touch-action:none; }
+    #board { width:100%; height:100%; display:grid; gap:4px; padding:4px; background:#202936; border:2px solid #5c6c80; border-radius:14px; position:relative; touch-action:none; user-select:none; transform:scale(var(--board-zoom,1)); transform-origin:center; }
     .cell { background:#151b24; border-radius:6px; }
     .checkpoint { margin:-2px; z-index:1; border-radius:4px; background:repeating-linear-gradient(45deg,#80661e 0 7px,#aa8e39 7px 14px); }
     .wall { background:#050608; box-shadow:inset 0 0 0 2px #37404c; }
@@ -43,11 +44,12 @@ export const pageHtml = `<!doctype html>
       <button data-mode="world" aria-pressed="false">World</button>
       <button data-mode="closure" aria-pressed="false">Closure</button>
     </nav>
-    <div id="board" aria-label="Sliding block puzzle"></div>
+    <div id="board-frame"><div id="board" aria-label="Sliding block puzzle"></div></div>
     <div id="mode-controls"></div>
     <div class="meta">
       <span class="badge" id="moves">0 moves</span>
       <span class="badge" id="seed">Fixed level</span>
+      <span class="badge" id="zoom">100% zoom</span>
       <button data-action="new-level">New generated level</button>
       <button data-action="restart">Restart</button>
     </div>
