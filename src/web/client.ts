@@ -99,6 +99,7 @@ let pinchStartCamera: MapCamera = worldCamera;
 let pinchStartCentroid: ScreenPoint = { x: 0, y: 0 };
 let pinchActive = false;
 let suppressDragUntilPointersClear = false;
+let visibleBoardColumns = 1;
 
 function render(): void {
   updateModeChrome();
@@ -202,7 +203,14 @@ function configureBoard(width: number, height: number, label: string, worldMap =
   board.dataset.height = String(height);
   board.ariaLabel = label;
   board.classList.toggle("world-map", worldMap);
+  visibleBoardColumns = worldMap ? width / 2 : width;
+  updateBlockScale();
   applyZoom();
+}
+
+function updateBlockScale(): void {
+  const frameWidth = boardFrame.getBoundingClientRect().width;
+  if (frameWidth > 0) board.style.setProperty("--cell-size", `${frameWidth / visibleBoardColumns}px`);
 }
 
 function createCell(x: number, y: number, kind: string): HTMLDivElement {
@@ -692,4 +700,5 @@ document.querySelector<HTMLButtonElement>("[data-action='export']")!.addEventLis
   status.textContent = "Complete play and generation evidence exported.";
 });
 
+window.addEventListener("resize", updateBlockScale);
 render();
