@@ -97,11 +97,8 @@ test("wins after the seven-move solution fully occupies the Checkpoint", () => {
 
   expect(state.blocks.find((block) => block.id === "R")).toMatchObject({ x: 5, y: 2 });
   expect(state).toMatchObject({ moves: 7, won: true });
-  expect(applyMove(state, { blockId: "R", direction: "left" })).toMatchObject({
-    ok: false,
-    state,
-    code: "already-won",
-  });
+  const afterWin = applyMove(state, { blockId: "A", direction: "down" });
+  expect(afterWin).toMatchObject({ ok: true, state: { moves: 8, won: true } });
 });
 
 test("projects every cell of a rectangular block", () => {

@@ -17,6 +17,13 @@ import { blockColor, rgbCss } from "../world/palette";
 import { createCellViews } from "./view-model";
 import { zoomFromPinch, zoomFromWheel } from "./zoom";
 import {
+  canAdvanceToNextLevel,
+  upsertLevelFeedback,
+  type FeedbackDraft,
+  type LevelFeedback,
+  type LevelRating,
+} from "./feedback";
+import {
   BROWSER_SESSION_KEY,
   decodeBrowserSession,
   encodeBrowserSession,
@@ -52,6 +59,10 @@ const historyBadge = document.querySelector<HTMLSpanElement>("#history")!;
 const lede = document.querySelector<HTMLParagraphElement>("#lede")!;
 const instructions = document.querySelector<HTMLParagraphElement>("#instructions")!;
 const modeControls = document.querySelector<HTMLDivElement>("#mode-controls")!;
+const feedbackPanel = document.querySelector<HTMLElement>("#feedback-panel")!;
+const feedbackComment = document.querySelector<HTMLTextAreaElement>("#feedback-comment")!;
+const feedbackState = document.querySelector<HTMLParagraphElement>("#feedback-state")!;
+const ratingButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-rating]")];
 const playActions = [...document.querySelectorAll<HTMLElement>("[data-action='new-level'], [data-action='restart']")];
 
 const restoredSession = decodeBrowserSession(localStorage.getItem(BROWSER_SESSION_KEY));
@@ -62,6 +73,10 @@ let currentSeed: number | undefined = restoredSession?.currentSeed;
 let worldState: PrototypeState = restoredSession?.worldState ?? createPrototypeState();
 let closureState: ClosureState = restoredSession?.closureState ?? createClosureState();
 let moveHistory: SemanticMove[] = restoredSession?.moveHistory ?? [];
+let currentLevelId = restoredSession?.currentLevelId ?? crypto.randomUUID();
+let currentLevelSolved = restoredSession?.currentLevelSolved ?? state.won;
+let feedbackDraft: FeedbackDraft = restoredSession?.feedbackDraft ?? { comment: "" };
+let feedbackEntries: LevelFeedback[] = restoredSession?.feedbackEntries ?? [];
 let panPreview: PanPreview | undefined;
 let dragPreview: DragPreview | undefined;
 let zoom = restoredSession?.zoom ?? 1;
@@ -77,6 +92,7 @@ function render(): void {
   else if (mode === "world") renderWorld();
   else renderClosure();
   historyBadge.textContent = `${moveHistory.length} recorded move${moveHistory.length === 1 ? "" : "s"}`;
+  renderFeedback();
   persistSession();
 }
 
@@ -210,7 +226,7 @@ function createBlock(block: Block): HTMLButtonElement {
 
 function attachDrag(element: HTMLElement, block: Block): void {
   element.addEventListener("pointerdown", (event) => {
-    if (state.won || pinchActive || suppressDragUntilPointersClear) return;
+    if (pinchActive || suppressDragUntilPointersClear) return;
     dragPreview = {
       block,
       element,
@@ -259,6 +275,7 @@ function attachDrag(element: HTMLElement, block: Block): void {
       return;
     }
     state = result.state;
+    currentLevelSolved ||= result.state.won;
     moveHistory = [
       ...moveHistory,
       {
@@ -349,6 +366,10 @@ function persistSession(): void {
     mode,
     zoom,
     currentSeed,
+    currentLevelId,
+    currentLevelSolved,
+    feedbackDraft,
+    feedbackEntries,
     initialState,
     playState: state,
     moveHistory,
@@ -369,6 +390,7 @@ function updateModeChrome(): void {
     button.ariaPressed = String(button.dataset.mode === mode);
   }
   for (const action of playActions) action.hidden = mode !== "play";
+  feedbackPanel.hidden = mode !== "play";
 
   if (mode === "play") {
     lede.textContent = "Drag a block along its axis. Put the Red Block fully onto the Checkpoint.";
@@ -380,6 +402,32 @@ function updateModeChrome(): void {
     lede.textContent = "Compare how a positioned Blocker Dependency chain closes, separates, or reaches its cap.";
     instructions.textContent = "Choose a scenario, then step once or run to its stopping condition.";
   }
+}
+
+function renderFeedback(): void {
+  feedbackComment.value = feedbackDraft.comment;
+  for (const button of ratingButtons) {
+    button.ariaPressed = String(button.dataset.rating === feedbackDraft.rating);
+  }
+  feedbackState.textContent = feedbackDraft.rating
+    ? `Saved thumbs ${feedbackDraft.rating}. You can change the vote or comment.`
+    : currentLevelSolved
+      ? "Rate this solved level to unlock the next level. You can keep moving blocks."
+      : "You can rate this level now, or skip it unfinished.";
+}
+
+function saveFeedback(): void {
+  if (!feedbackDraft.rating) return;
+  feedbackEntries = upsertLevelFeedback(feedbackEntries, {
+    levelId: currentLevelId,
+    rating: feedbackDraft.rating,
+    comment: feedbackDraft.comment,
+    ratedAt: new Date().toISOString(),
+    solved: currentLevelSolved,
+    initialState: cloneState(initialState),
+    stateAtRating: cloneState(state),
+    moveHistory: structuredClone(moveHistory),
+  });
 }
 
 function addControl(label: string, action: () => void, active = false): void {
@@ -470,11 +518,19 @@ board.addEventListener("pointercancel", () => {
 });
 
 document.querySelector<HTMLButtonElement>("[data-action='new-level']")!.addEventListener("pointerup", () => {
+  if (!canAdvanceToNextLevel(currentLevelSolved, feedbackDraft.rating)) {
+    status.textContent = "Choose thumbs up or thumbs down before starting the next solved level.";
+    renderFeedback();
+    return;
+  }
   currentSeed = Math.floor(Math.random() * 4_000_000_000) + 1;
   const level = createGeneratedLevel(currentSeed);
   initialState = level.state;
   state = cloneState(initialState);
   moveHistory = [];
+  currentLevelId = crypto.randomUUID();
+  currentLevelSolved = false;
+  feedbackDraft = { comment: "" };
   status.textContent = `Generated solvable level ${currentSeed}.`;
   render();
 });
@@ -484,6 +540,22 @@ document.querySelector<HTMLButtonElement>("[data-action='restart']")!.addEventLi
   moveHistory = [];
   status.textContent = "Level restarted.";
   render();
+});
+
+for (const button of ratingButtons) {
+  button.addEventListener("pointerup", () => {
+    feedbackDraft = { ...feedbackDraft, rating: button.dataset.rating as LevelRating };
+    saveFeedback();
+    status.textContent = `Thumbs ${feedbackDraft.rating} saved${feedbackDraft.comment ? " with your comment" : ""}.`;
+    render();
+  });
+}
+
+feedbackComment.addEventListener("input", () => {
+  feedbackDraft = { ...feedbackDraft, comment: feedbackComment.value };
+  saveFeedback();
+  persistSession();
+  renderFeedback();
 });
 
 render();
