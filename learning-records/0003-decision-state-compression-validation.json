@@ -1,0 +1,261 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "efae70fa53ab7681d687b71cff4cd00c568adbbe",
+  "conclusion": "candidate-rejected-by-exact-oracle",
+  "cases": [
+    {
+      "name": "independent-parallel",
+      "description": "Two independent parallel Blocks each translate through four positions.",
+      "seed": 1801,
+      "initialState": {
+        "width": 5,
+        "height": 2,
+        "blocks": [
+          {
+            "id": "A",
+            "x": 0,
+            "y": 0,
+            "width": 2,
+            "height": 1,
+            "movement": "horizontal"
+          },
+          {
+            "id": "B",
+            "x": 2,
+            "y": 1,
+            "width": 2,
+            "height": 1,
+            "movement": "horizontal"
+          }
+        ],
+        "walls": [],
+        "checkpoint": [],
+        "moves": 0,
+        "won": false
+      },
+      "result": {
+        "exact": {
+          "complete": true,
+          "durationMs": 6.685,
+          "goalReachable": false,
+          "peakQueuedStates": 6,
+          "states": 16,
+          "transitions": 48
+        },
+        "compressed": {
+          "complete": true,
+          "durationMs": 5.565,
+          "goalReachable": false,
+          "peakQueuedStates": 1,
+          "states": 1,
+          "transitions": 0,
+          "interactionPositionsExamined": 8
+        },
+        "exactDecisionStates": 1,
+        "comparison": {
+          "reachabilityMatches": true,
+          "missingDecisionStates": 0,
+          "extraDecisionStates": 0
+        }
+      }
+    },
+    {
+      "name": "checkpoint-event-boundary",
+      "description": "A Red Block translates harmlessly until full Checkpoint occupancy changes the consequence.",
+      "seed": 1802,
+      "initialState": {
+        "width": 6,
+        "height": 1,
+        "blocks": [
+          {
+            "id": "R",
+            "x": 0,
+            "y": 0,
+            "width": 2,
+            "height": 1,
+            "movement": "horizontal"
+          }
+        ],
+        "walls": [],
+        "checkpoint": [
+          {
+            "x": 4,
+            "y": 0
+          },
+          {
+            "x": 5,
+            "y": 0
+          }
+        ],
+        "moves": 0,
+        "won": false
+      },
+      "result": {
+        "exact": {
+          "complete": true,
+          "durationMs": 0.398,
+          "goalReachable": true,
+          "peakQueuedStates": 1,
+          "states": 5,
+          "transitions": 7
+        },
+        "compressed": {
+          "complete": true,
+          "durationMs": 2.125,
+          "goalReachable": true,
+          "peakQueuedStates": 1,
+          "states": 2,
+          "transitions": 1,
+          "interactionPositionsExamined": 9
+        },
+        "exactDecisionStates": 2,
+        "comparison": {
+          "reachabilityMatches": true,
+          "missingDecisionStates": 0,
+          "extraDecisionStates": 0
+        }
+      }
+    },
+    {
+      "name": "dependency-gate-counterexample",
+      "description": "A vertical Block gates the Red Block; independent region expansion recombines incompatible positions.",
+      "seed": 1803,
+      "initialState": {
+        "width": 5,
+        "height": 4,
+        "blocks": [
+          {
+            "id": "R",
+            "x": 0,
+            "y": 2,
+            "width": 2,
+            "height": 1,
+            "movement": "horizontal"
+          },
+          {
+            "id": "A",
+            "x": 2,
+            "y": 1,
+            "width": 1,
+            "height": 2,
+            "movement": "vertical"
+          }
+        ],
+        "walls": [],
+        "checkpoint": [
+          {
+            "x": 3,
+            "y": 2
+          },
+          {
+            "x": 4,
+            "y": 2
+          }
+        ],
+        "moves": 0,
+        "won": false
+      },
+      "result": {
+        "exact": {
+          "complete": true,
+          "durationMs": 0.335,
+          "goalReachable": true,
+          "peakQueuedStates": 2,
+          "states": 6,
+          "transitions": 9
+        },
+        "compressed": {
+          "complete": true,
+          "durationMs": 6.904,
+          "goalReachable": true,
+          "peakQueuedStates": 2,
+          "states": 6,
+          "transitions": 20,
+          "interactionPositionsExamined": 30
+        },
+        "exactDecisionStates": 4,
+        "comparison": {
+          "reachabilityMatches": false,
+          "missingDecisionStates": 0,
+          "extraDecisionStates": 2
+        },
+        "counterexample": {
+          "kind": "spurious-reachable",
+          "initialState": {
+            "width": 5,
+            "height": 4,
+            "blocks": [
+              {
+                "id": "R",
+                "x": 0,
+                "y": 2,
+                "width": 2,
+                "height": 1,
+                "movement": "horizontal"
+              },
+              {
+                "id": "A",
+                "x": 2,
+                "y": 1,
+                "width": 1,
+                "height": 2,
+                "movement": "vertical"
+              }
+            ],
+            "walls": [],
+            "checkpoint": [
+              {
+                "x": 3,
+                "y": 2
+              },
+              {
+                "x": 4,
+                "y": 2
+              }
+            ],
+            "moves": 0,
+            "won": false
+          },
+          "witnessState": {
+            "width": 5,
+            "height": 4,
+            "blocks": [
+              {
+                "id": "R",
+                "x": 1,
+                "y": 2,
+                "width": 2,
+                "height": 1,
+                "movement": "horizontal"
+              },
+              {
+                "id": "A",
+                "x": 2,
+                "y": 0,
+                "width": 1,
+                "height": 2,
+                "movement": "vertical"
+              }
+            ],
+            "walls": [],
+            "checkpoint": [
+              {
+                "x": 3,
+                "y": 2
+              },
+              {
+                "x": 4,
+                "y": 2
+              }
+            ],
+            "moves": 0,
+            "won": true
+          },
+          "decisionState": "5x4|won=true|A[2,0]{A->R}|R[0,2;1,2;2,2;3,2]{}",
+          "seed": 1803,
+          "sourceCommit": "efae70fa53ab7681d687b71cff4cd00c568adbbe"
+        }
+      }
+    }
+  ]
+}
