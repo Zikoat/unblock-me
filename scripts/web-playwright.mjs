@@ -26,7 +26,13 @@ export async function runWebVerification({ recordVideo = false, humanPace = fals
     browser = await chromium.launch({ executablePath: await browserPath(), headless: true });
     const desktop = await desktopFlow(browser, `http://127.0.0.1:${port}`, videoDir, humanPace);
     const mobile = await mobileFlow(browser, `http://127.0.0.1:${port}`, videoDir, humanPace);
-    return { desktopVideoPath: desktop.videoPath, mobileVideoPath: mobile.videoPath, generatedSeed: mobile.seed, screenshots: desktop.screenshots, videoDir };
+    return {
+      desktopVideoPath: desktop.videoPath,
+      mobileVideoPath: mobile.videoPath,
+      generatedSeed: mobile.seed,
+      screenshots: [...desktop.screenshots, ...mobile.screenshots],
+      videoDir,
+    };
   } catch (error) {
     if (videoDir) await rm(videoDir, { recursive: true, force: true });
     throw error;
@@ -70,7 +76,11 @@ async function mobileFlow(browser, url, videoDir, humanPace) {
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   const video = page.video();
+  const screenshots = videoDir ? mobileScreenshotSet(videoDir) : [];
   await page.goto(url, { waitUntil: "domcontentloaded" });
+  await assertSquareCells(page);
+  await assertConnectedCheckpoint(page);
+  if (screenshots[0]) await page.screenshot({ path: screenshots[0].path, fullPage: true });
   const session = await context.newCDPSession(page);
   await solveWithTouch(page, session, humanPace);
   assert((await page.locator("#win").textContent())?.includes("you win"), "Mobile touch drag did not reach the Checkpoint.");
@@ -78,9 +88,12 @@ async function mobileFlow(browser, url, videoDir, humanPace) {
   await page.waitForTimeout(350);
   const seed = await page.locator("#seed").textContent() ?? "";
   assert(/^Seed \d+$/.test(seed), `Mobile touch tap did not create a generated level (got ${JSON.stringify(seed)}; errors ${JSON.stringify(errors)}).`);
+  await assertSquareCells(page);
+  await assertConnectedCheckpoint(page);
+  if (screenshots[1]) await page.screenshot({ path: screenshots[1].path, fullPage: true });
   await pause(page, humanPace, 600);
   await context.close();
-  return { videoPath: video ? await video.path() : undefined, seed };
+  return { videoPath: video ? await video.path() : undefined, seed, screenshots };
 }
 
 async function solveWithMouse(page, humanPace) {
@@ -132,6 +145,13 @@ function screenshotSet(directory) {
   ].map(([caption, alt, filename]) => ({ caption, alt, path: join(directory, filename) }));
 }
 
+function mobileScreenshotSet(directory) {
+  return [
+    ["Phone square-cell board", "Uniform square cells and a connected Checkpoint on a phone viewport", "phone-square-board.png"],
+    ["Phone generated board", "A generated level retaining square cells and a connected Checkpoint", "phone-generated-board.png"],
+  ].map(([caption, alt, filename]) => ({ caption, alt, path: join(directory, filename) }));
+}
+
 async function addParityPanel(page) {
   await page.evaluate(() => {
     const board = document.querySelector("#board");
@@ -159,6 +179,24 @@ async function checkpointPositions(page) {
     const box = node.getBoundingClientRect();
     return { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width) };
   }));
+}
+
+async function assertSquareCells(page) {
+  const boxes = await page.locator(".cell").evaluateAll((nodes) => nodes.slice(0, 12).map((node) => {
+    const box = node.getBoundingClientRect();
+    return { width: box.width, height: box.height };
+  }));
+  assert(boxes.length > 0, "No board cells were rendered.");
+  for (const box of boxes) {
+    assert(Math.abs(box.width - box.height) < 1, `Board cell is not square: ${JSON.stringify(box)}.`);
+  }
+}
+
+async function assertConnectedCheckpoint(page) {
+  const boxes = await checkpointPositions(page);
+  assert(boxes.length === 2, `Expected a two-cell Checkpoint, got ${JSON.stringify(boxes)}.`);
+  const gap = boxes[1].x - (boxes[0].x + boxes[0].width);
+  assert(gap <= 1, `Checkpoint cells are visually disconnected by ${gap}px.`);
 }
 
 async function mouseDrag(page, id, dx, dy, humanPace) {

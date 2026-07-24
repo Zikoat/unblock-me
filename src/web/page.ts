@@ -13,9 +13,9 @@ export const pageHtml = `<!doctype html>
     .lede { color:#bdc6d5; margin:.45rem 0 1rem; }
     #board { width:min(100%, 560px); display:grid; gap:4px; padding:4px; background:#202936; border:2px solid #5c6c80; border-radius:14px; position:relative; touch-action:none; user-select:none; }
     .cell { background:#151b24; border-radius:6px; }
-    .checkpoint { background:repeating-linear-gradient(45deg,#80661e 0 7px,#aa8e39 7px 14px); }
+    .checkpoint { margin:-2px; z-index:1; border-radius:4px; background:repeating-linear-gradient(45deg,#80661e 0 7px,#aa8e39 7px 14px); }
     .wall { background:#050608; box-shadow:inset 0 0 0 2px #37404c; }
-    .block { z-index:2; margin:4px; border:0; border-radius:10px; cursor:grab; touch-action:none; color:#11151c; font-weight:800; font-size:1rem; box-shadow:0 3px 0 rgba(0,0,0,.25); background:hsl(var(--block-hue) 72% 72%); will-change:transform; }
+    .block { z-index:2; min-width:0; min-height:0; overflow:hidden; margin:4px; padding:0; border:0; border-radius:10px; cursor:grab; touch-action:none; color:#11151c; font-weight:800; font-size:1rem; box-shadow:0 3px 0 rgba(0,0,0,.25); background:hsl(var(--block-hue) 72% 72%); will-change:transform; }
     .block:active { cursor:grabbing; }
     .block[data-block-id="R"] { background:#ff624d; }
     .meta { display:flex; flex-wrap:wrap; gap:.6rem; align-items:center; margin:1rem 0; }

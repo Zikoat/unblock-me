@@ -25,8 +25,8 @@ type DragPreview = {
 
 function render(): void {
   board.replaceChildren();
-  board.style.gridTemplateColumns = `repeat(${state.width}, 1fr)`;
-  board.style.gridTemplateRows = `repeat(${state.height}, 1fr)`;
+  board.style.gridTemplateColumns = `repeat(${state.width}, minmax(0, 1fr))`;
+  board.style.gridTemplateRows = `repeat(${state.height}, minmax(0, 1fr))`;
   board.style.aspectRatio = `${state.width} / ${state.height}`;
   board.dataset.width = String(state.width);
   board.dataset.height = String(state.height);
