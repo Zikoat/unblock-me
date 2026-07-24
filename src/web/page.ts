@@ -77,6 +77,7 @@ export const pageHtml = `<!doctype html>
       <span class="badge" id="history">0 recorded moves</span>
       <button data-action="new-level">New generated level</button>
       <button data-action="restart">Restart</button>
+      <button data-action="export">Export data</button>
     </div>
     <div id="status" role="status">Drag a block across one or more cells.</div>
     <div id="win" role="alert">Checkpoint reached — you win.</div>

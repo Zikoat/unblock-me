@@ -1,4 +1,4 @@
-import type { Direction, GameState } from "../game";
+import type { Direction, GameState, MoveAction } from "../game";
 import type { ClosureState } from "../world/closure";
 import type { PrototypeState } from "../world/generation";
 import type { FeedbackDraft, LevelFeedback } from "./feedback";
@@ -20,6 +20,7 @@ export interface BrowserSession {
   closureState: ClosureState;
   currentGeneration?: FiniteGenerationRecord;
   currentSeed?: number;
+  currentSolution?: readonly MoveAction[];
   currentLevelId: string;
   currentLevelSolved: boolean;
   feedbackDraft: FeedbackDraft;
