@@ -50,6 +50,7 @@ export const pageHtml = `<!doctype html>
       <span class="badge" id="moves">0 moves</span>
       <span class="badge" id="seed">Fixed level</span>
       <span class="badge" id="zoom">100% zoom</span>
+      <span class="badge" id="history">0 recorded moves</span>
       <button data-action="new-level">New generated level</button>
       <button data-action="restart">Restart</button>
     </div>

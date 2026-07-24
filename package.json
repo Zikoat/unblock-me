@@ -10,6 +10,7 @@
     "report:web": "bun scripts/generate-web-report.ts",
     "report:world-modes": "bun scripts/generate-world-modes-report.ts",
     "report:zoom": "bun scripts/generate-zoom-report.ts",
+    "report:persistence": "bun scripts/generate-persistence-report.ts",
     "prototype:closure": "bun src/prototypes/dependency-closure/cli.ts",
     "prototype:regions": "bun src/prototypes/multi-region/cli.ts",
     "verify:tmux": "bun -e \"const p='scripts/tmux-playthrough.ps1'; if (!require('node:fs').existsSync(p)) { console.error('Missing ' + p); process.exit(1); }\" && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/tmux-playthrough.ps1",

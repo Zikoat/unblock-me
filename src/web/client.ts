@@ -16,6 +16,13 @@ import {
 import { blockColor, rgbCss } from "../world/palette";
 import { createCellViews } from "./view-model";
 import { zoomFromPinch, zoomFromWheel } from "./zoom";
+import {
+  BROWSER_SESSION_KEY,
+  decodeBrowserSession,
+  encodeBrowserSession,
+  type BrowserSession,
+  type SemanticMove,
+} from "./session";
 
 type AppMode = "play" | "world" | "closure";
 type DragPreview = {
@@ -41,20 +48,23 @@ const seed = document.querySelector<HTMLSpanElement>("#seed")!;
 const status = document.querySelector<HTMLDivElement>("#status")!;
 const win = document.querySelector<HTMLDivElement>("#win")!;
 const zoomBadge = document.querySelector<HTMLSpanElement>("#zoom")!;
+const historyBadge = document.querySelector<HTMLSpanElement>("#history")!;
 const lede = document.querySelector<HTMLParagraphElement>("#lede")!;
 const instructions = document.querySelector<HTMLParagraphElement>("#instructions")!;
 const modeControls = document.querySelector<HTMLDivElement>("#mode-controls")!;
 const playActions = [...document.querySelectorAll<HTMLElement>("[data-action='new-level'], [data-action='restart']")];
 
-let mode: AppMode = "play";
-let initialState = createPuzzle();
-let state = cloneState(initialState);
-let currentSeed: number | undefined;
-let worldState: PrototypeState = createPrototypeState();
-let closureState: ClosureState = createClosureState();
+const restoredSession = decodeBrowserSession(localStorage.getItem(BROWSER_SESSION_KEY));
+let mode: AppMode = restoredSession?.mode ?? "play";
+let initialState = restoredSession?.initialState ?? createPuzzle();
+let state = restoredSession?.playState ?? cloneState(initialState);
+let currentSeed: number | undefined = restoredSession?.currentSeed;
+let worldState: PrototypeState = restoredSession?.worldState ?? createPrototypeState();
+let closureState: ClosureState = restoredSession?.closureState ?? createClosureState();
+let moveHistory: SemanticMove[] = restoredSession?.moveHistory ?? [];
 let panPreview: PanPreview | undefined;
 let dragPreview: DragPreview | undefined;
-let zoom = 1;
+let zoom = restoredSession?.zoom ?? 1;
 const pointerPositions = new Map<number, { x: number; y: number }>();
 let pinchStartDistance = 0;
 let pinchStartZoom = 1;
@@ -66,6 +76,8 @@ function render(): void {
   if (mode === "play") renderPlay();
   else if (mode === "world") renderWorld();
   else renderClosure();
+  historyBadge.textContent = `${moveHistory.length} recorded move${moveHistory.length === 1 ? "" : "s"}`;
+  persistSession();
 }
 
 function renderPlay(): void {
@@ -247,6 +259,18 @@ function attachDrag(element: HTMLElement, block: Block): void {
       return;
     }
     state = result.state;
+    moveHistory = [
+      ...moveHistory,
+      {
+        type: "block-move",
+        blockId: block.id,
+        direction: completed.direction,
+        requestedSteps: completed.steps,
+        movedSteps: result.movedSteps,
+        before: cloneState(completed.startState),
+        after: cloneState(result.state),
+      },
+    ];
     status.textContent = result.state.won
       ? "Checkpoint reached."
       : `${block.id} moved ${result.movedSteps} cell${result.movedSteps === 1 ? "" : "s"} ${completed.direction}.`;
@@ -317,6 +341,21 @@ function cancelActiveInteractions(): void {
 function applyZoom(): void {
   board.style.setProperty("--board-zoom", String(zoom));
   zoomBadge.textContent = `${Math.round(zoom * 100)}% zoom`;
+}
+
+function persistSession(): void {
+  const session: BrowserSession = {
+    version: 1,
+    mode,
+    zoom,
+    currentSeed,
+    initialState,
+    playState: state,
+    moveHistory,
+    worldState,
+    closureState,
+  };
+  localStorage.setItem(BROWSER_SESSION_KEY, encodeBrowserSession(session));
 }
 
 function pointerDistance(): number {
@@ -392,6 +431,7 @@ board.addEventListener("pointermove", (event) => {
   event.preventDefault();
   zoom = zoomFromPinch(pinchStartZoom, pinchStartDistance, pointerDistance());
   applyZoom();
+  persistSession();
 }, { capture: true });
 
 for (const eventName of ["pointerup", "pointercancel"] as const) {
@@ -406,6 +446,7 @@ boardFrame.addEventListener("wheel", (event) => {
   event.preventDefault();
   zoom = zoomFromWheel(zoom, event.deltaY);
   applyZoom();
+  persistSession();
 }, { passive: false });
 
 board.addEventListener("pointerup", (event) => {
@@ -433,12 +474,14 @@ document.querySelector<HTMLButtonElement>("[data-action='new-level']")!.addEvent
   const level = createGeneratedLevel(currentSeed);
   initialState = level.state;
   state = cloneState(initialState);
+  moveHistory = [];
   status.textContent = `Generated solvable level ${currentSeed}.`;
   render();
 });
 
 document.querySelector<HTMLButtonElement>("[data-action='restart']")!.addEventListener("pointerup", () => {
   state = cloneState(initialState);
+  moveHistory = [];
   status.textContent = "Level restarted.";
   render();
 });
