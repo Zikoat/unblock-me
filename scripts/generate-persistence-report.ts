@@ -8,7 +8,7 @@ const exec = promisify(execFile);
 const ffmpegPath = require("ffmpeg-static") as string | null;
 const cwd = process.cwd();
 const artifacts = join(cwd, "artifacts");
-const releaseBase = "https://github.com/Zikoat/unblock-me/releases/download/issue-14-browser-persistence";
+const videoBase = "https://zikoat.github.io/unblock-me/reports";
 
 await exec("bun", ["run", "typecheck"], { cwd });
 await exec("bun", ["test", "test/browser-session.test.ts"], { cwd });
@@ -48,8 +48,8 @@ try {
     ],
     screenshots,
     videos: [
-      { caption: "Interactions and state before closing the page", url: `${releaseBase}/${basename(beforeMp4)}` },
-      { caption: "Restored state in a newly opened page", url: `${releaseBase}/${basename(afterMp4)}` },
+      { caption: "Interactions and state before closing the page", url: `${videoBase}/${basename(beforeMp4)}` },
+      { caption: "Restored state in a newly opened page", url: `${videoBase}/${basename(afterMp4)}` },
     ],
   });
   await writeFile(join(artifacts, "issue-14-browser-persistence.html"), html);

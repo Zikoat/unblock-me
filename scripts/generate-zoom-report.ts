@@ -8,7 +8,7 @@ const exec = promisify(execFile);
 const ffmpegPath = require("ffmpeg-static") as string | null;
 const cwd = process.cwd();
 const artifacts = join(cwd, "artifacts");
-const releaseBase = "https://github.com/Zikoat/unblock-me/releases/download/issue-13-browser-zoom";
+const videoBase = "https://zikoat.github.io/unblock-me/reports";
 
 await exec("bun", ["run", "typecheck"], { cwd });
 await exec("bun", ["test", "test/web-zoom.test.ts"], { cwd });
@@ -55,8 +55,8 @@ try {
     ],
     screenshots,
     videos: [
-      { caption: "Desktop wheel zoom", url: `${releaseBase}/${basename(desktopMp4)}` },
-      { caption: "Phone pinch beginning on the Red Block", url: `${releaseBase}/${basename(mobileMp4)}` },
+      { caption: "Desktop wheel zoom", url: `${videoBase}/${basename(desktopMp4)}` },
+      { caption: "Phone pinch beginning on the Red Block", url: `${videoBase}/${basename(mobileMp4)}` },
     ],
   });
   await writeFile(join(artifacts, "issue-13-browser-zoom.html"), html);

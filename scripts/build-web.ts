@@ -1,4 +1,4 @@
-import { mkdir, rm } from "node:fs/promises";
+import { cp, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { pageHtml } from "../src/web/page";
 
@@ -8,4 +8,5 @@ await mkdir(outdir, { recursive: true });
 const result = await Bun.build({ entrypoints: [join(import.meta.dir, "..", "src", "web", "client.ts")], outdir, target: "browser", naming: "app.js" });
 if (!result.success) throw new Error(result.logs.map((log) => log.message).join("\n"));
 await Bun.write(join(outdir, "index.html"), pageHtml);
+await cp(join(import.meta.dir, "..", "static"), outdir, { recursive: true });
 console.log(`Built web app in ${outdir}`);

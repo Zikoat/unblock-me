@@ -8,7 +8,7 @@ const exec = promisify(execFile);
 const ffmpegPath = require("ffmpeg-static") as string | null;
 const cwd = process.cwd();
 const artifacts = join(cwd, "artifacts");
-const releaseBase = "https://github.com/Zikoat/unblock-me/releases/download/issue-12-browser-world-modes";
+const videoBase = "https://zikoat.github.io/unblock-me/reports";
 
 await exec("bun", ["run", "typecheck"], { cwd });
 await exec("bun", ["test", "test/world-modes.test.ts"], { cwd });
@@ -54,8 +54,8 @@ try {
     ],
     screenshots,
     videos: [
-      { caption: "Desktop mouse: World pan and all Closure outcomes", url: `${releaseBase}/${basename(desktopMp4)}` },
-      { caption: "Phone touch: World pan and separator outcome", url: `${releaseBase}/${basename(mobileMp4)}` },
+      { caption: "Desktop mouse: World pan and all Closure outcomes", url: `${videoBase}/${basename(desktopMp4)}` },
+      { caption: "Phone touch: World pan and separator outcome", url: `${videoBase}/${basename(mobileMp4)}` },
     ],
   });
   const report = join(artifacts, "issue-12-browser-world-modes.html");
