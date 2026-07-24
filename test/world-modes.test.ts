@@ -62,3 +62,19 @@ test("World camera can pan diagonally beyond the original 40×40 experiment", ()
     cells.length === 100 && cells.every((cell) => cell.committed)
   );
 });
+
+test("World records its generation tactic, sampled settings, and timing", () => {
+  const state = worldPrototype.createPrototypeState();
+  expect(state.generation).toMatchObject({
+    kind: "world",
+    tactic: "viewport-rounded-margin",
+    seed: 1,
+    settings: {
+      viewportWidth: { definition: { kind: "fixed", value: 10 }, sampled: 10 },
+      requestMargin: { definition: { kind: "fixed", value: 2 }, sampled: 2 },
+      movementTypes: ["static"],
+    },
+  });
+  expect(typeof state.generation.timing.totalMs).toBe("number");
+  expect(Object.keys(state.generation.timing.phases)).toEqual(["requestCellsMs", "placeBlocksMs"]);
+});

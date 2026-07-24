@@ -2,6 +2,7 @@ import type { Direction, GameState } from "../game";
 import type { ClosureState } from "../world/closure";
 import type { PrototypeState } from "../world/generation";
 import type { FeedbackDraft, LevelFeedback } from "./feedback";
+import type { FiniteGenerationRecord } from "../generator";
 
 export const BROWSER_SESSION_KEY = "unblock-me.browser-session.v1";
 
@@ -17,6 +18,7 @@ export interface SemanticMove {
 
 export interface BrowserSession {
   closureState: ClosureState;
+  currentGeneration?: FiniteGenerationRecord;
   currentSeed?: number;
   currentLevelId: string;
   currentLevelSolved: boolean;

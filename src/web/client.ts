@@ -64,6 +64,8 @@ const modeControls = document.querySelector<HTMLDivElement>("#mode-controls")!;
 const feedbackPanel = document.querySelector<HTMLElement>("#feedback-panel")!;
 const feedbackComment = document.querySelector<HTMLTextAreaElement>("#feedback-comment")!;
 const feedbackState = document.querySelector<HTMLParagraphElement>("#feedback-state")!;
+const generationDetails = document.querySelector<HTMLDetailsElement>("#generation-details")!;
+const generationRecord = document.querySelector<HTMLPreElement>("#generation-record")!;
 const ratingButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-rating]")];
 const playActions = [...document.querySelectorAll<HTMLElement>("[data-action='new-level'], [data-action='restart']")];
 
@@ -72,6 +74,7 @@ let mode: AppMode = restoredSession?.mode ?? "play";
 let initialState = restoredSession?.initialState ?? createPuzzle();
 let state = restoredSession?.playState ?? cloneState(initialState);
 let currentSeed: number | undefined = restoredSession?.currentSeed;
+let currentGeneration = restoredSession?.currentGeneration;
 let worldState: PrototypeState = restoredSession?.worldState ?? createPrototypeState();
 let worldCamera: MapCamera = {
   x: restoredSession?.worldView.x ?? worldState.camera.x,
@@ -114,6 +117,7 @@ function renderPlay(): void {
   moves.textContent = `${state.moves} move${state.moves === 1 ? "" : "s"}`;
   seed.textContent = currentSeed === undefined ? "Fixed level" : `Seed ${currentSeed}`;
   win.classList.toggle("visible", state.won);
+  renderGenerationDetails(currentGeneration);
 }
 
 function renderWorld(): void {
@@ -141,6 +145,7 @@ function renderWorld(): void {
   seed.textContent = `${worldState.regions.length} region${worldState.regions.length === 1 ? "" : "s"}`;
   status.textContent = worldState.message;
   win.classList.remove("visible");
+  renderGenerationDetails(worldState.generation);
   addControl("Reset World", () => {
     worldState = createPrototypeState();
     worldCamera = { x: worldState.camera.x, y: worldState.camera.y, zoom };
@@ -162,6 +167,7 @@ function renderClosure(): void {
   seed.textContent = `${closureState.expansionCount}/6 expansions`;
   status.textContent = closureState.message;
   win.classList.remove("visible");
+  renderGenerationDetails(undefined);
 
   for (const scenario of ["natural", "runaway", "separator"] as const) {
     addControl(scenario, () => {
@@ -397,6 +403,7 @@ function persistSession(): void {
     mode,
     zoom,
     currentSeed,
+    currentGeneration,
     currentLevelId,
     currentLevelSolved,
     feedbackDraft,
@@ -482,6 +489,11 @@ function renderFeedback(): void {
       : "You can rate this level now, or skip it unfinished.";
 }
 
+function renderGenerationDetails(record: unknown): void {
+  generationDetails.hidden = record === undefined;
+  generationRecord.textContent = record === undefined ? "" : JSON.stringify(record, null, 2);
+}
+
 function saveFeedback(): void {
   if (!feedbackDraft.rating) return;
   feedbackEntries = upsertLevelFeedback(feedbackEntries, {
@@ -491,6 +503,7 @@ function saveFeedback(): void {
     ratedAt: new Date().toISOString(),
     solved: currentLevelSolved,
     initialState: cloneState(initialState),
+    generation: currentGeneration,
     stateAtRating: cloneState(state),
     moveHistory: structuredClone(moveHistory),
   });
@@ -624,6 +637,7 @@ document.querySelector<HTMLButtonElement>("[data-action='new-level']")!.addEvent
   }
   currentSeed = Math.floor(Math.random() * 4_000_000_000) + 1;
   const level = createGeneratedLevel(currentSeed);
+  currentGeneration = level.generation;
   initialState = level.state;
   state = cloneState(initialState);
   moveHistory = [];
