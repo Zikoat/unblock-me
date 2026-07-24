@@ -14,8 +14,9 @@ export const pageHtml = `<!doctype html>
     .lede { color:#bdc6d5; margin:.45rem 0 1rem; }
     .mode-switch { display:flex; gap:.45rem; margin:0 0 .8rem; }
     .mode-switch button[aria-pressed="true"] { background:#d8ff7a; color:#17210a; border-color:#d8ff7a; }
-    #board-frame { width:min(100%, 560px); overflow:hidden; border-radius:14px; background:#090d13; touch-action:none; }
-    #board { width:100%; height:100%; display:grid; gap:4px; padding:4px; background:#202936; border:2px solid #5c6c80; border-radius:14px; position:relative; touch-action:none; user-select:none; transform:scale(var(--board-zoom,1)); transform-origin:center; }
+    #board-frame { width:min(100%, 560px); overflow:hidden; border-radius:14px; background:#090d13; touch-action:none; position:relative; }
+    #board { width:100%; height:100%; left:0; top:0; display:grid; gap:4px; padding:4px; background:#202936; border:2px solid #5c6c80; border-radius:14px; position:absolute; touch-action:none; user-select:none; transform:scale(var(--board-zoom,1)) translate3d(var(--map-pan-x,0px),var(--map-pan-y,0px),0); transform-origin:center; }
+    #board.world-map { width:200%; height:200%; left:-50%; top:-50%; border-radius:0; }
     .cell { background:#151b24; border-radius:6px; }
     .checkpoint { margin:-2px; z-index:1; border-radius:4px; background:repeating-linear-gradient(45deg,#80661e 0 7px,#aa8e39 7px 14px); }
     .wall { background:#050608; box-shadow:inset 0 0 0 2px #37404c; }

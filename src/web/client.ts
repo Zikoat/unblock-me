@@ -16,6 +16,7 @@ import {
 import { blockColor, rgbCss } from "../world/palette";
 import { createCellViews } from "./view-model";
 import { zoomFromPinch, zoomFromWheel } from "./zoom";
+import { panMapCamera, pinchMapCamera, type MapCamera, type ScreenPoint } from "./map-camera";
 import {
   canAdvanceToNextLevel,
   upsertLevelFeedback,
@@ -44,6 +45,7 @@ type DragPreview = {
 };
 type PanPreview = {
   pointerId: number;
+  startCamera: MapCamera;
   startX: number;
   startY: number;
 };
@@ -71,6 +73,11 @@ let initialState = restoredSession?.initialState ?? createPuzzle();
 let state = restoredSession?.playState ?? cloneState(initialState);
 let currentSeed: number | undefined = restoredSession?.currentSeed;
 let worldState: PrototypeState = restoredSession?.worldState ?? createPrototypeState();
+let worldCamera: MapCamera = {
+  x: restoredSession?.worldView.x ?? worldState.camera.x,
+  y: restoredSession?.worldView.y ?? worldState.camera.y,
+  zoom: restoredSession?.zoom ?? 1,
+};
 let closureState: ClosureState = restoredSession?.closureState ?? createClosureState();
 let moveHistory: SemanticMove[] = restoredSession?.moveHistory ?? [];
 let currentLevelId = restoredSession?.currentLevelId ?? crypto.randomUUID();
@@ -83,6 +90,8 @@ let zoom = restoredSession?.zoom ?? 1;
 const pointerPositions = new Map<number, { x: number; y: number }>();
 let pinchStartDistance = 0;
 let pinchStartZoom = 1;
+let pinchStartCamera: MapCamera = worldCamera;
+let pinchStartCentroid: ScreenPoint = { x: 0, y: 0 };
 let pinchActive = false;
 let suppressDragUntilPointersClear = false;
 
@@ -108,8 +117,18 @@ function renderPlay(): void {
 }
 
 function renderWorld(): void {
-  const cells = projectWorldViewport(worldState);
-  configureBoard(worldState.camera.width, worldState.camera.height, "Generated World Viewport");
+  const overscan = 5;
+  const projection = {
+    ...worldState,
+    camera: {
+      x: worldState.camera.x - overscan,
+      y: worldState.camera.y - overscan,
+      width: worldState.camera.width + overscan * 2,
+      height: worldState.camera.height + overscan * 2,
+    },
+  };
+  const cells = projectWorldViewport(projection);
+  configureBoard(projection.camera.width, projection.camera.height, "Generated World map", true);
   for (const cell of cells) {
     const background = createCell(cell.x, cell.y, cell.committed ? "empty" : "unknown");
     background.dataset.worldX = String(cell.worldX);
@@ -118,12 +137,13 @@ function renderWorld(): void {
     board.append(background);
     if (cell.blockId) board.append(createWorldBlockCell(cell.x, cell.y, cell.worldX, cell.worldY, cell.blockId));
   }
-  moves.textContent = `Camera ${worldState.camera.x},${worldState.camera.y}`;
+  updateWorldCameraBadge();
   seed.textContent = `${worldState.regions.length} region${worldState.regions.length === 1 ? "" : "s"}`;
   status.textContent = worldState.message;
   win.classList.remove("visible");
   addControl("Reset World", () => {
     worldState = createPrototypeState();
+    worldCamera = { x: worldState.camera.x, y: worldState.camera.y, zoom };
     render();
   });
 }
@@ -163,7 +183,7 @@ function renderClosure(): void {
   });
 }
 
-function configureBoard(width: number, height: number, label: string): void {
+function configureBoard(width: number, height: number, label: string, worldMap = false): void {
   board.replaceChildren();
   modeControls.replaceChildren();
   board.style.gridTemplateColumns = `repeat(${width}, minmax(0, 1fr))`;
@@ -173,6 +193,7 @@ function configureBoard(width: number, height: number, label: string): void {
   board.dataset.width = String(width);
   board.dataset.height = String(height);
   board.ariaLabel = label;
+  board.classList.toggle("world-map", worldMap);
   applyZoom();
 }
 
@@ -356,7 +377,17 @@ function cancelActiveInteractions(): void {
 }
 
 function applyZoom(): void {
+  worldCamera.zoom = zoom;
   board.style.setProperty("--board-zoom", String(zoom));
+  if (mode === "world") {
+    const cellSize = mapCellSize();
+    board.style.setProperty("--map-pan-x", `${(worldState.camera.x - worldCamera.x) * cellSize}px`);
+    board.style.setProperty("--map-pan-y", `${(worldState.camera.y - worldCamera.y) * cellSize}px`);
+    updateWorldCameraBadge();
+  } else {
+    board.style.setProperty("--map-pan-x", "0px");
+    board.style.setProperty("--map-pan-y", "0px");
+  }
   zoomBadge.textContent = `${Math.round(zoom * 100)}% zoom`;
 }
 
@@ -370,6 +401,7 @@ function persistSession(): void {
     currentLevelSolved,
     feedbackDraft,
     feedbackEntries,
+    worldView: { x: worldCamera.x, y: worldCamera.y },
     initialState,
     playState: state,
     moveHistory,
@@ -383,6 +415,40 @@ function pointerDistance(): number {
   const [first, second] = [...pointerPositions.values()];
   if (!first || !second) return 0;
   return Math.hypot(first.x - second.x, first.y - second.y);
+}
+
+function pointerCentroid(): ScreenPoint {
+  const [first, second] = [...pointerPositions.values()];
+  if (!first || !second) return { x: 0, y: 0 };
+  return { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 };
+}
+
+function mapCellSize(): number {
+  return boardFrame.getBoundingClientRect().width / worldState.camera.width;
+}
+
+function mapFrameCenter(): ScreenPoint {
+  const frame = boardFrame.getBoundingClientRect();
+  return { x: frame.left + frame.width / 2, y: frame.top + frame.height / 2 };
+}
+
+function updateWorldCameraBadge(): void {
+  if (mode !== "world") return;
+  moves.textContent = `Camera ${worldCamera.x.toFixed(1)},${worldCamera.y.toFixed(1)}`;
+}
+
+function syncWorldCamera(): void {
+  const targetX = Math.round(worldCamera.x);
+  const targetY = Math.round(worldCamera.y);
+  const deltaX = targetX - worldState.camera.x;
+  const deltaY = targetY - worldState.camera.y;
+  if (deltaX !== 0 || deltaY !== 0) {
+    worldState = reducePrototype(worldState, { type: "pan-camera", deltaX, deltaY });
+    render();
+    return;
+  }
+  applyZoom();
+  persistSession();
 }
 
 function updateModeChrome(): void {
@@ -452,13 +518,12 @@ for (const button of document.querySelectorAll<HTMLButtonElement>("[data-mode]")
 
 board.addEventListener("pointerdown", (event) => {
   if (mode !== "world") return;
-  const target = event.target as HTMLElement;
-  if (target.closest("[data-world-block]")) {
-    status.textContent = "This generated Block is static in the current World experiment.";
-    return;
-  }
-  if (!target.closest(".cell")) return;
-  panPreview = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY };
+  panPreview = {
+    pointerId: event.pointerId,
+    startCamera: { ...worldCamera, zoom },
+    startX: event.clientX,
+    startY: event.clientY,
+  };
   board.setPointerCapture(event.pointerId);
 });
 
@@ -469,6 +534,8 @@ board.addEventListener("pointerdown", (event) => {
   suppressDragUntilPointersClear = true;
   pinchStartDistance = pointerDistance();
   pinchStartZoom = zoom;
+  pinchStartCamera = { ...worldCamera, zoom };
+  pinchStartCentroid = pointerCentroid();
   cancelActiveInteractions();
 }, { capture: true });
 
@@ -477,10 +544,36 @@ board.addEventListener("pointermove", (event) => {
   pointerPositions.set(event.pointerId, { x: event.clientX, y: event.clientY });
   if (!pinchActive || pointerPositions.size < 2) return;
   event.preventDefault();
-  zoom = zoomFromPinch(pinchStartZoom, pinchStartDistance, pointerDistance());
-  applyZoom();
-  persistSession();
+  if (mode === "world") {
+    worldCamera = pinchMapCamera(
+      pinchStartCamera,
+      mapFrameCenter(),
+      pinchStartCentroid,
+      pointerCentroid(),
+      pinchStartDistance,
+      pointerDistance(),
+      mapCellSize(),
+      worldState.camera.width / 2,
+    );
+    zoom = worldCamera.zoom;
+    syncWorldCamera();
+  } else {
+    zoom = zoomFromPinch(pinchStartZoom, pinchStartDistance, pointerDistance());
+    applyZoom();
+    persistSession();
+  }
 }, { capture: true });
+
+board.addEventListener("pointermove", (event) => {
+  if (mode !== "world" || pinchActive || !panPreview || panPreview.pointerId !== event.pointerId) return;
+  worldCamera = panMapCamera(
+    panPreview.startCamera,
+    { x: panPreview.startX, y: panPreview.startY },
+    { x: event.clientX, y: event.clientY },
+    mapCellSize(),
+  );
+  syncWorldCamera();
+});
 
 for (const eventName of ["pointerup", "pointercancel"] as const) {
   board.addEventListener(eventName, (event) => {
@@ -492,23 +585,29 @@ for (const eventName of ["pointerup", "pointercancel"] as const) {
 
 boardFrame.addEventListener("wheel", (event) => {
   event.preventDefault();
-  zoom = zoomFromWheel(zoom, event.deltaY);
+  const nextZoom = zoomFromWheel(zoom, event.deltaY);
+  if (mode === "world" && nextZoom !== zoom) {
+    const pointer = { x: event.clientX, y: event.clientY };
+    worldCamera = pinchMapCamera(
+      { ...worldCamera, zoom },
+      mapFrameCenter(),
+      pointer,
+      pointer,
+      1,
+      nextZoom / zoom,
+      mapCellSize(),
+      worldState.camera.width / 2,
+    );
+  }
+  zoom = nextZoom;
   applyZoom();
   persistSession();
 }, { passive: false });
 
 board.addEventListener("pointerup", (event) => {
   if (mode !== "world" || !panPreview || panPreview.pointerId !== event.pointerId) return;
-  const preview = panPreview;
   panPreview = undefined;
-  const deltaX = Math.round((preview.startX - event.clientX) / cellPitch(true));
-  const deltaY = Math.round((preview.startY - event.clientY) / cellPitch(false));
-  if (deltaX === 0 && deltaY === 0) {
-    status.textContent = "Drag empty space across at least one cell to pan.";
-    return;
-  }
-  worldState = reducePrototype(worldState, { type: "pan-camera", deltaX, deltaY });
-  render();
+  persistSession();
 });
 
 board.addEventListener("pointercancel", () => {

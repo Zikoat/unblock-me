@@ -45,19 +45,45 @@ async function desktopFlow(browser, url, videoDir, humanPace) {
     recordVideo: videoDir ? { dir: videoDir, size: { width: 900, height: 760 } } : undefined,
   });
   const page = await context.newPage();
+  const browserErrors = collectBrowserErrors(page);
   const video = page.video();
-  const screenshots = videoDir ? screenshotPair(videoDir, "desktop", "wheel") : [];
+  const screenshots = videoDir ? screenshotPair(videoDir, "desktop", "map") : [];
   await page.goto(url, { waitUntil: "domcontentloaded" });
-  const redBefore = await blockPosition(page, "R");
+  await page.locator("[data-mode='world']").click();
+  await pause(page, humanPace, 500);
   if (screenshots[0]) await page.screenshot({ path: screenshots[0].path, fullPage: true });
   const frame = await page.locator("#board-frame").boundingBox();
   if (!frame) throw new Error("Board frame is missing.");
-  await page.mouse.move(frame.x + frame.width / 2, frame.y + frame.height / 2);
-  for (let index = 0; index < 4; index += 1) await page.mouse.wheel(0, -120);
-  assert((await page.locator("#zoom").textContent()) === "140% zoom", "Desktop wheel did not reach 140% zoom.");
-  assert((await page.locator("#moves").textContent()) === "0 moves", "Wheel zoom committed a Block move.");
-  assert(JSON.stringify(await blockPosition(page, "R")) === JSON.stringify(redBefore), "Wheel zoom changed Red Block coordinates.");
+  const cameraBefore = cameraPosition(await page.locator("#moves").textContent());
+  const x = frame.x + frame.width / 2;
+  const y = frame.y + frame.height / 2;
+  const hitTarget = await page.evaluate(({ x, y }) => {
+    const element = document.elementFromPoint(x, y);
+    return { className: element?.className, tagName: element?.tagName };
+  }, { x, y });
+  assert(hitTarget.className, `Desktop map center had no interactive target: ${JSON.stringify(hitTarget)}.`);
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  for (let step = 1; step <= 10; step += 1) {
+    await page.mouse.move(x + 110 * step / 10, y + 75 * step / 10);
+    await pause(page, humanPace, 70);
+  }
+  const cameraDuringDrag = cameraPosition(await page.locator("#moves").textContent());
+  assert(
+    cameraDuringDrag.x !== cameraBefore.x && cameraDuringDrag.y !== cameraBefore.y,
+    `Desktop drag did not continuously pan both axes before release: ${JSON.stringify({ cameraBefore, cameraDuringDrag, browserErrors, hitTarget })}.`,
+  );
   if (screenshots[1]) await page.screenshot({ path: screenshots[1].path, fullPage: true });
+  await page.mouse.up();
+  await pause(page, humanPace, 500);
+  await page.mouse.move(x, y);
+  for (let index = 0; index < 4; index += 1) {
+    await page.mouse.wheel(0, -120);
+    await pause(page, humanPace, 180);
+  }
+  assert((await page.locator("#zoom").textContent()) === "140% zoom", "Desktop wheel did not reach 140% zoom.");
+  assert(browserErrors.length === 0, `Desktop browser emitted errors: ${JSON.stringify(browserErrors)}.`);
+  if (screenshots[2]) await page.screenshot({ path: screenshots[2].path, fullPage: true });
   await pause(page, humanPace, 700);
   await context.close();
   return { screenshots, videoPath: video ? await video.path() : undefined };
@@ -72,30 +98,46 @@ async function mobileFlow(browser, url, videoDir, humanPace) {
     recordVideo: videoDir ? { dir: videoDir, size: { width: 390, height: 760 } } : undefined,
   });
   const page = await context.newPage();
+  const browserErrors = collectBrowserErrors(page);
   const video = page.video();
-  const screenshots = videoDir ? screenshotPair(videoDir, "phone", "pinch") : [];
+  const screenshots = videoDir ? screenshotPair(videoDir, "phone", "map") : [];
   await page.goto(url, { waitUntil: "domcontentloaded" });
-  const red = await page.locator("[data-block-id='R']").boundingBox();
+  await page.locator("[data-mode='world']").tap();
+  await pause(page, humanPace, 500);
   const frame = await page.locator("#board-frame").boundingBox();
-  if (!red || !frame) throw new Error("Phone board geometry is missing.");
-  const redBefore = await blockPosition(page, "R");
+  if (!frame) throw new Error("Phone board geometry is missing.");
+  const cameraBefore = cameraPosition(await page.locator("#moves").textContent());
   if (screenshots[0]) await page.screenshot({ path: screenshots[0].path, fullPage: true });
   const session = await context.newCDPSession(page);
-  const first = { x: red.x + red.width / 2, y: red.y + red.height / 2, id: 1 };
-  const second = { x: frame.x + frame.width * 0.75, y: frame.y + frame.height * 0.75, id: 2 };
+  const center = { x: frame.x + frame.width / 2, y: frame.y + frame.height / 2 };
+  const first = { x: center.x - 90, y: center.y, id: 1 };
+  const second = { x: center.x + 90, y: center.y, id: 2 };
   await session.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [first, second] });
-  await session.send("Input.dispatchTouchEvent", {
-    type: "touchMove",
-    touchPoints: [
-      { ...first, x: Math.max(frame.x + 5, first.x - 35) },
-      { ...second, x: Math.min(frame.x + frame.width - 5, second.x + 35), y: second.y + 20 },
-    ],
-  });
-  await session.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
-  assert((await page.locator("#zoom").textContent()) !== "100% zoom", "Phone pinch did not change zoom.");
-  assert((await page.locator("#moves").textContent()) === "0 moves", "Pinch beginning on Red committed a Block move.");
-  assert(JSON.stringify(await blockPosition(page, "R")) === JSON.stringify(redBefore), "Pinch changed Red Block coordinates.");
+  for (let step = 1; step <= 8; step += 1) {
+    await session.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: [
+        { ...first, x: first.x + 85 * step / 8, y: first.y + 30 * step / 8 },
+        { ...second, x: second.x - 5 * step / 8, y: second.y + 30 * step / 8 },
+      ],
+    });
+    await pause(page, humanPace, 70);
+  }
+  const cameraDuringGesture = cameraPosition(await page.locator("#moves").textContent());
+  assert(cameraDuringGesture.x !== cameraBefore.x && cameraDuringGesture.y !== cameraBefore.y, "Phone pinch did not pan both axes.");
+  assert((await page.locator("#zoom").textContent()) !== "100% zoom", "Phone pinch did not zoom.");
   if (screenshots[1]) await page.screenshot({ path: screenshots[1].path, fullPage: true });
+  await session.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  const boardBox = await page.locator("#board").boundingBox();
+  if (!boardBox) throw new Error("World map is missing.");
+  assert(
+    boardBox.x <= frame.x && boardBox.y <= frame.y
+      && boardBox.x + boardBox.width >= frame.x + frame.width
+      && boardBox.y + boardBox.height >= frame.y + frame.height,
+    "Zooming out exposed a World map edge.",
+  );
+  assert(browserErrors.length === 0, `Phone browser emitted errors: ${JSON.stringify(browserErrors)}.`);
+  if (screenshots[2]) await page.screenshot({ path: screenshots[2].path, fullPage: true });
   await pause(page, humanPace, 700);
   await context.close();
   return { screenshots, videoPath: video ? await video.path() : undefined };
@@ -103,16 +145,25 @@ async function mobileFlow(browser, url, videoDir, humanPace) {
 
 function screenshotPair(directory, device, gesture) {
   return [
-    [`${device} — before ${gesture}`, `Board before ${gesture} zoom`, `issue13-${device}-before.png`],
-    [`${device} — after ${gesture}`, `Board after ${gesture} zoom`, `issue13-${device}-after.png`],
+    [`${device} — before ${gesture} gesture`, `World map before ${gesture} gesture`, `issue13-${device}-before.png`],
+    [`${device} — gesture still held`, `World map panned diagonally before pointer release`, `issue13-${device}-held.png`],
+    [`${device} — completed ${gesture} gesture`, `World map after combined pan and zoom`, `issue13-${device}-after.png`],
   ].map(([caption, alt, filename]) => ({ caption, alt, path: join(directory, filename) }));
 }
 
-async function blockPosition(page, id) {
-  return page.locator(`[data-block-id='${id}']`).evaluate((element) => ({
-    x: element.dataset.x,
-    y: element.dataset.y,
-  }));
+function cameraPosition(text) {
+  const match = text?.match(/^Camera (-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)$/);
+  if (!match) throw new Error(`Could not read camera position from ${JSON.stringify(text)}.`);
+  return { x: Number(match[1]), y: Number(match[2]) };
+}
+
+function collectBrowserErrors(page) {
+  const errors = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("console", (message) => {
+    if (message.type() === "error") errors.push(message.text());
+  });
+  return errors;
 }
 
 async function waitForServer(url) {
@@ -141,5 +192,5 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     humanPace: process.argv.includes("--human"),
   });
   if (process.argv.includes("--json")) console.log(JSON.stringify(result));
-  else console.log("Wheel and pinch zoom verified without Block movement.");
+  else console.log("Continuous diagonal pan and combined phone pinch-pan verified.");
 }

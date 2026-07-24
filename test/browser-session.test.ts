@@ -32,6 +32,7 @@ test("round-trips exact Play, World, Closure, camera, zoom, and move snapshots",
       after: { ...play, moves: 1 },
     }],
     worldState: createPrototypeState(),
+    worldView: { x: 1.25, y: -2.5 },
     closureState: createClosureState("separator"),
     currentLevelId: "level-42",
     currentLevelSolved: false,
@@ -70,6 +71,7 @@ test("migrates a stored session without feedback fields", () => {
   expect(decoded).toMatchObject({
     currentLevelId: "restored-level",
     currentLevelSolved: false,
+    worldView: { x: 0, y: 0 },
     feedbackDraft: { comment: "" },
     feedbackEntries: [],
   });
