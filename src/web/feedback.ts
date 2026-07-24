@@ -1,10 +1,12 @@
 import type { GameState } from "../game";
+import type { FiniteGenerationRecord } from "../generator";
 import type { SemanticMove } from "./session";
 
 export type LevelRating = "up" | "down";
 
 export interface LevelFeedback {
   comment: string;
+  generation?: FiniteGenerationRecord;
   initialState: GameState;
   levelId: string;
   moveHistory: SemanticMove[];

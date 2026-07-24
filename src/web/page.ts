@@ -40,6 +40,9 @@ export const pageHtml = `<!doctype html>
     .feedback-actions button[aria-pressed="true"] { background:#d8ff7a; border-color:#d8ff7a; color:#17210a; }
     #feedback-comment { width:100%; min-height:4.5rem; margin-top:.35rem; padding:.65rem; resize:vertical; border:1px solid #526178; border-radius:8px; background:#090d13; color:inherit; font:inherit; }
     #feedback-state { margin:.45rem 0 0; color:#bdc6d5; font-size:.9rem; }
+    #generation-details { margin:.8rem 0; padding:.8rem; border:1px solid #526178; border-radius:12px; background:#171e28; }
+    #generation-details[hidden] { display:none; }
+    #generation-details pre { max-height:18rem; overflow:auto; white-space:pre-wrap; font:12px/1.4 ui-monospace,monospace; }
     .instructions { color:#bdc6d5; font-size:.93rem; }
   </style>
 </head>
@@ -63,6 +66,10 @@ export const pageHtml = `<!doctype html>
       <textarea id="feedback-comment" placeholder="What made this level good or bad?"></textarea>
       <p id="feedback-state">You can rate this level now or after solving it.</p>
     </section>
+    <details id="generation-details" hidden>
+      <summary>Generation settings and timing</summary>
+      <pre id="generation-record"></pre>
+    </details>
     <div class="meta">
       <span class="badge" id="moves">0 moves</span>
       <span class="badge" id="seed">Fixed level</span>

@@ -8,6 +8,12 @@
  */
 
 import { blockColor } from "./palette";
+import {
+  elapsedMs,
+  sampleNumericSetting,
+  type GenerationTiming,
+  type SampledNumericSetting,
+} from "../generation/settings";
 
 export type Direction = "left" | "right" | "up" | "down";
 
@@ -44,10 +50,33 @@ export interface PrototypeState {
   blocks: PrototypeBlock[];
   camera: Camera;
   cells: RegionCell[];
+  generation: WorldGenerationRecord;
   message: string;
   regions: GeneratedRegion[];
   worldHeight: number;
   worldWidth: number;
+}
+
+export interface WorldGenerationSettings {
+  checkpointCount: SampledNumericSetting;
+  initialBlocksPerRegion: SampledNumericSetting;
+  initialWorldHeight: SampledNumericSetting;
+  initialWorldWidth: SampledNumericSetting;
+  laterBlocksPerRegion: SampledNumericSetting;
+  maxBlockSize: SampledNumericSetting;
+  movementTypes: ["static"];
+  requestMargin: SampledNumericSetting;
+  viewportHeight: SampledNumericSetting;
+  viewportWidth: SampledNumericSetting;
+  wallCount: SampledNumericSetting;
+}
+
+export interface WorldGenerationRecord {
+  kind: "world";
+  seed: number;
+  settings: WorldGenerationSettings;
+  tactic: "viewport-rounded-margin";
+  timing: GenerationTiming;
 }
 
 export interface WorldViewportCell {
@@ -78,11 +107,34 @@ const shapes = [
   { width: 1, height: 3 },
 ] as const;
 
-export function createPrototypeState(): PrototypeState {
+export function createPrototypeState(seed = 1): PrototypeState {
+  const fixed = (value: number) => sampleNumericSetting({ kind: "fixed", value }, () => 0);
   const state: PrototypeState = {
     blocks: [],
     camera: { x: 0, y: 0, width: VIEWPORT_SIZE, height: VIEWPORT_SIZE },
     cells: [],
+    generation: {
+      kind: "world",
+      seed,
+      tactic: "viewport-rounded-margin",
+      settings: {
+        initialWorldWidth: fixed(WORLD_SIZE),
+        initialWorldHeight: fixed(WORLD_SIZE),
+        viewportWidth: fixed(VIEWPORT_SIZE),
+        viewportHeight: fixed(VIEWPORT_SIZE),
+        requestMargin: fixed(REQUEST_MARGIN),
+        initialBlocksPerRegion: fixed(7),
+        laterBlocksPerRegion: fixed(6),
+        maxBlockSize: fixed(3),
+        wallCount: fixed(0),
+        checkpointCount: fixed(0),
+        movementTypes: ["static"],
+      },
+      timing: {
+        totalMs: 0,
+        phases: { requestCellsMs: 0, placeBlocksMs: 0 },
+      },
+    },
     message: "",
     regions: [],
     worldHeight: WORLD_SIZE,
@@ -170,6 +222,8 @@ function panCamera(state: PrototypeState, deltaX: number, deltaY: number): Proto
 }
 
 function commitViewportRequest(state: PrototypeState): PrototypeState {
+  const totalStartedAt = performance.now();
+  const requestStartedAt = performance.now();
   const regionId = `region-${state.regions.length + 1}`;
   const existingCells = new Set(state.cells.map(key));
   const site = {
@@ -179,10 +233,22 @@ function commitViewportRequest(state: PrototypeState): PrototypeState {
   const newCells = viewportRequestCells(state.camera, REQUEST_MARGIN)
     .filter((cell) => !existingCells.has(key(cell)))
     .map((cell): RegionCell => ({ ...cell, regionId }));
-  if (newCells.length === 0) return state;
+  const requestCellsMs = elapsedMs(requestStartedAt);
+  if (newCells.length === 0) {
+    return withWorldTiming(state, elapsedMs(totalStartedAt), requestCellsMs, 0);
+  }
   const allCells = [...state.cells, ...newCells];
-  const blocks = placeRegionBlocks(state.blocks, newCells, regionId, site, state.regions.length);
-  return {
+  const placementStartedAt = performance.now();
+  const blocks = placeRegionBlocks(
+    state.blocks,
+    newCells,
+    regionId,
+    site,
+    state.regions.length,
+    state.generation.seed,
+  );
+  const placeBlocksMs = elapsedMs(placementStartedAt);
+  return withWorldTiming({
     ...state,
     blocks: [...state.blocks, ...blocks],
     cells: allCells,
@@ -190,7 +256,7 @@ function commitViewportRequest(state: PrototypeState): PrototypeState {
       ...state.regions,
       { id: regionId, site: { ...site }, cellCount: newCells.length, blockIds: blocks.map((block) => block.id) },
     ],
-  };
+  }, elapsedMs(totalStartedAt), requestCellsMs, placeBlocksMs);
 }
 
 function placeRegionBlocks(
@@ -199,6 +265,7 @@ function placeRegionBlocks(
   regionId: string,
   site: Point,
   regionIndex: number,
+  seed: number,
 ): PrototypeBlock[] {
   const committed = new Set(committedCells.map(key));
   const occupied = new Set(existingBlocks.flatMap(blockPoints).map(key));
@@ -210,7 +277,7 @@ function placeRegionBlocks(
     const shape = isRed ? { width: 2, height: 1 } : shapes[(regionIndex * 3 + index) % shapes.length]!;
     const id = isRed ? "R" : blockId(existingBlocks.length + blocks.length);
     const color = blockColor(id);
-    const position = findPosition(site, shape, committed, occupied, regionIndex * 17 + index * 11);
+    const position = findPosition(site, shape, committed, occupied, seed * 13 + regionIndex * 17 + index * 11);
     if (!position) continue;
     const block = { id, regionId, ...shape, ...position, color };
     blocks.push(block);
@@ -281,4 +348,25 @@ function blockId(index: number): string {
 
 function key(point: Point): string {
   return `${point.x},${point.y}`;
+}
+
+function withWorldTiming(
+  state: PrototypeState,
+  totalMs: number,
+  requestCellsMs: number,
+  placeBlocksMs: number,
+): PrototypeState {
+  return {
+    ...state,
+    generation: {
+      ...state.generation,
+      timing: {
+        totalMs: state.generation.timing.totalMs + totalMs,
+        phases: {
+          requestCellsMs: (state.generation.timing.phases.requestCellsMs ?? 0) + requestCellsMs,
+          placeBlocksMs: (state.generation.timing.phases.placeBlocksMs ?? 0) + placeBlocksMs,
+        },
+      },
+    },
+  };
 }
