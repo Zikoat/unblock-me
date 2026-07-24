@@ -15,22 +15,26 @@ export const pageHtml = `<!doctype html>
     .mode-switch { display:flex; gap:.45rem; margin:0 0 .8rem; }
     .mode-switch button[aria-pressed="true"] { background:#d8ff7a; color:#17210a; border-color:#d8ff7a; }
     #board-frame { width:min(100%, 560px); overflow:hidden; border-radius:14px; background:#090d13; touch-action:none; position:relative; }
-    #board { width:100%; height:100%; left:0; top:0; display:grid; gap:4px; padding:4px; background:#202936; border:2px solid #5c6c80; border-radius:14px; position:absolute; touch-action:none; user-select:none; transform:scale(var(--board-zoom,1)) translate3d(var(--map-pan-x,0px),var(--map-pan-y,0px),0); transform-origin:center; }
+    #board { --cell-size:56px; --block-inset:calc(var(--cell-size) * .065); --block-radius:calc(var(--cell-size) * .16); --block-font-size:calc(var(--cell-size) * .26); --block-shadow-y:calc(var(--cell-size) * .045); width:100%; height:100%; left:0; top:0; display:grid; gap:4px; padding:4px; background:#202936; border:2px solid #5c6c80; border-radius:14px; position:absolute; touch-action:none; user-select:none; transform:scale(var(--board-zoom,1)) translate3d(var(--map-pan-x,0px),var(--map-pan-y,0px),0); transform-origin:center; }
     #board.world-map { width:200%; height:200%; left:-50%; top:-50%; border-radius:0; }
     .cell { background:#151b24; border-radius:6px; }
     .checkpoint { margin:-2px; z-index:1; border-radius:4px; background:repeating-linear-gradient(45deg,#80661e 0 7px,#aa8e39 7px 14px); }
     .wall { background:#050608; box-shadow:inset 0 0 0 2px #37404c; }
-    .block { z-index:2; min-width:0; min-height:0; overflow:hidden; margin:4px; padding:0; border:0; border-radius:10px; cursor:grab; touch-action:none; color:#11151c; font-weight:800; font-size:1rem; box-shadow:0 3px 0 rgba(0,0,0,.25); background:hsl(var(--block-hue) 72% 72%); will-change:transform; }
+    .block, .world-block { z-index:2; min-width:0; min-height:0; overflow:hidden; margin:var(--block-inset); border:0; border-radius:var(--block-radius); color:#11151c; font-weight:850; font-size:var(--block-font-size); line-height:1; box-shadow:0 var(--block-shadow-y) 0 rgba(0,0,0,.25); }
+    .block { padding:0; cursor:grab; touch-action:none; background:hsl(var(--block-hue) 72% 72%); will-change:transform; }
     .block:active { cursor:grabbing; }
     .block[data-block-id="R"] { background:#ff624d; }
-    .world-block { z-index:2; display:grid; place-items:center; margin:2px; border-radius:6px; color:#11151c; font-weight:850; }
+    .world-block { display:grid; place-items:center; }
     .unknown { background:#0b0f15; }
     #mode-controls:empty { display:none; }
     #mode-controls { display:flex; flex-wrap:wrap; gap:.45rem; margin:.8rem 0 0; }
     .meta { display:flex; flex-wrap:wrap; gap:.6rem; align-items:center; margin:1rem 0; }
-    .badge, button { border-radius:999px; padding:.55rem .8rem; border:1px solid #526178; background:#202936; color:inherit; }
-    button { cursor:pointer; font-weight:700; }
-    .meta button:hover { background:#303c4d; }
+    .badge { display:inline-flex; align-items:center; min-height:2.35rem; padding:.5rem .72rem; border:1px solid #39475a; border-radius:8px; background:#171e28; color:#bdc6d5; font-weight:600; cursor:default; box-shadow:none; }
+    button:not(.block) { appearance:none; min-height:2.35rem; padding:.5rem .8rem; border:1px solid #8293aa; border-radius:9px; background:linear-gradient(#344357,#263346); color:#f4f0e5; cursor:pointer; font:inherit; font-weight:700; box-shadow:0 3px 0 #080b10; transition:background .12s ease,border-color .12s ease,box-shadow .12s ease,transform .12s ease; }
+    button:not(.block):hover { background:linear-gradient(#40516a,#2e3d52); border-color:#a9bad0; }
+    button:not(.block):active { transform:translateY(2px); box-shadow:0 1px 0 #080b10; }
+    button:not(.block):focus-visible { outline:3px solid #7cc7ff; outline-offset:3px; }
+    button:not(.block):disabled { opacity:.5; cursor:not-allowed; box-shadow:none; }
     #status { min-height:1.5rem; color:#bdc6d5; }
     #win { display:none; margin-top:1rem; padding:1rem; border-radius:10px; background:#d8ff7a; color:#17210a; font-weight:850; }
     #win.visible { display:block; }
