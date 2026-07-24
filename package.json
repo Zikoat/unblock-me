@@ -14,6 +14,7 @@
     "report:feedback": "bun scripts/generate-feedback-report.ts",
     "report:generation-settings": "bun scripts/generate-generation-settings-report.ts",
     "report:evidence-export": "bun scripts/generate-evidence-export-report.ts",
+    "report:decision-state": "bun scripts/generate-decision-state-report.ts",
     "prototype:closure": "bun src/prototypes/dependency-closure/cli.ts",
     "prototype:regions": "bun src/prototypes/multi-region/cli.ts",
     "verify:tmux": "bun -e \"const p='scripts/tmux-playthrough.ps1'; if (!require('node:fs').existsSync(p)) { console.error('Missing ' + p); process.exit(1); }\" && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/tmux-playthrough.ps1",
