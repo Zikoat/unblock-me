@@ -24,6 +24,7 @@ import {
   type LevelFeedback,
   type LevelRating,
 } from "./feedback";
+import { bundledSourceCommit, createEvidenceExport } from "./evidence-export";
 import {
   BROWSER_SESSION_KEY,
   decodeBrowserSession,
@@ -75,6 +76,7 @@ let initialState = restoredSession?.initialState ?? createPuzzle();
 let state = restoredSession?.playState ?? cloneState(initialState);
 let currentSeed: number | undefined = restoredSession?.currentSeed;
 let currentGeneration = restoredSession?.currentGeneration;
+let currentSolution = restoredSession?.currentSolution;
 let worldState: PrototypeState = restoredSession?.worldState ?? createPrototypeState();
 let worldCamera: MapCamera = {
   x: restoredSession?.worldView.x ?? worldState.camera.x,
@@ -398,12 +400,17 @@ function applyZoom(): void {
 }
 
 function persistSession(): void {
-  const session: BrowserSession = {
+  localStorage.setItem(BROWSER_SESSION_KEY, encodeBrowserSession(currentSession()));
+}
+
+function currentSession(): BrowserSession {
+  return {
     version: 1,
     mode,
     zoom,
     currentSeed,
     currentGeneration,
+    currentSolution,
     currentLevelId,
     currentLevelSolved,
     feedbackDraft,
@@ -415,7 +422,6 @@ function persistSession(): void {
     worldState,
     closureState,
   };
-  localStorage.setItem(BROWSER_SESSION_KEY, encodeBrowserSession(session));
 }
 
 function pointerDistance(): number {
@@ -504,6 +510,8 @@ function saveFeedback(): void {
     solved: currentLevelSolved,
     initialState: cloneState(initialState),
     generation: currentGeneration,
+    solution: currentSolution,
+    sourceCommit: bundledSourceCommit(),
     stateAtRating: cloneState(state),
     moveHistory: structuredClone(moveHistory),
   });
@@ -638,6 +646,7 @@ document.querySelector<HTMLButtonElement>("[data-action='new-level']")!.addEvent
   currentSeed = Math.floor(Math.random() * 4_000_000_000) + 1;
   const level = createGeneratedLevel(currentSeed);
   currentGeneration = level.generation;
+  currentSolution = level.solution;
   initialState = level.state;
   state = cloneState(initialState);
   moveHistory = [];
@@ -669,6 +678,18 @@ feedbackComment.addEventListener("input", () => {
   saveFeedback();
   persistSession();
   renderFeedback();
+});
+
+document.querySelector<HTMLButtonElement>("[data-action='export']")!.addEventListener("pointerup", () => {
+  const exported = createEvidenceExport(currentSession());
+  const blob = new Blob([JSON.stringify(exported, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `unblock-me-evidence-${exported.exportedAt.replaceAll(":", "-")}.json`;
+  link.click();
+  URL.revokeObjectURL(url);
+  status.textContent = "Complete play and generation evidence exported.";
 });
 
 render();

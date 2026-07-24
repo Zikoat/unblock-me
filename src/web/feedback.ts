@@ -1,4 +1,4 @@
-import type { GameState } from "../game";
+import type { GameState, MoveAction } from "../game";
 import type { FiniteGenerationRecord } from "../generator";
 import type { SemanticMove } from "./session";
 
@@ -12,6 +12,8 @@ export interface LevelFeedback {
   moveHistory: SemanticMove[];
   ratedAt: string;
   rating: LevelRating;
+  solution?: readonly MoveAction[];
+  sourceCommit?: string;
   solved: boolean;
   stateAtRating: GameState;
 }
