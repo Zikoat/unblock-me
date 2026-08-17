@@ -2,12 +2,20 @@
 
 Slide the Red Block horizontally until it fully occupies the Checkpoint.
 
-## Run
+## Browser app
 
-From PowerShell:
+After the GitHub Pages workflow deploys this branch, use the homepage at
+<https://zikoat.github.io/unblock-me/> and choose **Play Unblock Me**, or open
+the game directly at <https://zikoat.github.io/unblock-me/app/>.
 
-```powershell
-cd C:\Users\sscho\Documents\Codex\2026-07-19\hi\unblock-me
+The development build on this exe.dev VM is available at
+<https://hockey-mandolin.exe.xyz/> (game: `/app/`). exe.dev authentication may
+be required.
+
+## Terminal app
+
+```bash
+cd unblock-me
 bun install
 bun run start
 ```
@@ -17,16 +25,16 @@ the command summary and `quit` to exit.
 
 ## Verify
 
-The following local commands have been verified for this MVP:
+Verification is a plain test suite — there are no separate verification
+commands and no Windows/PowerShell dependency:
 
-```powershell
+```bash
 bun run check
-bun run verify:tmux
-bun run report
 ```
 
-`bun run report` writes the self-contained verification report to
-`artifacts/terminal-mvp-verification.html`.
+The terminal playthrough test runs the real `bun src/index.ts`, drives the
+known solution to the winning state, and writes frame-by-frame PNG screenshots,
+a transcript, and a manifest to `artifacts/terminal/`.
 
 ## Pending human verification
 

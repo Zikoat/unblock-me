@@ -36,7 +36,7 @@ try {
     issueNumber: 25,
     issueName: "Make controls recognizable and block styling scale-consistent",
     issueUrl: "https://github.com/Zikoat/unblock-me/issues/25",
-    deploymentUrl: "https://zikoat.github.io/unblock-me/",
+    deploymentUrl: "https://zikoat.github.io/unblock-me/app/",
     requirements: [
       "Pressable buttons are visually distinct from informational labels",
       "Blocks retain the same style across generated board sizes",

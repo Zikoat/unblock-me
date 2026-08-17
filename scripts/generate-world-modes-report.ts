@@ -44,7 +44,7 @@ try {
     summary: "Only the new Viewport-driven World generation, empty-space camera pan, and Dependency-closure modes are shown.",
     commit,
     issueUrl: "https://github.com/Zikoat/unblock-me/issues/12",
-    deploymentUrl: "https://zikoat.github.io/unblock-me/",
+    deploymentUrl: "https://zikoat.github.io/unblock-me/app/",
     checks: [
       "World renders exactly the 10×10 Viewport while retaining 40×40 state",
       "Desktop mouse and phone touch empty-space drags changed camera coordinates",

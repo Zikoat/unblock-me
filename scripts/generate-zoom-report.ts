@@ -46,7 +46,7 @@ try {
     issueNumber: 13,
     issueName: "Add pinch and wheel zoom to the browser Viewport",
     issueUrl: "https://github.com/Zikoat/unblock-me/issues/13",
-    deploymentUrl: "https://zikoat.github.io/unblock-me/",
+    deploymentUrl: "https://zikoat.github.io/unblock-me/app/",
     requirements: [
       "Pan updates continuously before pointer release",
       "One pan may move in X and Y simultaneously",

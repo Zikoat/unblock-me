@@ -38,7 +38,7 @@ try {
     issueNumber: 16,
     issueName: "Record distribution-backed generator settings and timings",
     issueUrl: "https://github.com/Zikoat/unblock-me/issues/16",
-    deploymentUrl: "https://zikoat.github.io/unblock-me/",
+    deploymentUrl: "https://zikoat.github.io/unblock-me/app/",
     requirements: [
       "Settings retain distribution definition and sampled value",
       "Finite and World generation record complete settings",

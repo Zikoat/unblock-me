@@ -25,7 +25,7 @@ export async function runWorldModesVerification({ recordVideo = false, humanPace
   const videoDir = recordVideo ? await mkdtemp(join(tmpdir(), "unblock-me-world-modes-")) : undefined;
   let browser;
   try {
-    const url = `http://127.0.0.1:${port}`;
+    const url = `http://127.0.0.1:${port}/app/`;
     await waitForServer(url);
     browser = await chromium.launch({ executablePath: await browserPath(), headless: true });
     const desktop = await desktopFlow(browser, url, videoDir, humanPace);

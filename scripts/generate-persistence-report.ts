@@ -38,7 +38,7 @@ try {
     summary: "Only exact-state storage and restoration after closing and reopening the browser page are shown.",
     commit,
     issueUrl: "https://github.com/Zikoat/unblock-me/issues/14",
-    deploymentUrl: "https://zikoat.github.io/unblock-me/",
+    deploymentUrl: "https://zikoat.github.io/unblock-me/app/",
     checks: [
       "New page restored the previous Closure mode, separator result, and zoom",
       "World camera and Generated Regions were restored",

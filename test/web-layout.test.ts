@@ -1,6 +1,11 @@
 import { expect, test } from "bun:test";
+import { homeHtml } from "../src/web/home";
 import { pageHtml } from "../src/web/page";
 
+test("links the homepage to the browser app subpage", () => {
+  expect(homeHtml).toContain('href="./app/"');
+  expect(homeHtml).toContain("Play Unblock Me");
+});
 test("removes Block intrinsic sizing from square board tracks", () => {
   expect(pageHtml).toContain("min-width:0; min-height:0; overflow:hidden;");
 });
