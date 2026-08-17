@@ -42,7 +42,7 @@ try {
     issueNumber: 18,
     issueName: "Validate Decision State compression with finite exact search",
     issueUrl: "https://github.com/Zikoat/unblock-me/issues/18",
-    deploymentUrl: "https://zikoat.github.io/unblock-me/",
+    deploymentUrl: "https://zikoat.github.io/unblock-me/app/",
     requirements: [
       "Exact search is the finite correctness oracle",
       "Compression uses positioned Blocks and derived Blocker Dependencies",

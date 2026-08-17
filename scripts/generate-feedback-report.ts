@@ -38,7 +38,7 @@ try {
     issueNumber: 15,
     issueName: "Collect level feedback and gate solved progression",
     issueUrl: "https://github.com/Zikoat/unblock-me/issues/15",
-    deploymentUrl: "https://zikoat.github.io/unblock-me/",
+    deploymentUrl: "https://zikoat.github.io/unblock-me/app/",
     requirements: [
       "Feedback is available before and after solving",
       "A solved level remains interactive",

@@ -23,9 +23,11 @@ export async function runWebVerification({ recordVideo = false, humanPace = fals
   let browser;
   try {
     await waitForServer(`http://127.0.0.1:${port}`);
-    browser = await chromium.launch({ executablePath: await browserPath(), headless: true });
-    const desktop = await desktopFlow(browser, `http://127.0.0.1:${port}`, videoDir, humanPace);
-    const mobile = await mobileFlow(browser, `http://127.0.0.1:${port}`, videoDir, humanPace);
+    const executablePath = await browserPath();
+    browser = await chromium.launch({ ...(executablePath ? { executablePath } : {}), headless: true });
+    const appUrl = `http://127.0.0.1:${port}/app/`;
+    const desktop = await desktopFlow(browser, appUrl, videoDir, humanPace);
+    const mobile = await mobileFlow(browser, appUrl, videoDir, humanPace);
     return {
       desktopVideoPath: desktop.videoPath,
       mobileVideoPath: mobile.videoPath,
@@ -304,7 +306,9 @@ async function touchDrag(page, session, id, dx, dy, humanPace) {
 }
 
 async function touchTap(page, session, selector) {
-  const box = await page.locator(selector).boundingBox();
+  const locator = page.locator(selector);
+  await locator.scrollIntoViewIfNeeded();
+  const box = await locator.boundingBox();
   if (!box) throw new Error(`Could not find ${selector}.`);
   const x = box.x + box.width / 2;
   const y = box.y + box.height / 2;
@@ -316,7 +320,8 @@ async function pause(page, humanPace, milliseconds) { if (humanPace) await page.
 
 async function browserPath() {
   for (const candidate of edgeCandidates) { try { await access(candidate); return candidate; } catch { /* next */ } }
-  throw new Error("No installed Chromium browser found for Playwright.");
+  // Fall back to Playwright's bundled Chromium, which works cross-platform.
+  return undefined;
 }
 
 async function waitForServer(url) {

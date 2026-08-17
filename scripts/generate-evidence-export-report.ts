@@ -38,7 +38,7 @@ try {
     issueNumber: 17,
     issueName: "Export complete play and generation evidence as JSON",
     issueUrl: "https://github.com/Zikoat/unblock-me/issues/17",
-    deploymentUrl: "https://zikoat.github.io/unblock-me/",
+    deploymentUrl: "https://zikoat.github.io/unblock-me/app/",
     requirements: [
       "Repository code is unnecessary to recover Block positions or player decisions",
       "Exact geometry before and after recorded moves is included",

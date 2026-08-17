@@ -22,7 +22,7 @@ export async function runPersistenceVerification({ recordVideo = false, humanPac
   const videoDir = recordVideo ? await mkdtemp(join(tmpdir(), "unblock-me-persistence-")) : undefined;
   let browser;
   try {
-    const url = `http://127.0.0.1:${port}`;
+    const url = `http://127.0.0.1:${port}/app/`;
     await waitForServer(url);
     await access(edge);
     browser = await chromium.launch({ executablePath: edge, headless: true });
