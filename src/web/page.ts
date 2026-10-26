@@ -3,7 +3,7 @@ export const pageHtml = `<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="icon" href="data:,">
+  <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="%237c4a1e"/><rect x="12" y="12" width="40" height="40" rx="3" fill="%23f3d9a4"/><rect x="51" y="22" width="13" height="10" fill="%23f3d9a4"/><g fill="%23b7791f"><rect x="33.5" y="13.5" width="7" height="27" rx="2"/><rect x="13.5" y="43.5" width="17" height="7" rx="2"/></g><rect x="13.5" y="23.5" width="17" height="7" rx="2" fill="%23dc2626"/></svg>'>
   <title>Unblock Me</title>
   <style>
     :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; background:#11151c; color:#f4f0e5; }
