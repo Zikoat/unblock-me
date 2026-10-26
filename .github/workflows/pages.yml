@@ -2,7 +2,7 @@ name: Deploy web app to GitHub Pages
 
 on:
   push:
-    branches: [codex/terminal-mvp]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
