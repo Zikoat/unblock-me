@@ -1,29 +1,17 @@
 {
+  "name": "unblock-me",
+  "private": true,
+  "type": "module",
   "scripts": {
-    "start": "bun src/index.ts",
-    "test": "bun test",
+    "build": "bun scripts/build.ts",
+    "test": "bun test test/unit",
     "typecheck": "tsc --noEmit",
-    "check": "bun run typecheck && bun test",
-    "build:web": "bun scripts/build-web.ts",
-    "web": "bun run build:web && bun src/web/server.ts",
-    "test:web": "node scripts/verify-web.mjs",
-    "report:web": "bun scripts/generate-web-report.ts",
-    "report:world-modes": "bun scripts/generate-world-modes-report.ts",
-    "report:zoom": "bun scripts/generate-zoom-report.ts",
-    "report:persistence": "bun scripts/generate-persistence-report.ts",
-    "report:feedback": "bun scripts/generate-feedback-report.ts",
-    "report:generation-settings": "bun scripts/generate-generation-settings-report.ts",
-    "report:evidence-export": "bun scripts/generate-evidence-export-report.ts",
-    "report:decision-state": "bun scripts/generate-decision-state-report.ts",
-    "report:control-style": "bun scripts/generate-control-style-report.ts",
-    "prototype:closure": "bun src/prototypes/dependency-closure/cli.ts",
-    "prototype:regions": "bun src/prototypes/multi-region/cli.ts"
+    "check": "bun run typecheck && bun run test",
+    "e2e": "bun run build && node test/e2e.mjs"
   },
   "devDependencies": {
-    "@types/bun": "latest",
-    "ffmpeg-static": "latest",
-    "playwright": "latest",
-    "sharp": "latest",
-    "typescript": "latest"
+    "@types/bun": "1.3.14",
+    "playwright": "1.61.1",
+    "typescript": "7.0.2"
   }
 }
