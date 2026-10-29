@@ -50,7 +50,7 @@ function save(): void {
 }
 
 const newSeed = () => Math.floor(Math.random() * 2 ** 32);
-let seed = load<number>(SEED_KEY, newSeed());
+const seed = load<number>(SEED_KEY, newSeed());
 const moved = load<[string, number, number][]>(MOVED_KEY, []);
 const scene = newScene(innerWidth, innerHeight, {
   layout: randomLayout(seed),
@@ -59,21 +59,34 @@ const scene = newScene(innerWidth, innerHeight, {
   border: load<boolean>(BORDER_KEY, true),
 });
 restoreCamera();
+// A fresh start (first visit or after a reset) keeps its seed from the first load on.
+if (localStorage.getItem(SEED_KEY) === null) save();
 const gestures = new Gestures(scene, {
   onChange: save,
   onUi: (ui) => {
     if (ui === "reset") {
-      // A new seed lays out every block anew; moves, marks and the circle are forgotten.
-      seed = newSeed();
-      restart(scene, randomLayout(seed));
+      forgetEverything();
     } else if (ui === "border") {
       scene.border = !scene.border;
+      save();
     } else {
       toggleFullscreen();
     }
-    save();
   },
 });
+
+/** Delete everything Unblock Me stored and reload: a new seed, default settings, centred.
+ * Only our own keys go, since other pages on this origin keep theirs in the same storage. */
+function forgetEverything(): void {
+  for (const storage of [localStorage, sessionStorage]) {
+    try {
+      for (const key of Object.keys(storage)) if (key.startsWith("unblock-me:")) storage.removeItem(key);
+    } catch {
+      // No storage: there is nothing to forget.
+    }
+  }
+  location.reload();
+}
 
 function toggleFullscreen(): void {
   // Runs inside the tap's pointerup, which counts as the user gesture fullscreen needs.

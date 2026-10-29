@@ -122,12 +122,28 @@ const browser = await chromium.launch();
   await page.reload();
   await frame(page);
   check((await page.evaluate(() => unblock.seed())) === seedBefore && (await block(page, movable.id))?.moved, "the seed and the move survive a reload");
-  await tap(cell(0.5, 0.5));
+  // Turn the border off, pan, and leave another page's key on this origin, then reset.
+  await tap(cell(-0.5, 0.5));
+  await gesture([cell(0.5, 0.5)], [cell(1.5, 1.2)]);
+  await page.evaluate(() => localStorage.setItem("someone-else", "keep me"));
+  const resetReload = page.waitForEvent("load", { timeout: 5000 }).then(() => true, () => false);
+  await tap(cell(1.5, 1.2)); // the reset block, after the pan
+  check(await resetReload, "tapping the reset block reloads the page");
   await frame(page);
   const seedAfter = await page.evaluate(() => unblock.seed());
-  check(seedAfter !== seedBefore, `tapping the reset block changes the seed (${seedBefore} -> ${seedAfter})`);
-  check((await blockIds(page)) !== blocksBefore, "and lays out different blocks");
-  check(await page.evaluate(() => unblock.scene.moved.size === 0 && unblock.scene.tapped.size === 0 && unblock.scene.circle === null), "and forgets every move, mark and the circle");
+  check(seedAfter !== seedBefore, `with a new seed (${seedBefore} -> ${seedAfter})`);
+  check((await blockIds(page)) !== blocksBefore, "and different blocks");
+  check(await page.evaluate(() => unblock.scene.moved.size === 0 && unblock.scene.tapped.size === 0 && unblock.scene.circle === null), "and no moves, marks or circle");
+  check(await page.evaluate(() => unblock.scene.border === true), "and the border back on");
+  check(await page.evaluate(() => unblock.scene.camera.offsetX === 170 && unblock.scene.camera.offsetY === 370 && unblock.scene.camera.scale === 1), "and the view centred");
+  const stored = await page.evaluate(() => Object.fromEntries(Object.keys(localStorage).sort().map((k) => [k, localStorage.getItem(k)])));
+  check(JSON.stringify(stored) === JSON.stringify({
+    "someone-else": "keep me",
+    "unblock-me:border": "true",
+    "unblock-me:v4:moved": "[]",
+    "unblock-me:v4:seed": String(seedAfter),
+    "unblock-me:v4:tapped": "[]",
+  }), `storage holds only fresh defaults, and other pages' keys are left alone (${JSON.stringify(stored)})`);
   await expectColor(page, cell(0.15, 0.15), "reset", "the reset block is still in the middle");
   await page.screenshot({ path: shots + "phone-2-after-reset.png" });
   const afterReset = await blockIds(page);
