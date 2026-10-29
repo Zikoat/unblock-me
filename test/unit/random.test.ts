@@ -32,7 +32,7 @@ describe("random layout", () => {
     for (const seed of [1, 7, 123456]) {
       const taken = new Set<string>();
       for (const b of randomLayout(seed).blocksIn(AREA)) {
-        if (b.reset) continue;
+        if (b.ui) continue;
         expect([[2, 1], [1, 2]]).toContainEqual([b.w, b.h]);
         expect(Number.isInteger(b.x) && Number.isInteger(b.y)).toBe(true);
         const [cx, cy] = b.id.split(",").map(Number) as [number, number];
@@ -50,7 +50,7 @@ describe("random layout", () => {
 
   test("it is dense: about half the cells are covered and many blocks are stuck or nearly", () => {
     const layout = randomLayout(9);
-    const blocks = layout.blocksIn(AREA).filter((b) => !b.reset);
+    const blocks = layout.blocksIn(AREA).filter((b) => !b.ui);
     const coverage = blocks.reduce((n, b) => n + b.w * b.h, 0) / (80 * 80);
     expect(coverage).toBeGreaterThan(0.4);
     expect(coverage).toBeLessThan(0.65);
@@ -62,13 +62,14 @@ describe("random layout", () => {
     expect(room.filter((r) => r <= 3).length / room.length).toBeGreaterThan(0.5);
   });
 
-  test("the reset block sits in the middle for every seed, and no block overlaps it", () => {
+  test("the UI blocks sit in the middle for every seed, and no block overlaps them", () => {
     for (const seed of [1, 2, 3, 99, 2 ** 31]) {
       const layout = randomLayout(seed);
       const near = layout.blocksIn({ x: -5, y: -5, width: 10, height: 10 });
-      expect(near.find((b) => b.reset)).toMatchObject({ id: "reset", x: -1, y: -1, w: 2, h: 2 });
-      const resetCells = new Set(["-1,-1", "0,-1", "-1,0", "0,0"]);
-      for (const b of near) if (!b.reset) for (const c of cells(b)) expect(resetCells.has(c)).toBe(false);
+      expect(near.filter((b) => b.ui).map((b) => [b.ui, b.x, b.y, b.w, b.h])).toEqual([
+        ["border", -1, 0, 1, 1], ["reset", 0, 0, 1, 1], ["fullscreen", 1, 0, 1, 1],
+      ]);
+      for (const b of near) if (!b.ui) for (const c of cells(b)) expect(["-1,0", "0,0", "1,0"]).not.toContain(c);
     }
   });
 
@@ -87,7 +88,7 @@ describe("random layout", () => {
 
   test("a moved block shows at its new place even when its home is far out of view", () => {
     const layout = randomLayout(3);
-    const home = layout.blocksIn({ x: 4, y: 4, width: 4, height: 4 }).find((b) => !b.reset)!;
+    const home = layout.blocksIn({ x: 4, y: 4, width: 4, height: 4 }).find((b) => !b.ui)!;
     const changes = { moved: new Map([[home.id, { x: 500, y: 500 }]]), tapped: new Set<string>() };
     expect(blocksIn(layout, { x: home.x, y: home.y, width: home.w, height: home.h }, changes).map((b) => b.id)).not.toContain(home.id);
     expect(blocksIn(layout, { x: 500, y: 500, width: 1, height: 1 }, changes)).toContainEqual({ ...home, x: 500, y: 500, moved: true });
@@ -100,7 +101,7 @@ describe("random layout", () => {
       return blocksIn(layout, { x: at.x, y: at.y, width: at.w, height: at.h }, none).some((o) => o.id !== b.id);
     };
     for (const b of layout.blocksIn({ x: -12, y: -12, width: 24, height: 24 })) {
-      if (b.reset) continue;
+      if (b.ui) continue;
       const { lo, hi } = slideRange(layout, b, none);
       for (let p = lo; p <= hi; p++) expect(occupied(b, p)).toBe(false);
       expect(occupied(b, lo - 1)).toBe(true);
@@ -135,7 +136,7 @@ describe("culling", () => {
     const before = visibleBlocks(scene);
     scene.camera = { ...scene.camera, offsetX: 5000, offsetY: -3000 };
     expect(visibleBlocks(scene).map((b) => b.id)).not.toEqual(before.map((b) => b.id));
-    scene.camera = { ...scene.camera, offsetX: 200, offsetY: 400 };
+    scene.camera = { ...scene.camera, offsetX: 170, offsetY: 370 };
     expect(visibleBlocks(scene)).toEqual(before);
   });
 });

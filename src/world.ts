@@ -1,18 +1,21 @@
 import type { Point, Rect } from "./camera";
 
+/** A 1x1 control on the board: it never slides, a tap runs it. */
+export type Ui = "border" | "reset" | "fullscreen";
+
 /** A block on the lattice, in lattice units: 2x1 slides horizontally, 1x2 vertically.
- * The reset block never slides. */
+ * UI blocks never slide. */
 export type Block = {
   id: string;
   x: number;
   y: number;
   w: number;
   h: number;
-  reset: boolean;
+  ui: Ui | null;
   moved: boolean;
   tapped: boolean;
 };
-export type Placed = { id?: string; x: number; y: number; w: number; h: number; reset?: boolean };
+export type Placed = { id?: string; x: number; y: number; w: number; h: number; ui?: Ui };
 
 /** Where the blocks start. The app uses a random layout; tests can place blocks exactly. */
 export interface Layout {
@@ -27,7 +30,7 @@ export const UNIT = 60;
 /** How far (in cells) a drag looks for blocks in the way. */
 const REACH = 200;
 
-const block = (p: Placed, id: string): Block => ({ id, x: p.x, y: p.y, w: p.w, h: p.h, reset: p.reset ?? false, moved: false, tapped: false });
+const block = (p: Placed, id: string): Block => ({ id, x: p.x, y: p.y, w: p.w, h: p.h, ui: p.ui ?? null, moved: false, tapped: false });
 const intersects = (b: { x: number; y: number; w: number; h: number }, r: Rect) =>
   b.x < r.x + r.width && b.x + b.w > r.x && b.y < r.y + r.height && b.y + b.h > r.y;
 
@@ -41,8 +44,12 @@ export function fixedLayout(placed: Placed[]): Layout {
   };
 }
 
-/** The black reset block in the middle of the random layout. */
-export const RESET_BLOCK: Placed = { id: "reset", x: -1, y: -1, w: 2, h: 2, reset: true };
+/** The UI blocks in the middle of the random layout: border toggle, reset, fullscreen. */
+export const UI_BLOCKS: Placed[] = [
+  { id: "border", x: -1, y: 0, w: 1, h: 1, ui: "border" },
+  { id: "reset", x: 0, y: 0, w: 1, h: 1, ui: "reset" },
+  { id: "fullscreen", x: 1, y: 0, w: 1, h: 1, ui: "fullscreen" },
+];
 
 /** The lattice is cut into chunks of CHUNK x CHUNK cells. Each chunk tries TRIES random
  * blocks and keeps those that fit, so blocks stay inside their chunk and never overlap. */
@@ -69,9 +76,10 @@ function chunkSeed(seed: number, cx: number, cy: number): number {
   return h ^ (h >>> 16);
 }
 
-/** Blocks everywhere, the same for the same seed, with the reset block in the middle. */
+/** Blocks everywhere, the same for the same seed, with the UI blocks in the middle. */
 export function randomLayout(seed: number): Layout {
-  const reset = block(RESET_BLOCK, RESET_BLOCK.id!);
+  const ui = UI_BLOCKS.map((p) => block(p, p.id!));
+  const uiArea = { x: -1, y: 0, width: 3, height: 1 };
   const cache = new Map<string, Block[]>();
 
   function chunk(cx: number, cy: number): Block[] {
@@ -89,7 +97,7 @@ export function randomLayout(seed: number): Layout {
       const y = cy * CHUNK + Math.floor(next() * (CHUNK - h + 1));
       const cells = horizontal ? [`${x},${y}`, `${x + 1},${y}`] : [`${x},${y}`, `${x},${y + 1}`];
       const candidate = block({ x, y, w, h }, `${cx},${cy},${i}`);
-      if (cells.some((c) => taken.has(c)) || intersects(candidate, { x: reset.x, y: reset.y, width: reset.w, height: reset.h })) continue;
+      if (cells.some((c) => taken.has(c)) || intersects(candidate, uiArea)) continue;
       cells.forEach((c) => taken.add(c));
       blocks.push(candidate);
     }
@@ -100,7 +108,7 @@ export function randomLayout(seed: number): Layout {
 
   return {
     blocksIn(area) {
-      const found = intersects(reset, area) ? [reset] : [];
+      const found = ui.filter((b) => intersects(b, area));
       for (let cx = Math.floor(area.x / CHUNK); cx <= Math.floor((area.x + area.width) / CHUNK); cx++) {
         for (let cy = Math.floor(area.y / CHUNK); cy <= Math.floor((area.y + area.height) / CHUNK); cy++) {
           for (const b of chunk(cx, cy)) if (intersects(b, area)) found.push(b);
@@ -109,7 +117,8 @@ export function randomLayout(seed: number): Layout {
       return found;
     },
     byId(id) {
-      if (id === reset.id) return reset;
+      const control = ui.find((b) => b.id === id);
+      if (control) return control;
       const [cx, cy] = id.split(",").map(Number) as [number, number];
       return chunk(cx, cy).find((b) => b.id === id);
     },

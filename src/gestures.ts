@@ -1,6 +1,6 @@
 import { pan, pinch, toWorld, zoomAt, type Camera, type Point } from "./camera";
 import { limits, visibleBlocks, type Scene } from "./scene";
-import { blockAt, slideRange, UNIT, type Block } from "./world";
+import { blockAt, slideRange, UNIT, type Block, type Ui } from "./world";
 
 /** A press that moves less than this many screen pixels is a tap. */
 export const TAP_SLOP = 10;
@@ -18,7 +18,7 @@ type Mode =
  * Turns pointer events (screen coordinates) into scene changes: a tap on the background
  * moves the circle and a tap on a block marks it, one finger pans the background or slides
  * a block along its long axis until it hits another block, two fingers pinch-zoom and pan.
- * The reset block never moves: dragging it pans, tapping it calls `onReset`.
+ * UI blocks never move: dragging one pans, tapping one calls `onUi` with its kind.
  * `onChange` runs when a block was moved or tapped, to store it.
  */
 export class Gestures {
@@ -27,14 +27,14 @@ export class Gestures {
 
   constructor(
     private readonly scene: Scene,
-    { onChange = () => {}, onReset = () => {} }: { onChange?: () => void; onReset?: () => void } = {},
+    { onChange = () => {}, onUi = () => {} }: { onChange?: () => void; onUi?: (ui: Ui) => void } = {},
   ) {
     this.onChange = onChange;
-    this.onReset = onReset;
+    this.onUi = onUi;
   }
 
   private readonly onChange: () => void;
-  private readonly onReset: () => void;
+  private readonly onUi: (ui: Ui) => void;
 
   down(id: number, at: Point): void {
     this.pointers.set(id, at);
@@ -53,7 +53,7 @@ export class Gestures {
     const mode = this.mode;
     if (mode.kind === "pressed" && mode.id === id) {
       if (Math.hypot(at.x - mode.start.x, at.y - mode.start.y) < TAP_SLOP) return;
-      if (mode.block === null || mode.block.reset) {
+      if (mode.block === null || mode.block.ui) {
         this.mode = { kind: "panning", id, last: mode.start };
       } else {
         const { lo, hi } = slideRange(this.scene.layout, mode.block, this.scene);
@@ -69,8 +69,8 @@ export class Gestures {
     if (mode.kind === "pressed" && mode.id === id) {
       if (mode.block === null) {
         this.scene.circle = toWorld(this.scene.camera, mode.start);
-      } else if (mode.block.reset) {
-        this.onReset();
+      } else if (mode.block.ui) {
+        this.onUi(mode.block.ui);
       } else {
         // Tapping a block toggles its mark.
         if (!this.scene.tapped.delete(mode.block.id)) this.scene.tapped.add(mode.block.id);

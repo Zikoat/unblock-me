@@ -55,13 +55,14 @@ const blockIds = (page) => page.evaluate(() => unblock.visibleBlocks().map((b) =
 
 const browser = await chromium.launch();
 
-// --- Phone: 400x800 CSS px at 2x, touch only. At scale 1, lattice point (x,y) is at
-// screen (200 + 60x, 400 + 60y); the border spans about x -2.6..2.6, y -5.3..5.3.
+// --- Phone: 400x800 CSS px at 2x, touch only. The view starts centred on the reset cell
+// (0,0), so lattice point (x,y) is at screen (170 + 60x, 370 + 60y); the border spans
+// about x -2.1..3.1, y -4.8..5.8.
 {
   const context = await browser.newContext({ viewport: { width: 400, height: 800 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   const page = await context.newPage();
   const cdp = await context.newCDPSession(page);
-  const cell = (x, y) => [200 + x * UNIT, 400 + y * UNIT];
+  const cell = (x, y) => [170 + x * UNIT, 370 + y * UNIT];
   const touch = (type, points) =>
     cdp.send("Input.dispatchTouchEvent", { type, touchPoints: points.map(([x, y], id) => ({ x, y, id })) });
   // Fingers move in small steps like a real gesture.
@@ -79,13 +80,19 @@ const browser = await chromium.launch();
   const place = async (blocks) => { await page.evaluate((b) => unblock.place(b), blocks); await frame(page); };
   const H = (id, x, y) => ({ id, x, y, w: 2, h: 1 });
   const V = (id, x, y) => ({ id, x, y, w: 1, h: 2 });
-  const RESET = { id: "reset", x: -1, y: -1, w: 2, h: 2, reset: true };
+  const UI = [
+    { id: "border", x: -1, y: 0, w: 1, h: 1, ui: "border" },
+    { id: "reset", x: 0, y: 0, w: 1, h: 1, ui: "reset" },
+    { id: "fullscreen", x: 1, y: 0, w: 1, h: 1, ui: "fullscreen" },
+  ];
 
-  // Random layout with the reset block in the middle.
+  // Random layout with the UI blocks in the middle.
   await fresh();
   const text = await page.evaluate(() => document.body.innerText.trim());
   check(/^\d+ fps · \d+ blocks$/.test(text), `only text is the fps counter ("${text}")`);
-  await expectColor(page, cell(-0.8, -0.8), "reset", "the reset block is black, in the middle");
+  for (const [x, what] of [[-0.85, "border toggle"], [0.15, "reset"], [1.15, "fullscreen"]]) {
+    await expectColor(page, cell(x, 0.15), "reset", `the ${what} block is black, in the middle row`);
+  }
   const iconPixels = await page.evaluate(() => {
     const c = document.querySelector("canvas"), d = c.width / c.clientWidth;
     const data = c.getContext("2d").getImageData(170 * d, 370 * d, 60 * d, 60 * d).data;
@@ -96,16 +103,17 @@ const browser = await chromium.launch();
   check(iconPixels > 0.05 && iconPixels < 0.4, `the reset block shows a light icon (${(iconPixels * 100).toFixed(0)}% of its middle)`);
   const random = await page.evaluate(() => unblock.visibleBlocks());
   check(random.length >= 12, `the random layout is dense (${random.length} blocks inside the border)`);
-  check(random.every((b) => b.reset || (b.w === 2 && b.h === 1) || (b.w === 1 && b.h === 2)), "every block is 2x1 or 1x2");
+  check(random.every((b) => b.ui || (b.w === 2 && b.h === 1) || (b.w === 1 && b.h === 2)), "every block is 2x1 or 1x2");
+  check(random.filter((b) => b.ui).every((b) => b.w === 1 && b.h === 1), "UI blocks are 1x1");
   await page.screenshot({ path: shots + "phone-1-random.png" });
 
   // Reset: change something, tap the black block, get a new seed and new blocks, nothing kept.
   const seedBefore = await page.evaluate(() => unblock.seed());
   const blocksBefore = await blockIds(page);
   const movable = await page.evaluate(() => unblock.visibleBlocks().find((b) => {
-    if (b.reset) return false;
+    if (b.ui) return false;
     const { lo, hi } = unblock.slideRange(b.id), pos = b.w > b.h ? b.x : b.y;
-    const x = 200 + (b.x + b.w / 2) * 60, y = 400 + (b.y + b.h / 2) * 60;
+    const x = 170 + (b.x + b.w / 2) * 60, y = 370 + (b.y + b.h / 2) * 60;
     return hi > pos && x > 20 && x < 380 && y > 100 && y < 700;
   }));
   const from = cell(movable.x + movable.w / 2, movable.y + movable.h / 2);
@@ -114,24 +122,54 @@ const browser = await chromium.launch();
   await page.reload();
   await frame(page);
   check((await page.evaluate(() => unblock.seed())) === seedBefore && (await block(page, movable.id))?.moved, "the seed and the move survive a reload");
-  await tap(cell(-0.5, -0.5));
+  await tap(cell(0.5, 0.5));
   await frame(page);
   const seedAfter = await page.evaluate(() => unblock.seed());
   check(seedAfter !== seedBefore, `tapping the reset block changes the seed (${seedBefore} -> ${seedAfter})`);
   check((await blockIds(page)) !== blocksBefore, "and lays out different blocks");
   check(await page.evaluate(() => unblock.scene.moved.size === 0 && unblock.scene.tapped.size === 0 && unblock.scene.circle === null), "and forgets every move, mark and the circle");
-  await expectColor(page, cell(-0.8, -0.8), "reset", "the reset block is still in the middle");
+  await expectColor(page, cell(0.15, 0.15), "reset", "the reset block is still in the middle");
   await page.screenshot({ path: shots + "phone-2-after-reset.png" });
   const afterReset = await blockIds(page);
   await page.reload();
   await frame(page);
   check((await page.evaluate(() => unblock.seed())) === seedAfter && (await blockIds(page)) === afterReset, "the new layout survives a reload");
 
-  // Dragging the reset block pans instead.
+  // Dragging a UI block pans instead.
   const cam = await page.evaluate(() => ({ ...unblock.scene.camera }));
-  await gesture([cell(-0.5, -0.5)], [cell(0.5, 0.5)]);
+  await gesture([cell(0.5, 0.5)], [cell(1.5, 1.5)]);
   const camAfter = await page.evaluate(() => ({ ...unblock.scene.camera }));
-  check(Math.abs(camAfter.offsetX - cam.offsetX - 60) < 0.5 && (await block(page, "reset")).x === -1, "dragging the reset block pans the board, the block stays");
+  check(Math.abs(camAfter.offsetX - cam.offsetX - 60) < 0.5 && (await block(page, "reset")).x === 0, "dragging the reset block pans the board, the block stays");
+
+  // The border toggle: off culls to the screen edge and hides the border line.
+  await fresh();
+  const borderLine = [40.5, 200]; // on the left edge of the 80% border
+  await expectColor(page, borderLine, "border", "the border line is drawn");
+  const withBorder = (await page.evaluate(() => unblock.visibleBlocks())).length;
+  // The middle of the switch: the light track when on, dark when off.
+  await expectColor(page, cell(-0.5, 0.5), "background", "the switch in the toggle block is on (light track)");
+  await tap(cell(-0.5, 0.5));
+  await frame(page);
+  const withoutBorder = (await page.evaluate(() => unblock.visibleBlocks())).length;
+  check(await page.evaluate(() => unblock.scene.border === false), "tapping the border toggle turns the border off");
+  check(withoutBorder > withBorder, `more blocks are drawn without the border (${withBorder} -> ${withoutBorder})`);
+  check((await colorAt(page, ...borderLine)) !== "border", "and the border line is gone");
+  await expectColor(page, cell(-0.5, 0.5), "reset", "and the switch in the toggle block is off (dark track)");
+  await page.screenshot({ path: shots + "phone-2b-border-off.png" });
+  await page.reload();
+  await frame(page);
+  check(await page.evaluate(() => unblock.scene.border === false), "the border setting survives a reload");
+  await tap(cell(-0.5, 0.5));
+  await expectColor(page, borderLine, "border", "tapping it again brings the border back");
+
+  // The fullscreen block.
+  await tap(cell(1.5, 0.5));
+  await page.waitForTimeout(300);
+  check(await page.evaluate(() => document.fullscreenElement !== null), "tapping the fullscreen block enters fullscreen");
+  await page.screenshot({ path: shots + "phone-2c-fullscreen.png" });
+  await tap(cell(1.5, 0.5));
+  await page.waitForTimeout(300);
+  check(await page.evaluate(() => document.fullscreenElement === null), "tapping it again leaves fullscreen");
 
   // Exact boards from here on.
   await fresh();
@@ -158,9 +196,9 @@ const browser = await chromium.launch();
   await gesture([cell(0, 0.5)], [cell(-2, 0.5)]);
   check(!(await block(page, "a")).moved, "a boxed-in block does not move either way");
 
-  await place([RESET, H("a", 1, 0)]);
-  await gesture([cell(2, 0.5)], [cell(-2, 0.5)]);
-  check((await block(page, "a")).x === 1, "the reset block blocks other blocks");
+  await place([...UI, H("a", 2, 1), V("b", 0, 2)]);
+  await gesture([cell(0.5, 3)], [cell(0.5, -3)]);
+  check((await block(page, "b")).y === 1, "the UI blocks block other blocks");
 
   // Taps on an exact board.
   await place([H("a", -1, 2)]);
@@ -187,7 +225,7 @@ const browser = await chromium.launch();
   await page.goto(url);
   await page.evaluate(() => unblock.place([{ id: "a", x: 2, y: 0, w: 2, h: 1 }]));
   await frame(page);
-  const at = (x, y) => [640 + x * UNIT, 400 + y * UNIT];
+  const at = (x, y) => [610 + x * UNIT, 370 + y * UNIT];
   await page.mouse.move(...at(3, 0.5));
   await page.mouse.down();
   await page.mouse.move(...at(4.2, 0.5), { steps: 8 });

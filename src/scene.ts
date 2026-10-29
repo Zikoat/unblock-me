@@ -21,20 +21,27 @@ export type Scene = {
   circle: Point | null;
   /** The block being dragged and where it is right now, in (fractional) lattice units. */
   dragging: { id: string; x: number; y: number } | null;
+  /** Cull to the smaller border (and draw it), or to the screen edge. */
+  border: boolean;
 };
 
 export function newScene(
   width: number,
   height: number,
-  { layout = randomLayout(1), moved = new Map<string, Point>(), tapped = new Set<string>() }: { layout?: Layout; moved?: Map<string, Point>; tapped?: Set<string> } = {},
+  {
+    layout = randomLayout(1),
+    moved = new Map<string, Point>(),
+    tapped = new Set<string>(),
+    border = true,
+  }: { layout?: Layout; moved?: Map<string, Point>; tapped?: Set<string>; border?: boolean } = {},
 ): Scene {
-  const scene: Scene = { camera: centred(width, height), width, height, layout, moved, tapped, circle: null, dragging: null };
+  const scene: Scene = { camera: centred(width, height), width, height, layout, moved, tapped, circle: null, dragging: null, border };
   return resize(scene, width, height);
 }
 
-/** World (0,0), the middle of the reset block, in the middle of the screen at scale 1. */
+/** The middle of the reset block (lattice cell 0,0) in the middle of the screen at scale 1. */
 export function centred(width: number, height: number): Camera {
-  return { scale: 1, offsetX: width / 2, offsetY: height / 2 };
+  return { scale: 1, offsetX: width / 2 - UNIT / 2, offsetY: height / 2 - UNIT / 2 };
 }
 
 /** Start over with a new layout: every move, mark and the circle are forgotten. */
@@ -65,10 +72,11 @@ export function resize(scene: Scene, width: number, height: number): Scene {
   return scene;
 }
 
-/** The culling border in screen pixels. */
+/** The culling border in screen pixels: the smaller border, or the screen when it is off. */
 export function borderOnScreen(scene: Scene): Rect {
-  const margin = (1 - BORDER) / 2;
-  return { x: scene.width * margin, y: scene.height * margin, width: scene.width * BORDER, height: scene.height * BORDER };
+  const share = scene.border ? BORDER : 1;
+  const margin = (1 - share) / 2;
+  return { x: scene.width * margin, y: scene.height * margin, width: scene.width * share, height: scene.height * share };
 }
 
 /** A screen rectangle in lattice units. */
