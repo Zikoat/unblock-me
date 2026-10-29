@@ -22,6 +22,9 @@ const SEED_KEY = "unblock-me:v4:seed";
 const MOVED_KEY = "unblock-me:v4:moved";
 const TAPPED_KEY = "unblock-me:v4:tapped";
 const BORDER_KEY = "unblock-me:border";
+const CAMERA_KEY = "unblock-me:camera"; // carried over a live reload only
+
+declare const __BUILD_ID__: string;
 
 const canvas = document.querySelector("canvas")!;
 const fps = document.querySelector<HTMLElement>("#fps")!;
@@ -55,6 +58,7 @@ const scene = newScene(innerWidth, innerHeight, {
   tapped: new Set(load<string[]>(TAPPED_KEY, [])),
   border: load<boolean>(BORDER_KEY, true),
 });
+restoreCamera();
 const gestures = new Gestures(scene, {
   onChange: save,
   onUi: (ui) => {
@@ -220,6 +224,37 @@ function drawFullscreenIcon(block: Block, active: boolean): void {
     ctx.lineTo(at.x, at.y);
     ctx.lineTo(at.x, at.y + dir * sy * arm);
     ctx.stroke();
+  }
+}
+
+// Live reload: every build writes a new id to build.txt. While the page is visible, check
+// it every second (and right away when the page comes back), and reload on a new build,
+// keeping the view where it was.
+async function reloadOnNewBuild(): Promise<void> {
+  if (document.hidden) return;
+  try {
+    const id = (await (await fetch("build.txt", { cache: "no-store" })).text()).trim();
+    if (id && id !== __BUILD_ID__) {
+      sessionStorage.setItem(CAMERA_KEY, JSON.stringify(scene.camera));
+      location.reload();
+    }
+  } catch {
+    // Offline or the file is missing: try again next time.
+  }
+}
+setInterval(reloadOnNewBuild, 1000);
+document.addEventListener("visibilitychange", reloadOnNewBuild);
+
+function restoreCamera(): void {
+  try {
+    const saved = sessionStorage.getItem(CAMERA_KEY);
+    sessionStorage.removeItem(CAMERA_KEY);
+    if (saved) {
+      scene.camera = JSON.parse(saved);
+      resize(scene, scene.width, scene.height);
+    }
+  } catch {
+    // No session storage: start centred.
   }
 }
 

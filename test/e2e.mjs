@@ -3,7 +3,7 @@
 // the rest use the app's random layout and its reset block.
 // Run with `bun run e2e`; screenshots go to test/screenshots.
 import { createServer } from "node:http";
-import { mkdir, readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { extname, join } from "node:path";
 import { chromium } from "playwright";
 
@@ -216,6 +216,18 @@ const browser = await chromium.launch();
   check(Math.abs(after.scale / before.scale - 2) < 0.01 && Math.abs(after.offsetY - 500 - (before.offsetY - 400) * 2) < 1, "pinch doubles the zoom and follows the fingers");
   await gesture([[199, 400], [201, 400]], [[1, 400], [399, 400]]);
   check(Math.abs((await page.evaluate(() => unblock.scene.camera.scale)) * 2 * UNIT - 400) < 0.5, "max zoom: two cells fill the width");
+  // Live reload: a new build id makes an open page reload itself, keeping the view.
+  await page.evaluate(() => { unblock.scene.camera = { ...unblock.scene.camera, offsetX: 111, offsetY: 222 }; });
+  const buildFile = join(dist, "build.txt");
+  const build = await readFile(buildFile, "utf8");
+  const reloaded = page.waitForEvent("load", { timeout: 5000 }).then(() => true, () => false);
+  await writeFile(buildFile, "a-newer-build");
+  const didReload = await reloaded;
+  await writeFile(buildFile, build);
+  await frame(page);
+  check(didReload, "a new build reloads the open page by itself");
+  const kept = await page.evaluate(() => unblock.scene.camera);
+  check(kept.offsetX === 111 && kept.offsetY === 222, "and the view stays where it was");
   await context.close();
 }
 
