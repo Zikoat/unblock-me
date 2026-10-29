@@ -1,22 +1,23 @@
 import { worldRect, type Point } from "./camera";
 import { Gestures } from "./gestures";
-import { borderOnScreen, newScene, resize, visibleSquares, type Scene } from "./scene";
-import { squaresIn } from "./world";
+import { borderOnScreen, latticeRect, newScene, resize, visibleBlocks, type Scene } from "./scene";
+import { blocksIn, slideRange, UNIT } from "./world";
 
 const COLORS = {
   background: "#f3f2ee",
   dot: "#d3d1ca",
   border: "#b9b6ad",
-  square: "#4f6d8f",
+  block: "#4f6d8f",
   moved: "#3f9a7a",
   tapped: "#8b5fbf",
   dragging: "#e0823d",
   circle: "#d64545",
 };
-const DOT_SPACING = 100; // world units
-const DOT_SIZE = 4;
-const MOVED_KEY = "unblock-me:moved";
-const TAPPED_KEY = "unblock-me:tapped";
+const DOT_SIZE = 4; // world units, one dot per lattice corner
+const GAP = 3; // world units between a block's edge and its lattice cells
+// v2: lattice positions; v1 stored free world positions.
+const MOVED_KEY = "unblock-me:v2:moved";
+const TAPPED_KEY = "unblock-me:v2:tapped";
 
 const canvas = document.querySelector("canvas")!;
 const fps = document.querySelector<HTMLElement>("#fps")!;
@@ -46,8 +47,11 @@ const gestures = new Gestures(scene, save);
 Object.assign(window, {
   unblock: {
     scene,
-    visibleSquares: () => visibleSquares(scene),
-    onScreen: () => squaresIn(worldRect(scene.camera, { x: 0, y: 0, width: scene.width, height: scene.height }), scene.moved, scene.tapped),
+    UNIT,
+    visibleBlocks: () => visibleBlocks(scene),
+    onScreen: () => blocksIn(latticeRect(scene, { x: 0, y: 0, width: scene.width, height: scene.height }), scene.moved, scene.tapped),
+    slideRange: (id: string) => slideRange(visibleBlocks(scene).find((b) => b.id === id)!, scene.moved),
+    redraw: () => redraw(),
   },
 });
 
@@ -67,20 +71,20 @@ function draw(scene: Scene): number {
 
   const view = worldRect(camera, { x: 0, y: 0, width, height });
   ctx.fillStyle = COLORS.dot;
-  for (let x = Math.floor(view.x / DOT_SPACING) * DOT_SPACING; x < view.x + view.width; x += DOT_SPACING) {
-    for (let y = Math.floor(view.y / DOT_SPACING) * DOT_SPACING; y < view.y + view.height; y += DOT_SPACING) {
+  for (let x = Math.floor(view.x / UNIT) * UNIT; x < view.x + view.width; x += UNIT) {
+    for (let y = Math.floor(view.y / UNIT) * UNIT; y < view.y + view.height; y += UNIT) {
       ctx.fillRect(x - DOT_SIZE / 2, y - DOT_SIZE / 2, DOT_SIZE, DOT_SIZE);
     }
   }
 
-  const squares = visibleSquares(scene);
-  for (const square of squares) {
-    ctx.fillStyle = square.id === scene.draggingId ? COLORS.dragging
-      : square.tapped ? COLORS.tapped
-      : square.moved ? COLORS.moved
-      : COLORS.square;
+  const blocks = visibleBlocks(scene);
+  for (const block of blocks) {
+    ctx.fillStyle = block.id === scene.dragging?.id ? COLORS.dragging
+      : block.tapped ? COLORS.tapped
+      : block.moved ? COLORS.moved
+      : COLORS.block;
     ctx.beginPath();
-    ctx.roundRect(square.x, square.y, square.size, square.size, 8);
+    ctx.roundRect(block.x * UNIT + GAP, block.y * UNIT + GAP, block.w * UNIT - 2 * GAP, block.h * UNIT - 2 * GAP, 8);
     ctx.fill();
   }
 
@@ -97,7 +101,7 @@ function draw(scene: Scene): number {
   ctx.strokeStyle = COLORS.border;
   ctx.lineWidth = 1;
   ctx.strokeRect(border.x + 0.5, border.y + 0.5, border.width - 1, border.height - 1);
-  return squares.length;
+  return blocks.length;
 }
 
 // Frames are only drawn when something changes, so the counter shows 0 fps when idle.
@@ -105,7 +109,7 @@ const frames: number[] = [];
 let shown = 0;
 function showFps(now: number): void {
   while (frames.length && frames[0]! <= now - 1000) frames.shift();
-  fps.textContent = `${frames.length} fps · ${shown} squares`;
+  fps.textContent = `${frames.length} fps · ${shown} blocks`;
 }
 setInterval(() => showFps(performance.now()), 500);
 

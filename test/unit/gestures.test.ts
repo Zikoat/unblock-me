@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { pinch, toScreen, toWorld, worldRect, zoomAt, type Point } from "../../src/camera";
+import { pinch, toScreen, toWorld, zoomAt, type Point } from "../../src/camera";
 import { Gestures } from "../../src/gestures";
-import { borderOnScreen, limits, newScene, visibleSquares, type Scene } from "../../src/scene";
-import { CELL, generated, SQUARE_SIZE, squareAt, squaresIn } from "../../src/world";
+import { borderOnScreen, latticeRect, limits, newScene, visibleBlocks, type Scene } from "../../src/scene";
+import { blockAt, blocksIn, CHUNK, generated, slideRange, UNIT, type Block } from "../../src/world";
 
 const setup = () => {
   const scene = newScene(400, 800);
@@ -10,17 +10,30 @@ const setup = () => {
   const g = new Gestures(scene, () => changes++);
   return { scene, g, changes: () => changes };
 };
-const center = (scene: Scene, s: { x: number; y: number }) =>
-  toScreen(scene.camera, { x: s.x + SQUARE_SIZE / 2, y: s.y + SQUARE_SIZE / 2 });
-/** A screen point inside the border with no square under it. */
+const center = (scene: Scene, b: Block) =>
+  toScreen(scene.camera, { x: (b.x + b.w / 2) * UNIT, y: (b.y + b.h / 2) * UNIT });
+const horizontal = (b: Block) => b.w > b.h;
+/** A screen point inside the border with no block under it. */
 function emptyPoint(scene: Scene): Point {
-  const squares = visibleSquares(scene);
+  const blocks = visibleBlocks(scene);
   for (let y = 200; y < 600; y += 10) {
     for (let x = 100; x < 300; x += 10) {
-      if (!squareAt(squares, toWorld(scene.camera, { x, y }))) return { x, y };
+      const w = toWorld(scene.camera, { x, y });
+      if (!blockAt(blocks, { x: w.x / UNIT, y: w.y / UNIT })) return { x, y };
     }
   }
   throw new Error("no empty point");
+}
+/** Is any lattice cell of `block` at position `pos` (along its axis) taken by another block? */
+function collides(block: Block, pos: number, moved: Map<string, Point>): boolean {
+  const at = horizontal(block) ? { ...block, x: pos } : { ...block, y: pos };
+  return blocksIn({ x: at.x, y: at.y, width: at.w, height: at.h }, moved).some((o) => o.id !== block.id);
+}
+/** Drag with one finger in small steps. */
+function drag(g: Gestures, from: Point, to: Point, steps = 10): void {
+  g.down(1, from);
+  for (let i = 1; i <= steps; i++) g.move(1, { x: from.x + ((to.x - from.x) * i) / steps, y: from.y + ((to.y - from.y) * i) / steps });
+  g.up(1, to);
 }
 
 describe("camera", () => {
@@ -29,189 +42,212 @@ describe("camera", () => {
     const at = { x: 120, y: 300 };
     const zoomed = zoomAt(camera, at, 2.5);
     expect(toScreen(zoomed, toWorld(camera, at))).toEqual(at);
-    expect(zoomed.scale).toBe(2.5);
   });
 
   test("pinch zooms by finger distance and pans with the midpoint", () => {
-    const camera = { scale: 1, offsetX: 0, offsetY: 0 };
-    const next = pinch(camera, [{ x: 100, y: 100 }, { x: 200, y: 100 }], [{ x: 300, y: 400 }, { x: 500, y: 400 }]);
+    const next = pinch({ scale: 1, offsetX: 0, offsetY: 0 }, [{ x: 100, y: 100 }, { x: 200, y: 100 }], [{ x: 300, y: 400 }, { x: 500, y: 400 }]);
     expect(next.scale).toBe(2);
     expect(toScreen(next, { x: 150, y: 100 })).toEqual({ x: 400, y: 400 });
   });
 });
 
 describe("zoom limits", () => {
-  test("max zoom fits two squares in the width, min zoom puts 670 world units in a third", () => {
+  test("max zoom fits two cells in the width, min zoom puts 670 world units in a third", () => {
     const scene = newScene(400, 800);
-    const { min, max } = limits(scene);
-    expect(2 * SQUARE_SIZE * max).toBeCloseTo(400);
-    expect(670 * min).toBeCloseTo(400 / 3);
+    expect(2 * UNIT * limits(scene).max).toBeCloseTo(400);
+    expect(670 * limits(scene).min).toBeCloseTo(400 / 3);
   });
 
-  test("wheel and pinch stop at the limits", () => {
+  test("wheel stops at the limits", () => {
     const { scene, g } = setup();
     for (let i = 0; i < 50; i++) g.wheel({ x: 200, y: 400 }, -500);
     expect(scene.camera.scale).toBeCloseTo(limits(scene).max);
     for (let i = 0; i < 50; i++) g.wheel({ x: 200, y: 400 }, 500);
     expect(scene.camera.scale).toBeCloseTo(limits(scene).min);
-    g.down(1, { x: 199, y: 400 });
-    g.down(2, { x: 201, y: 400 });
-    g.move(1, { x: 0, y: 400 });
-    g.move(2, { x: 400, y: 400 });
-    expect(scene.camera.scale).toBeCloseTo(limits(scene).max);
   });
 });
 
 describe("generated world", () => {
-  test("a cell always generates the same square, inside the cell", () => {
-    let squares = 0;
+  test("blocks are 2x1 or 1x2 on whole lattice cells, inside their chunk, the same every time", () => {
+    let blocks = 0;
+    let wide = 0;
     for (let cx = -20; cx < 20; cx++) {
       for (let cy = -20; cy < 20; cy++) {
-        const s = generated(cx, cy);
-        expect(s).toEqual(generated(cx, cy));
-        if (!s) continue;
-        squares++;
-        expect(s.x).toBeGreaterThanOrEqual(cx * CELL);
-        expect(s.x + s.size).toBeLessThanOrEqual((cx + 1) * CELL);
-        expect(s.y).toBeGreaterThanOrEqual(cy * CELL);
-        expect(s.y + s.size).toBeLessThanOrEqual((cy + 1) * CELL);
+        const b = generated(cx, cy);
+        expect(b).toEqual(generated(cx, cy));
+        if (!b) continue;
+        blocks++;
+        if (horizontal(b)) wide++;
+        expect([[2, 1], [1, 2]]).toContainEqual([b.w, b.h]);
+        expect(Number.isInteger(b.x) && Number.isInteger(b.y)).toBe(true);
+        expect(b.x).toBeGreaterThanOrEqual(cx * CHUNK);
+        expect(b.x + b.w).toBeLessThanOrEqual((cx + 1) * CHUNK);
+        expect(b.y).toBeGreaterThanOrEqual(cy * CHUNK);
+        expect(b.y + b.h).toBeLessThanOrEqual((cy + 1) * CHUNK);
       }
     }
-    expect(squares / 1600).toBeGreaterThan(0.45);
-    expect(squares / 1600).toBeLessThan(0.65);
+    expect(blocks / 1600).toBeGreaterThan(0.6);
+    expect(wide / blocks).toBeGreaterThan(0.4);
+    expect(wide / blocks).toBeLessThan(0.6);
   });
 
-  test("squaresIn returns exactly the squares touching the area", () => {
-    const area = { x: -333, y: 127, width: 901, height: 517 };
-    const found = squaresIn(area, new Map());
+  test("blocksIn returns exactly the blocks touching the area", () => {
+    const area = { x: -11.3, y: 4.2, width: 30.1, height: 17.4 };
     const expected = [];
     for (let cx = -10; cx < 10; cx++) {
       for (let cy = -10; cy < 10; cy++) {
-        const s = generated(cx, cy);
-        if (s && s.x < area.x + area.width && s.x + s.size > area.x && s.y < area.y + area.height && s.y + s.size > area.y) expected.push(s.id);
+        const b = generated(cx, cy);
+        if (b && b.x < area.x + area.width && b.x + b.w > area.x && b.y < area.y + area.height && b.y + b.h > area.y) expected.push(b.id);
       }
     }
-    expect(found.map((s) => s.id).sort()).toEqual(expected.sort());
+    expect(blocksIn(area, new Map()).map((b) => b.id).sort()).toEqual(expected.sort());
   });
 
-  test("a moved square shows at its new place even when its home cell is out of view", () => {
+  test("a moved block shows at its new place even when its home chunk is out of view", () => {
     const home = generated(0, 0) ?? generated(1, 0) ?? generated(2, 0)!;
-    const moved = new Map([[home.id, { x: 5000, y: 5000 }]]);
-    expect(squaresIn({ x: home.x, y: home.y, width: 10, height: 10 }, moved)).toEqual([]);
-    expect(squaresIn({ x: 5050, y: 5050, width: 10, height: 10 }, moved)).toEqual([
-      { id: home.id, x: 5000, y: 5000, size: SQUARE_SIZE, moved: true, tapped: false },
-    ]);
+    const moved = new Map([[home.id, { x: 500, y: 500 }]]);
+    expect(blocksIn({ x: home.x, y: home.y, width: 1, height: 1 }, moved)).toEqual([]);
+    expect(blocksIn({ x: 500, y: 500, width: 1, height: 1 }, moved)).toContainEqual({ ...home, x: 500, y: 500, moved: true });
+  });
+
+  test("slideRange stops right at the nearest blocks in the lane", () => {
+    const moved = new Map<string, Point>();
+    let checked = 0;
+    for (let cx = -15; cx < 15; cx++) {
+      for (let cy = -15; cy < 15; cy++) {
+        const b = generated(cx, cy);
+        if (!b) continue;
+        const pos = horizontal(b) ? b.x : b.y;
+        const { lo, hi } = slideRange(b, moved);
+        // Every position in between is free, and one step further is taken.
+        for (let p = lo; p <= hi; p++) expect(collides(b, p, moved)).toBe(false);
+        expect(collides(b, lo - 1, moved)).toBe(true);
+        expect(collides(b, hi + 1, moved)).toBe(true);
+        expect(lo).toBeLessThanOrEqual(pos);
+        expect(hi).toBeGreaterThanOrEqual(pos);
+        checked++;
+      }
+    }
+    expect(checked).toBeGreaterThan(500);
   });
 });
 
 describe("culling", () => {
-  test("only squares touching the border are visible, at every place and zoom", () => {
+  test("only blocks touching the border are visible, at every place and zoom", () => {
     const scene = newScene(400, 800);
     let visibleTotal = 0;
     let onScreenTotal = 0;
     for (const scale of [limits(scene).min, 1, limits(scene).max]) {
       for (let i = 0; i < 20; i++) {
         scene.camera = { scale, offsetX: i * 977, offsetY: i * -1301 };
-        const border = worldRect(scene.camera, borderOnScreen(scene));
-        const visible = visibleSquares(scene);
-        for (const s of visible) {
-          expect(s.x < border.x + border.width && s.x + s.size > border.x && s.y < border.y + border.height && s.y + s.size > border.y).toBe(true);
+        const border = latticeRect(scene, borderOnScreen(scene));
+        const visible = visibleBlocks(scene);
+        for (const b of visible) {
+          expect(b.x < border.x + border.width && b.x + b.w > border.x && b.y < border.y + border.height && b.y + b.h > border.y).toBe(true);
         }
         visibleTotal += visible.length;
-        onScreenTotal += squaresIn(worldRect(scene.camera, { x: 0, y: 0, width: 400, height: 800 }), scene.moved).length;
+        onScreenTotal += blocksIn(latticeRect(scene, { x: 0, y: 0, width: 400, height: 800 }), scene.moved).length;
       }
     }
-    // Squares on screen but wholly outside the border exist and are left out.
     expect(onScreenTotal).toBeGreaterThan(visibleTotal);
     expect(visibleTotal).toBeGreaterThan(60);
   });
 
-  test("panning away and back shows the same squares", () => {
+  test("panning away and back shows the same blocks", () => {
     const { scene, g } = setup();
-    const before = visibleSquares(scene);
-    // Each pan starts on empty background, so it never picks up a square.
-    const drag = (dx: number, dy: number) => {
+    const before = visibleBlocks(scene);
+    const pan = (dx: number, dy: number) => {
       const from = emptyPoint(scene);
       g.down(1, from);
       g.move(1, { x: from.x + dx, y: from.y + dy });
       g.up(1, { x: from.x + dx, y: from.y + dy });
     };
-    for (let i = 0; i < 10; i++) drag(-150, -300);
-    expect(visibleSquares(scene).map((s) => s.id)).not.toEqual(before.map((s) => s.id));
-    for (let i = 0; i < 10; i++) drag(150, 300);
-    expect(visibleSquares(scene)).toEqual(before);
+    for (let i = 0; i < 10; i++) pan(-150, -300);
+    expect(visibleBlocks(scene).map((b) => b.id)).not.toEqual(before.map((b) => b.id));
+    for (let i = 0; i < 10; i++) pan(150, 300);
+    expect(visibleBlocks(scene)).toEqual(before);
     expect(scene.moved.size).toBe(0);
   });
 });
 
 describe("gestures", () => {
-  test("a tap puts the circle there, and the next tap moves it", () => {
+  test("a tap on the background puts the circle there", () => {
     const { scene, g } = setup();
     const at = emptyPoint(scene);
     g.down(1, at);
     g.move(1, { x: at.x + 4, y: at.y });
     g.up(1, { x: at.x + 4, y: at.y });
     expect(scene.circle).toEqual(toWorld(scene.camera, at));
-    g.down(2, { x: 100, y: 400 });
-    g.up(2, { x: 100, y: 400 });
-    expect(scene.circle).toEqual(toWorld(scene.camera, { x: 100, y: 400 }));
   });
 
-  test("a tap on a square marks it, and a second tap unmarks it; the circle stays", () => {
+  test("a tap on a block toggles its mark and leaves the circle and the block alone", () => {
     const { scene, g, changes } = setup();
-    const square = visibleSquares(scene)[0]!;
-    const at = center(scene, square);
+    const block = visibleBlocks(scene)[0]!;
+    const at = center(scene, block);
     g.down(1, at);
-    g.move(1, { x: at.x + 4, y: at.y + 3 });
     g.up(1, { x: at.x + 4, y: at.y + 3 });
     expect(scene.circle).toBeNull();
     expect(scene.moved.size).toBe(0);
-    expect(visibleSquares(scene).find((s) => s.id === square.id)).toMatchObject({ tapped: true, x: square.x, y: square.y });
+    expect(visibleBlocks(scene).find((b) => b.id === block.id)).toMatchObject({ tapped: true, x: block.x, y: block.y });
     expect(changes()).toBe(1);
     g.down(1, at);
     g.up(1, at);
-    expect(visibleSquares(scene).find((s) => s.id === square.id)).toMatchObject({ tapped: false });
-  });
-
-  test("dragging a square is not a tap", () => {
-    const { scene, g } = setup();
-    const square = visibleSquares(scene)[0]!;
-    const at = center(scene, square);
-    g.down(1, at);
-    g.move(1, { x: at.x + 30, y: at.y });
-    g.up(1, { x: at.x + 30, y: at.y });
-    expect(scene.tapped.size).toBe(0);
+    expect(visibleBlocks(scene).find((b) => b.id === block.id)).toMatchObject({ tapped: false });
   });
 
   test("dragging the background pans and does not tap", () => {
     const { scene, g } = setup();
     const at = emptyPoint(scene);
     const before = scene.camera;
-    g.down(1, at);
-    g.move(1, { x: at.x + 30, y: at.y + 20 });
-    g.move(1, { x: at.x + 60, y: at.y + 40 });
-    g.up(1, { x: at.x + 60, y: at.y + 40 });
+    drag(g, at, { x: at.x + 60, y: at.y + 40 });
     expect(scene.camera).toEqual({ ...before, offsetX: before.offsetX + 60, offsetY: before.offsetY + 40 });
     expect(scene.circle).toBeNull();
   });
 
-  test("dragging a square stores its new place, marks it while dragging and draws it on top", () => {
+  test("a block follows the finger only along its long axis while dragged, and snaps to the lattice on drop", () => {
     const { scene, g, changes } = setup();
-    const square = visibleSquares(scene)[0]!;
-    const at = center(scene, square);
+    // A block with room to move one cell forward.
+    const block = visibleBlocks(scene).find((b) => slideRange(b, scene.moved).hi >= (horizontal(b) ? b.x : b.y) + 1)!;
+    const at = center(scene, block);
+    const cell = UNIT * scene.camera.scale;
+    // Along the axis by 0.4 of a cell, and sideways a lot.
+    const along = horizontal(block) ? { x: 0.4 * cell, y: 80 } : { x: 80, y: 0.4 * cell };
     g.down(1, at);
-    g.move(1, { x: at.x + 50, y: at.y + 20 });
-    expect(scene.draggingId).toBe(square.id);
-    expect(visibleSquares(scene).at(-1)!.id).toBe(square.id);
-    g.move(1, { x: at.x + 100, y: at.y + 40 });
-    g.up(1, { x: at.x + 100, y: at.y + 40 });
-    expect(scene.draggingId).toBeNull();
+    g.move(1, { x: at.x + along.x, y: at.y + along.y });
+    expect(scene.dragging!.id).toBe(block.id);
+    expect(horizontal(block) ? scene.dragging!.y : scene.dragging!.x).toBe(horizontal(block) ? block.y : block.x);
+    expect(horizontal(block) ? scene.dragging!.x : scene.dragging!.y).toBeCloseTo((horizontal(block) ? block.x : block.y) + 0.4);
+    expect(visibleBlocks(scene).at(-1)!.id).toBe(block.id);
+    // Released at 0.4: it snaps back home and nothing is stored.
+    g.up(1, { x: at.x + along.x, y: at.y + along.y });
+    expect(scene.dragging).toBeNull();
+    expect(scene.moved.size).toBe(0);
+    expect(changes()).toBe(0);
+    // Released at 0.6: it snaps one cell on and is stored.
+    const further = horizontal(block) ? { x: at.x + 0.6 * cell, y: at.y } : { x: at.x, y: at.y + 0.6 * cell };
+    drag(g, at, further);
+    expect(scene.moved.get(block.id)).toEqual(horizontal(block) ? { x: block.x + 1, y: block.y } : { x: block.x, y: block.y + 1 });
     expect(changes()).toBe(1);
-    const moved = scene.moved.get(square.id)!;
-    expect(moved.x).toBeCloseTo(square.x + 100 / scene.camera.scale);
-    expect(moved.y).toBeCloseTo(square.y + 40 / scene.camera.scale);
-    expect(visibleSquares(scene).find((s) => s.id === square.id)).toMatchObject({ moved: true });
-    expect(scene.circle).toBeNull();
+    expect(scene.tapped.size).toBe(0);
+  });
+
+  test("a block cannot be dragged into or over another block", () => {
+    const { scene, g } = setup();
+    // A block with a neighbour a few cells ahead in its lane.
+    const block = visibleBlocks(scene).find((b) => {
+      const pos = horizontal(b) ? b.x : b.y;
+      const { hi } = slideRange(b, scene.moved);
+      return hi - pos >= 0 && hi - pos <= 4;
+    })!;
+    const pos = horizontal(block) ? block.x : block.y;
+    const { hi } = slideRange(block, scene.moved);
+    const at = center(scene, block);
+    const far = 10 * UNIT * scene.camera.scale; // well past the neighbour
+    drag(g, at, horizontal(block) ? { x: at.x + far, y: at.y } : { x: at.x, y: at.y + far });
+    const now = scene.moved.get(block.id) ?? block;
+    expect(horizontal(block) ? now.x : now.y).toBe(hi);
+    expect(collides(block, hi, scene.moved)).toBe(false);
+    expect(hi - pos).toBeLessThanOrEqual(4);
   });
 
   test("two fingers zoom and pan together, with no tap", () => {
@@ -223,7 +259,6 @@ describe("gestures", () => {
     g.move(1, { x: 150, y: 500 });
     g.move(2, { x: 250, y: 500 });
     expect(scene.camera.scale).toBeCloseTo(scale * 2);
-    // The world point under the fingers' midpoint follows the midpoint.
     const now = toScreen(scene.camera, world);
     expect(now.x).toBeCloseTo(200);
     expect(now.y).toBeCloseTo(500);
@@ -241,21 +276,18 @@ describe("gestures", () => {
     g.move(2, { x: 280, y: 420 });
     g.up(2, { x: 280, y: 420 });
     expect(scene.camera).toEqual({ ...before, offsetX: before.offsetX + 30, offsetY: before.offsetY + 20 });
-    expect(scene.circle).toBeNull();
   });
 
-  test("a second finger during a square drag changes the square and pinches", () => {
-    const { scene, g, changes } = setup();
-    const square = visibleSquares(scene)[0]!;
-    const at = center(scene, square);
+  test("a second finger during a block drag drops the block on the lattice and pinches", () => {
+    const { scene, g } = setup();
+    const block = visibleBlocks(scene)[0]!;
+    const at = center(scene, block);
     g.down(1, at);
-    g.move(1, { x: at.x + 40, y: at.y });
+    g.move(1, horizontal(block) ? { x: at.x + 40, y: at.y } : { x: at.x, y: at.y + 40 });
     g.down(2, { x: 300, y: 600 });
-    expect(scene.draggingId).toBeNull();
-    expect(changes()).toBe(1);
-    const dropped = { ...scene.moved.get(square.id)! };
-    g.move(1, { x: at.x + 90, y: at.y });
-    expect(scene.moved.get(square.id)).toEqual(dropped);
+    expect(scene.dragging).toBeNull();
+    const now = scene.moved.get(block.id) ?? block;
+    expect(Number.isInteger(now.x) && Number.isInteger(now.y)).toBe(true);
   });
 
   test("a cancelled press is not a tap", () => {

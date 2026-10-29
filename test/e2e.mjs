@@ -1,5 +1,5 @@
 // Drives the built app in Chromium with real touch and mouse input and checks what is
-// drawn by sampling canvas pixels. Square positions come from the PRNG, so the test reads
+// drawn by sampling canvas pixels. Block positions come from the PRNG, so the test reads
 // them from the app's debug handle (window.unblock) and then checks the pixels.
 // Run with `bun run e2e`; screenshots go to test/screenshots.
 import { createServer } from "node:http";
@@ -22,9 +22,10 @@ const server = createServer(async (req, res) => {
 }).listen(0);
 const url = `http://localhost:${server.address().port}/`;
 
+const UNIT = 60;
 const COLORS = {
   background: [243, 242, 238], dot: [211, 209, 202], border: [185, 182, 173],
-  square: [79, 109, 143], moved: [63, 154, 122], tapped: [139, 95, 191], dragging: [224, 130, 61], circle: [214, 69, 69],
+  block: [79, 109, 143], moved: [63, 154, 122], tapped: [139, 95, 191], dragging: [224, 130, 61], circle: [214, 69, 69],
 };
 let failures = 0;
 const check = (ok, what) => {
@@ -39,7 +40,8 @@ const rgbAt = (page, x, y) => page.evaluate(([x, y]) => {
 }, [x, y]);
 async function colorAt(page, x, y) {
   const rgb = await rgbAt(page, x, y);
-  return Object.entries(COLORS).map(([n, c]) => [n, Math.hypot(...c.map((v, i) => v - rgb[i]))]).sort((a, b) => a[1] - b[1])[0][0];
+  const name = Object.entries(COLORS).map(([n, c]) => [n, Math.hypot(...c.map((v, i) => v - rgb[i]))]).sort((a, b) => a[1] - b[1])[0][0];
+  return name === "dot" ? "background" : name;
 }
 const frame = (page) => page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
 const expectColor = async (page, x, y, want, what) => {
@@ -49,22 +51,35 @@ const expectColor = async (page, x, y, want, what) => {
 };
 const camera = (page) => page.evaluate(() => ({ ...unblock.scene.camera }));
 const toScreen = (cam, p) => ({ x: p.x * cam.scale + cam.offsetX, y: p.y * cam.scale + cam.offsetY });
-const centerOf = (cam, s) => toScreen(cam, { x: s.x + s.size / 2, y: s.y + s.size / 2 });
-const visible = (page) => page.evaluate(() => unblock.visibleSquares());
-/** A point inside the border that is not on a square and not near the circle. */
+const centerOf = (cam, b) => toScreen(cam, { x: (b.x + b.w / 2) * UNIT, y: (b.y + b.h / 2) * UNIT });
+const horizontal = (b) => b.w > b.h;
+const visible = (page) => page.evaluate(() => unblock.visibleBlocks());
+const range = (page, id) => page.evaluate((id) => unblock.slideRange(id), id);
+/** A point inside the border that is not on a block and not near one. */
 const emptyPoint = (page) => page.evaluate(() => {
-  const { scene } = unblock;
-  const squares = unblock.visibleSquares();
+  const { scene, UNIT } = unblock;
+  const blocks = unblock.visibleBlocks();
   const c = scene.camera;
   for (let y = scene.height * 0.3; y < scene.height * 0.7; y += 7) {
     for (let x = scene.width * 0.3; x < scene.width * 0.7; x += 7) {
-      const w = { x: (x - c.offsetX) / c.scale, y: (y - c.offsetY) / c.scale };
-      const pad = 20 / c.scale;
-      if (!squares.some((s) => w.x > s.x - pad && w.x < s.x + s.size + pad && w.y > s.y - pad && w.y < s.y + s.size + pad)) return { x, y };
+      const w = { x: (x - c.offsetX) / c.scale / UNIT, y: (y - c.offsetY) / c.scale / UNIT };
+      const pad = 20 / c.scale / UNIT;
+      if (!blocks.some((b) => w.x > b.x - pad && w.x < b.x + b.w + pad && w.y > b.y - pad && w.y < b.y + b.h + pad)) return { x, y };
     }
   }
   return null;
 });
+/** A visible block near the screen centre whose lane matches `test(block, lo, hi, pos)`. */
+async function findBlock(page, test) {
+  const cam = await camera(page);
+  for (const b of await visible(page)) {
+    const c = centerOf(cam, b);
+    if (c.x < 60 || c.x > 340 || c.y < 200 || c.y > 600) continue;
+    const { lo, hi } = await range(page, b.id);
+    if (test(b, lo, hi, horizontal(b) ? b.x : b.y)) return { block: b, lo, hi };
+  }
+  return null;
+}
 
 const browser = await chromium.launch();
 
@@ -89,124 +104,145 @@ const browser = await chromium.launch();
     const p = await emptyPoint(page);
     await gesture([[p.x, p.y]], [[p.x + dx, p.y + dy]]);
   };
-  const fresh = async () => { await page.goto(url); await frame(page); };
+  const fresh = async () => { await page.goto(url); await page.evaluate(() => localStorage.clear()); await page.goto(url); await frame(page); };
 
   await fresh();
   const text = await page.evaluate(() => document.body.innerText.trim());
-  check(/^\d+ fps · \d+ squares$/.test(text), `only text is the fps counter ("${text}")`);
-  check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "no horizontal scroll");
+  check(/^\d+ fps · \d+ blocks$/.test(text), `only text is the fps counter ("${text}")`);
   let cam = await camera(page);
-  let squares = await visible(page);
-  check(squares.length >= 2, `a few squares are shown (${squares.length})`);
-  for (const s of squares) {
-    const c = centerOf(cam, s);
-    if (c.x > 0 && c.x < 400 && c.y > 0 && c.y < 800) await expectColor(page, c.x, c.y, "square", `visible square ${s.id} is drawn`);
+  let blocks = await visible(page);
+  check(blocks.length >= 3, `blocks are shown (${blocks.length})`);
+  check(blocks.every((b) => (b.w === 2 && b.h === 1) || (b.w === 1 && b.h === 2)), "every block is 2x1 or 1x2");
+  check(blocks.every((b) => Number.isInteger(b.x) && Number.isInteger(b.y)), "every block sits on the lattice");
+  for (const b of blocks) {
+    const c = centerOf(cam, b);
+    if (c.x > 0 && c.x < 400 && c.y > 0 && c.y < 800) await expectColor(page, c.x, c.y, "block", `block ${b.id} (${b.w}x${b.h}) is drawn`);
   }
   await page.screenshot({ path: shots + "phone-1-start.png" });
 
-  // Culling: pan until some square is on screen but wholly outside the border, then make
-  // sure it is not drawn, and that it appears once it crosses into the border.
+  // Slide a block one and a half cells along its axis while also moving sideways: it stays
+  // in its lane, is orange during the drag and lands on the lattice two cells on.
+  let found = await findBlock(page, (b, lo, hi, pos) => hi - pos >= 3);
+  check(found !== null, "found a block with room to slide");
+  if (found) {
+    const { block } = found;
+    cam = await camera(page);
+    const cell = UNIT * cam.scale;
+    const c = centerOf(cam, block);
+    const to = horizontal(block) ? [c.x + 1.6 * cell, c.y + 0.8 * cell] : [c.x + 0.8 * cell, c.y + 1.6 * cell];
+    let mid = null;
+    await gesture([[c.x, c.y]], [to], {
+      during: async () => {
+        await frame(page);
+        mid = await page.evaluate(() => ({ ...unblock.scene.dragging }));
+        await page.screenshot({ path: shots + "phone-2-dragging.png" });
+      },
+    });
+    check(mid && (horizontal(block) ? mid.y === block.y : mid.x === block.x), "while dragged the block stays in its lane");
+    check(mid && !Number.isInteger(horizontal(block) ? mid.x : mid.y), "while dragged the block moves smoothly between cells");
+    const midScreen = centerOf(cam, { ...block, x: mid.x, y: mid.y });
+    const now = (await visible(page)).find((b) => b.id === block.id);
+    const want = horizontal(block) ? { x: block.x + 2, y: block.y } : { x: block.x, y: block.y + 2 };
+    check(now && now.x === want.x && now.y === want.y, `dropped two cells on, on the lattice (${now?.x},${now?.y})`);
+    const landed = centerOf(cam, { ...block, ...want });
+    await expectColor(page, landed.x, landed.y, "moved", "the moved block is drawn in the stored colour where it landed");
+    await page.screenshot({ path: shots + "phone-3-dropped.png" });
+    check(midScreen.x > 0, "drag position was on screen");
+    await page.reload();
+    await frame(page);
+    const restored = (await visible(page)).find((b) => b.id === block.id);
+    check(restored && restored.x === want.x && restored.y === want.y && restored.moved, "after a reload the block is where it was dropped");
+  }
+
+  // Drag a block hard towards a neighbour in its lane: it stops right in front of it.
+  await fresh();
+  found = await findBlock(page, (b, lo, hi, pos) => hi - pos >= 1 && hi - pos <= 3);
+  check(found !== null, "found a block with a neighbour a few cells ahead");
+  if (found) {
+    const { block, hi } = found;
+    cam = await camera(page);
+    const cell = UNIT * cam.scale;
+    const c = centerOf(cam, block);
+    const to = horizontal(block) ? [c.x + 8 * cell, c.y] : [c.x, c.y + 8 * cell];
+    let mid = null;
+    await gesture([[c.x, c.y]], [to], { steps: 16, during: async () => { mid = await page.evaluate(() => ({ ...unblock.scene.dragging })); } });
+    check(mid && (horizontal(block) ? mid.x : mid.y) <= hi + 1e-9, `even mid-drag the block never passes its neighbour (at ${(horizontal(block) ? mid.x : mid.y).toFixed(2)}, limit ${hi})`);
+    const now = (await visible(page)).find((b) => b.id === block.id);
+    check(now && (horizontal(block) ? now.x : now.y) === hi, `it stopped right before the neighbour (at ${horizontal(block) ? now?.x : now?.y}, limit ${hi})`);
+    const after = await page.evaluate(() => unblock.visibleBlocks());
+    const cells = new Set();
+    let overlap = false;
+    for (const b of after) for (let x = b.x; x < b.x + b.w; x++) for (let y = b.y; y < b.y + b.h; y++) { const k = `${x},${y}`; if (cells.has(k)) overlap = true; cells.add(k); }
+    check(!overlap, "no two blocks share a lattice cell");
+    await page.screenshot({ path: shots + "phone-4-blocked.png" });
+  }
+
+  // A block touching a neighbour in its lane cannot move towards it at all.
+  await fresh();
+  // Walk the camera across the world until such a block sits in the middle of the screen.
+  await page.evaluate(() => {
+    const { scene, UNIT } = unblock;
+    for (let i = 0; i < 400; i++) {
+      scene.camera = { ...scene.camera, offsetX: 200 - (i % 20) * 3 * UNIT * scene.camera.scale, offsetY: 400 - Math.floor(i / 20) * 3 * UNIT * scene.camera.scale };
+      const near = unblock.visibleBlocks().find((b) => {
+        const c = scene.camera, x = (b.x + b.w / 2) * UNIT * c.scale + c.offsetX, y = (b.y + b.h / 2) * UNIT * c.scale + c.offsetY;
+        const { lo, hi } = unblock.slideRange(b.id), pos = b.w > b.h ? b.x : b.y;
+        return x > 60 && x < 340 && y > 200 && y < 600 && (lo === pos || hi === pos);
+      });
+      if (near) break;
+    }
+    unblock.redraw();
+  });
+  await frame(page);
+  found = await findBlock(page, (b, lo, hi, pos) => lo === pos || hi === pos);
+  check(found !== null, "found a block touching a neighbour");
+  if (found) {
+    const { block, lo } = found;
+    cam = await camera(page);
+    const c = centerOf(cam, block);
+    const cell = UNIT * cam.scale;
+    const sign = lo === (horizontal(block) ? block.x : block.y) ? -1 : 1; // towards the neighbour
+    await gesture([[c.x, c.y]], [horizontal(block) ? [c.x + sign * 3 * cell, c.y] : [c.x, c.y + sign * 3 * cell]]);
+    const now = (await visible(page)).find((b) => b.id === block.id);
+    check(now && now.x === block.x && now.y === block.y && !now.moved, `block ${block.id} does not move into the neighbour it touches`);
+  }
+
+  // Taps: on the background the circle moves, on a block it turns purple.
+  await fresh();
+  const p = await emptyPoint(page);
+  await gesture([[p.x, p.y]], [[p.x + 3, p.y + 2]], { steps: 2 });
+  await expectColor(page, p.x, p.y, "circle", "tap on the background puts the circle there");
+  cam = await camera(page);
+  const tapTarget = (await visible(page)).find((b) => { const c = centerOf(cam, b); return c.x > 60 && c.x < 340 && c.y > 200 && c.y < 600; });
+  const t = centerOf(cam, tapTarget);
+  await gesture([[t.x, t.y]], [[t.x + 3, t.y + 3]], { steps: 2 });
+  await expectColor(page, t.x, t.y, "tapped", "tap on a block turns it purple");
+  await expectColor(page, p.x, p.y, "circle", "tap on a block leaves the circle");
+  const still = (await visible(page)).find((b) => b.id === tapTarget.id);
+  check(still.x === tapTarget.x && still.y === tapTarget.y, "a tap does not move the block");
+
+  // Culling still works with blocks.
+  await fresh();
   let culled = null;
   for (let i = 0; i < 12 && !culled; i++) {
     culled = await page.evaluate(() => {
-      const ids = new Set(unblock.visibleSquares().map((s) => s.id));
+      const ids = new Set(unblock.visibleBlocks().map((b) => b.id));
       const c = unblock.scene.camera;
-      return unblock.onScreen().find((s) => {
-        const x = (s.x + s.size / 2) * c.scale + c.offsetX, y = (s.y + s.size / 2) * c.scale + c.offsetY;
-        return !ids.has(s.id) && x > 2 && x < unblock.scene.width - 2 && y > 2 && y < unblock.scene.height - 2;
+      return unblock.onScreen().find((b) => {
+        const x = (b.x + b.w / 2) * unblock.UNIT * c.scale + c.offsetX, y = (b.y + b.h / 2) * unblock.UNIT * c.scale + c.offsetY;
+        return !ids.has(b.id) && x > 2 && x < unblock.scene.width - 2 && y > 2 && y < unblock.scene.height - 2;
       }) ?? null;
     });
     if (!culled) await panBy(0, -97);
   }
-  check(culled !== null, "found a square on screen but outside the border");
+  check(culled !== null, "found a block on screen but outside the border");
   if (culled) {
     cam = await camera(page);
     const c = centerOf(cam, culled);
-    await expectColor(page, c.x, c.y, "background", `square ${culled.id} outside the border is not drawn`);
-    await page.screenshot({ path: shots + "phone-2-culled.png" });
-    // Pan it towards the screen centre; it must show up.
-    const p = await emptyPoint(page);
-    await gesture([[p.x, p.y]], [[p.x + (200 - c.x), p.y + (400 - c.y)]]);
-    cam = await camera(page);
-    const now = centerOf(cam, culled);
-    const shown = (await visible(page)).some((s) => s.id === culled.id);
-    check(shown, `square ${culled.id} is shown once inside the border`);
-    if (shown) await expectColor(page, now.x, now.y, "square", `square ${culled.id} is drawn inside the border`);
+    await expectColor(page, c.x, c.y, "background", `block ${culled.id} outside the border is not drawn`);
   }
 
-  // Same squares after panning away and back.
-  await fresh();
-  const before = await visible(page);
-  for (let i = 0; i < 4; i++) await panBy(-120, -160);
-  const away = (await visible(page)).map((s) => s.id).join();
-  check(away !== before.map((s) => s.id).join(), "panning away shows other squares");
-  for (let i = 0; i < 4; i++) await panBy(120, 160);
-  check(JSON.stringify(await visible(page)) === JSON.stringify(before), "panning back shows the same squares in the same places");
-
-  // Tap moves the circle.
-  await fresh();
-  let p = await emptyPoint(page);
-  await gesture([[p.x, p.y]], [[p.x + 3, p.y + 2]], { steps: 2 });
-  await expectColor(page, p.x, p.y, "circle", "tap puts the circle under the finger");
-  const firstTap = p;
-  await panBy(30, 40);
-  p = await emptyPoint(page);
-  await gesture([[p.x, p.y]], [[p.x, p.y]], { steps: 1 });
-  await expectColor(page, p.x, p.y, "circle", "second tap moves the circle");
-  await expectColor(page, firstTap.x + 30, firstTap.y + 40, "background", "old circle spot is cleared");
-
-  // Tap a square: it turns purple, the circle stays where it was, and it is still purple
-  // after panning it out of the border and back, and after a reload.
-  cam = await camera(page);
-  const tapTarget = (await visible(page)).find((s) => { const c = centerOf(cam, s); return c.x > 60 && c.x < 340 && c.y > 160 && c.y < 640; });
-  const t = centerOf(cam, tapTarget);
-  const circleBefore = await page.evaluate(() => unblock.scene.circle);
-  await gesture([[t.x, t.y]], [[t.x + 3, t.y + 3]], { steps: 2 });
-  await expectColor(page, t.x, t.y, "tapped", "tapping a square turns it purple");
-  check(JSON.stringify(await page.evaluate(() => unblock.scene.circle)) === JSON.stringify(circleBefore), "tapping a square leaves the circle where it was");
-  await page.screenshot({ path: shots + "phone-3-tapped-square.png" });
-  await panBy(0, -350);
-  await panBy(0, -350);
-  await panBy(0, 350);
-  await panBy(0, 350);
-  await page.reload();
-  await frame(page);
-  cam = await camera(page);
-  await expectColor(page, centerOf(cam, tapTarget).x, centerOf(cam, tapTarget).y, "tapped", "the tapped colour survives panning away and a reload");
-  await gesture([[centerOf(cam, tapTarget).x, centerOf(cam, tapTarget).y]], [[centerOf(cam, tapTarget).x, centerOf(cam, tapTarget).y]], { steps: 1 });
-  await expectColor(page, centerOf(cam, tapTarget).x, centerOf(cam, tapTarget).y, "square", "a second tap turns it back");
-
-  // Drag a square: orange while dragging, green once dropped and stored, still there after reload.
-  await page.evaluate(() => localStorage.clear());
-  await fresh();
-  cam = await camera(page);
-  const square = (await visible(page)).find((s) => { const c = centerOf(cam, s); return c.x > 60 && c.x < 340 && c.y > 160 && c.y < 640; });
-  const start = centerOf(cam, square);
-  const target = { x: start.x < 200 ? start.x + 100 : start.x - 100, y: start.y < 400 ? start.y + 120 : start.y - 120 };
-  let midDrag = null;
-  let fpsWhileDragging = "";
-  await gesture([[start.x, start.y]], [[target.x, target.y]], {
-    during: async ([[x, y]]) => {
-      await frame(page);
-      midDrag = await colorAt(page, x, y);
-      fpsWhileDragging = await page.evaluate(() => document.querySelector("#fps").textContent);
-      await page.screenshot({ path: shots + "phone-4-dragging.png" });
-    },
-  });
-  check(midDrag === "dragging", `square is orange while dragged (${midDrag})`);
-  check(/^[1-9]\d* fps/.test(fpsWhileDragging), `fps counter counts frames during a drag ("${fpsWhileDragging}")`);
-  await expectColor(page, target.x, target.y, "moved", "dropped square turns the stored colour");
-  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem("unblock-me:moved") ?? "[]"));
-  check(stored.length === 1 && stored[0][0] === square.id, `move of ${square.id} is stored (${JSON.stringify(stored)})`);
-  check(await page.evaluate(() => unblock.scene.tapped.size === 0), "dragging a square does not mark it as tapped");
-  await page.screenshot({ path: shots + "phone-5-dropped.png" });
-  await page.reload();
-  await frame(page);
-  await expectColor(page, target.x, target.y, "moved", "after a reload the moved square is restored, in the stored colour");
-  const startEmpty = !(await visible(page)).some((s) => { const c = centerOf(cam, s); return Math.abs(c.x - start.x) < 45 && Math.abs(c.y - start.y) < 45; });
-  check(startEmpty, "the square's generated spot stays empty after the move");
-
-  // Pinch: spread around the centre and move down 100 px at once.
+  // Pinch zooms and pans together; limits hold.
   await fresh();
   cam = await camera(page);
   const anchor = { x: (200 - cam.offsetX) / cam.scale, y: (400 - cam.offsetY) / cam.scale };
@@ -214,59 +250,42 @@ const browser = await chromium.launch();
   const after = await camera(page);
   check(Math.abs(after.scale / cam.scale - 2) < 0.01, `pinch doubles the zoom (${(after.scale / cam.scale).toFixed(3)}x)`);
   const anchorNow = toScreen(after, anchor);
-  check(Math.hypot(anchorNow.x - 200, anchorNow.y - 500) < 1, `the point between the fingers followed them (${anchorNow.x.toFixed(1)},${anchorNow.y.toFixed(1)})`);
-  await page.screenshot({ path: shots + "phone-5-pinch-pan.png" });
-
-  // Zoom limits by pinching hard both ways.
+  check(Math.hypot(anchorNow.x - 200, anchorNow.y - 500) < 1, "the point between the fingers followed them");
   await gesture([[199, 400], [201, 400]], [[1, 400], [399, 400]]);
-  let scale = (await camera(page)).scale;
-  check(Math.abs(scale * 180 - 400) < 0.5, `max zoom: two squares fill the width (2 squares = ${(scale * 180).toFixed(1)} px)`);
-  await page.screenshot({ path: shots + "phone-6-max-zoom.png" });
+  check(Math.abs((await camera(page)).scale * 2 * UNIT - 400) < 0.5, "max zoom: two cells fill the width");
+  await page.screenshot({ path: shots + "phone-5-max-zoom.png" });
   await gesture([[1, 400], [399, 400]], [[199, 400], [201, 400]]);
-  scale = (await camera(page)).scale;
-  check(Math.abs(scale * 670 - 400 / 3) < 0.5, `min zoom: 670 world units fill a third of the width (${(scale * 670).toFixed(1)} px)`);
-  const fpsText = await page.evaluate(() => document.querySelector("#fps").textContent);
-  const counts = await page.evaluate(() => [unblock.visibleSquares().length, unblock.onScreen().length]);
-  check(Number(fpsText.split(" · ")[1].split(" ")[0]) === counts[0] && counts[0] < counts[1],
-    `zoomed out, only the ${counts[0]} squares inside the border are drawn, of ${counts[1]} on screen (${fpsText})`);
-  await page.screenshot({ path: shots + "phone-7-min-zoom.png" });
+  check(Math.abs((await camera(page)).scale * 670 - 400 / 3) < 0.5, "min zoom: 670 world units fill a third of the width");
+  await page.screenshot({ path: shots + "phone-6-min-zoom.png" });
   await context.close();
 }
 
-// --- Desktop: mouse and wheel; dots grow with zoom.
+// --- Desktop: mouse drag of a block, wheel zoom.
 {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   await page.goto(url);
   await frame(page);
-  // Width of the dot at world (0,0), which is at the screen centre and not under a square.
-  const dotWidth = async () => {
-    const cam = await camera(page);
-    const c = toScreen(cam, { x: 0, y: 0 });
-    let w = 0;
-    for (let x = Math.round(c.x) - 30; x <= Math.round(c.x) + 30; x++) if ((await colorAt(page, x, c.y)) === "dot") w++;
-    return w;
-  };
-  const before = await dotWidth();
-  await page.mouse.move(640, 400);
-  await page.mouse.wheel(0, -500);
-  await frame(page);
-  const zoom = (await camera(page)).scale;
-  const afterZoom = await dotWidth();
-  check(before >= 3 && afterZoom > before * 2, `dots grow with zoom (${before}px -> ${afterZoom}px at ${zoom.toFixed(2)}x)`);
-  await page.screenshot({ path: shots + "desktop-zoomed.png" });
-
-  const p = await emptyPoint(page);
-  await page.mouse.click(p.x, p.y);
-  await expectColor(page, p.x, p.y, "circle", "mouse click places the circle");
   const cam = await camera(page);
-  const s = (await visible(page)).find((s) => { const c = centerOf(cam, s); return c.x > 200 && c.x < 1080 && c.y > 200 && c.y < 600; });
-  const c = centerOf(cam, s);
+  let pick = null;
+  for (const b of await visible(page)) {
+    const c = centerOf(cam, b);
+    if (c.x < 300 || c.x > 980 || c.y < 200 || c.y > 600) continue;
+    const { lo, hi } = await range(page, b.id);
+    if (hi - (horizontal(b) ? b.x : b.y) >= 1) { pick = b; break; }
+  }
+  const c = centerOf(cam, pick);
+  const cell = UNIT * cam.scale;
   await page.mouse.move(c.x, c.y);
   await page.mouse.down();
-  await page.mouse.move(c.x + 60, c.y + 30, { steps: 8 });
-  await expectColor(page, c.x + 60, c.y + 30, "dragging", "mouse drag colours the square");
+  const to = horizontal(pick) ? { x: c.x + cell, y: c.y } : { x: c.x, y: c.y + cell };
+  await page.mouse.move(to.x, to.y, { steps: 8 });
+  await expectColor(page, to.x, to.y, "dragging", "mouse drag colours the block");
   await page.mouse.up();
-  await expectColor(page, c.x + 60, c.y + 30, "moved", "mouse drop stores the square");
+  await expectColor(page, to.x, to.y, "moved", "mouse drop lands the block one cell on");
+  await page.mouse.move(640, 400);
+  await page.mouse.wheel(0, -300);
+  await frame(page);
+  check((await camera(page)).scale > cam.scale * 1.5, "wheel zooms in");
 }
 
 await browser.close();

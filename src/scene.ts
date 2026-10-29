@@ -1,8 +1,7 @@
 import { worldRect, type Camera, type Limits, type Point, type Rect } from "./camera";
-import { SQUARE_SIZE, squaresIn, type Square } from "./world";
+import { blocksIn, UNIT, type Block } from "./world";
 
-/** Zoomed out fully, this many world units take a third of the screen width (the spread of
- * the first six hand-placed squares). */
+/** Zoomed out fully, this many world units take a third of the screen width. */
 const MIN_ZOOM_SPAN = 670;
 /** The culling border is this share of the screen, centred. */
 export const BORDER = 0.8;
@@ -12,24 +11,24 @@ export type Scene = {
   /** Screen size in CSS pixels. */
   width: number;
   height: number;
-  /** Squares that were dragged: id -> top-left corner. Everything else is generated. */
+  /** Blocks that were dragged: id -> lattice position. Everything else is generated. */
   moved: Map<string, Point>;
-  /** Squares that were tapped. */
+  /** Blocks that were tapped. */
   tapped: Set<string>;
   /** Where the last tap landed, in world coordinates. */
   circle: Point | null;
-  /** The square being dragged, drawn in another colour. */
-  draggingId: string | null;
+  /** The block being dragged and where it is right now, in (fractional) lattice units. */
+  dragging: { id: string; x: number; y: number } | null;
 };
 
 export function newScene(width: number, height: number, moved = new Map<string, Point>(), tapped = new Set<string>()): Scene {
-  const scene: Scene = { camera: { scale: 1, offsetX: width / 2, offsetY: height / 2 }, width, height, moved, tapped, circle: null, draggingId: null };
+  const scene: Scene = { camera: { scale: 1, offsetX: width / 2, offsetY: height / 2 }, width, height, moved, tapped, circle: null, dragging: null };
   return resize(scene, width, height);
 }
 
-/** Max zoom: two squares fill the width. Min zoom: MIN_ZOOM_SPAN fills a third of it. */
+/** Max zoom: two lattice cells fill the width. Min zoom: MIN_ZOOM_SPAN fills a third of it. */
 export function limits(scene: Scene): Limits {
-  return { min: scene.width / (3 * MIN_ZOOM_SPAN), max: scene.width / (2 * SQUARE_SIZE) };
+  return { min: scene.width / (3 * MIN_ZOOM_SPAN), max: scene.width / (2 * UNIT) };
 }
 
 export function resize(scene: Scene, width: number, height: number): Scene {
@@ -50,11 +49,18 @@ export function borderOnScreen(scene: Scene): Rect {
   return { x: scene.width * margin, y: scene.height * margin, width: scene.width * BORDER, height: scene.height * BORDER };
 }
 
-/** The squares to draw and hit-test: only those at least partly inside the border. */
-export function visibleSquares(scene: Scene): Square[] {
-  const squares = squaresIn(worldRect(scene.camera, borderOnScreen(scene)), scene.moved, scene.tapped);
-  // The dragged square draws on top of everything.
-  const dragged = squares.findIndex((s) => s.id === scene.draggingId);
-  if (dragged >= 0) squares.push(...squares.splice(dragged, 1));
-  return squares;
+/** A screen rectangle in lattice units. */
+export function latticeRect(scene: Scene, screen: Rect): Rect {
+  const r = worldRect(scene.camera, screen);
+  return { x: r.x / UNIT, y: r.y / UNIT, width: r.width / UNIT, height: r.height / UNIT };
+}
+
+/** The blocks to draw and hit-test: only those at least partly inside the border. The
+ * dragged block is shown where the finger has it and drawn on top. */
+export function visibleBlocks(scene: Scene): Block[] {
+  const blocks = blocksIn(latticeRect(scene, borderOnScreen(scene)), scene.moved, scene.tapped);
+  const drag = scene.dragging;
+  const index = drag ? blocks.findIndex((b) => b.id === drag.id) : -1;
+  if (drag && index >= 0) blocks.push({ ...blocks.splice(index, 1)[0]!, x: drag.x, y: drag.y });
+  return blocks;
 }
