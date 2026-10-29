@@ -1,37 +1,58 @@
-import type { Camera, Point } from "./camera";
+import { worldRect, type Camera, type Limits, type Point, type Rect } from "./camera";
+import { SQUARE_SIZE, squaresIn, type Square } from "./world";
 
-export type Square = { id: number; x: number; y: number; size: number };
+/** Zoomed out fully, this many world units take a third of the screen width (the spread of
+ * the first six hand-placed squares). */
+const MIN_ZOOM_SPAN = 670;
+/** The culling border is this share of the screen, centred. */
+export const BORDER = 0.8;
 
 export type Scene = {
   camera: Camera;
-  /** Drawn in order, so the last square is on top. */
-  squares: Square[];
+  /** Screen size in CSS pixels. */
+  width: number;
+  height: number;
+  /** Squares that were dragged: id -> top-left corner. Everything else is generated. */
+  moved: Map<string, Point>;
   /** Where the last tap landed, in world coordinates. */
   circle: Point | null;
   /** The square being dragged, drawn in another colour. */
-  draggingId: number | null;
+  draggingId: string | null;
 };
 
-export function initialScene(width: number, height: number): Scene {
-  const at: [number, number][] = [[-260, -180], [40, -120], [-120, 60], [200, 120], [-40, 280], [320, -260]];
-  return {
-    camera: { scale: 1, offsetX: width / 2, offsetY: height / 2 },
-    squares: at.map(([x, y], id) => ({ id, x, y, size: 90 })),
-    circle: null,
-    draggingId: null,
-  };
+export function newScene(width: number, height: number, moved = new Map<string, Point>()): Scene {
+  const scene: Scene = { camera: { scale: 1, offsetX: width / 2, offsetY: height / 2 }, width, height, moved, circle: null, draggingId: null };
+  return resize(scene, width, height);
 }
 
-/** The topmost square under a world point. */
-export function squareAt(scene: Scene, world: Point): Square | null {
-  for (let i = scene.squares.length - 1; i >= 0; i--) {
-    const s = scene.squares[i]!;
-    if (world.x >= s.x && world.x <= s.x + s.size && world.y >= s.y && world.y <= s.y + s.size) return s;
-  }
-  return null;
+/** Max zoom: two squares fill the width. Min zoom: MIN_ZOOM_SPAN fills a third of it. */
+export function limits(scene: Scene): Limits {
+  return { min: scene.width / (3 * MIN_ZOOM_SPAN), max: scene.width / (2 * SQUARE_SIZE) };
 }
 
-export function bringToFront(scene: Scene, id: number): void {
-  const index = scene.squares.findIndex((s) => s.id === id);
-  if (index >= 0) scene.squares.push(...scene.squares.splice(index, 1));
+export function resize(scene: Scene, width: number, height: number): Scene {
+  scene.width = width;
+  scene.height = height;
+  const { min, max } = limits(scene);
+  const scale = Math.min(max, Math.max(min, scene.camera.scale));
+  // Keep the screen centre where it was.
+  const cx = (width / 2 - scene.camera.offsetX) / scene.camera.scale;
+  const cy = (height / 2 - scene.camera.offsetY) / scene.camera.scale;
+  scene.camera = { scale, offsetX: width / 2 - cx * scale, offsetY: height / 2 - cy * scale };
+  return scene;
+}
+
+/** The culling border in screen pixels. */
+export function borderOnScreen(scene: Scene): Rect {
+  const margin = (1 - BORDER) / 2;
+  return { x: scene.width * margin, y: scene.height * margin, width: scene.width * BORDER, height: scene.height * BORDER };
+}
+
+/** The squares to draw and hit-test: only those at least partly inside the border. */
+export function visibleSquares(scene: Scene): Square[] {
+  const squares = squaresIn(worldRect(scene.camera, borderOnScreen(scene)), scene.moved);
+  // The dragged square draws on top of everything.
+  const dragged = squares.findIndex((s) => s.id === scene.draggingId);
+  if (dragged >= 0) squares.push(...squares.splice(dragged, 1));
+  return squares;
 }

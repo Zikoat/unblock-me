@@ -1,5 +1,7 @@
 // Drives the built app in Chromium with real touch and mouse input and checks what is
-// drawn by sampling canvas pixels. Run with `bun run e2e`; screenshots go to test/screenshots.
+// drawn by sampling canvas pixels. Square positions come from the PRNG, so the test reads
+// them from the app's debug handle (window.unblock) and then checks the pixels.
+// Run with `bun run e2e`; screenshots go to test/screenshots.
 import { createServer } from "node:http";
 import { mkdir, readFile } from "node:fs/promises";
 import { extname, join } from "node:path";
@@ -20,35 +22,53 @@ const server = createServer(async (req, res) => {
 }).listen(0);
 const url = `http://localhost:${server.address().port}/`;
 
-const COLORS = { background: [243, 242, 238], dot: [211, 209, 202], square: [79, 109, 143], dragging: [224, 130, 61], circle: [214, 69, 69] };
+const COLORS = {
+  background: [243, 242, 238], dot: [211, 209, 202], border: [185, 182, 173],
+  square: [79, 109, 143], moved: [63, 154, 122], dragging: [224, 130, 61], circle: [214, 69, 69],
+};
 let failures = 0;
 const check = (ok, what) => {
   console.log(`${ok ? "ok  " : "FAIL"} ${what}`);
   if (!ok) failures++;
 };
 
+const rgbAt = (page, x, y) => page.evaluate(([x, y]) => {
+  const c = document.querySelector("canvas");
+  const d = c.width / c.clientWidth;
+  return [...c.getContext("2d").getImageData(Math.round(x * d), Math.round(y * d), 1, 1).data.slice(0, 3)];
+}, [x, y]);
 async function colorAt(page, x, y) {
-  const rgb = await page.evaluate(([x, y]) => {
-    const c = document.querySelector("canvas");
-    const d = c.width / c.clientWidth;
-    return [...c.getContext("2d").getImageData(Math.round(x * d), Math.round(y * d), 1, 1).data.slice(0, 3)];
-  }, [x, y]);
-  const [name] = Object.entries(COLORS)
-    .map(([n, c]) => [n, Math.hypot(...c.map((v, i) => v - rgb[i]))])
-    .sort((a, b) => a[1] - b[1])[0];
-  return name === "dot" ? "background" : name;
+  const rgb = await rgbAt(page, x, y);
+  return Object.entries(COLORS).map(([n, c]) => [n, Math.hypot(...c.map((v, i) => v - rgb[i]))]).sort((a, b) => a[1] - b[1])[0][0];
 }
 const frame = (page) => page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
 const expectColor = async (page, x, y, want, what) => {
   await frame(page);
   const got = await colorAt(page, x, y);
-  check(got === want, `${what}: (${x},${y}) is ${got}${got === want ? "" : `, want ${want}`}`);
+  check(got === want, `${what}: (${Math.round(x)},${Math.round(y)}) is ${got}${got === want ? "" : `, want ${want}`}`);
 };
+const camera = (page) => page.evaluate(() => ({ ...unblock.scene.camera }));
+const toScreen = (cam, p) => ({ x: p.x * cam.scale + cam.offsetX, y: p.y * cam.scale + cam.offsetY });
+const centerOf = (cam, s) => toScreen(cam, { x: s.x + s.size / 2, y: s.y + s.size / 2 });
+const visible = (page) => page.evaluate(() => unblock.visibleSquares());
+/** A point inside the border that is not on a square and not near the circle. */
+const emptyPoint = (page) => page.evaluate(() => {
+  const { scene } = unblock;
+  const squares = unblock.visibleSquares();
+  const c = scene.camera;
+  for (let y = scene.height * 0.3; y < scene.height * 0.7; y += 7) {
+    for (let x = scene.width * 0.3; x < scene.width * 0.7; x += 7) {
+      const w = { x: (x - c.offsetX) / c.scale, y: (y - c.offsetY) / c.scale };
+      const pad = 20 / c.scale;
+      if (!squares.some((s) => w.x > s.x - pad && w.x < s.x + s.size + pad && w.y > s.y - pad && w.y < s.y + s.size + pad)) return { x, y };
+    }
+  }
+  return null;
+});
 
 const browser = await chromium.launch();
 
-// --- Phone: 400x800 CSS px at 2x, touch only. World (0,0) starts at the screen centre,
-// so square 1 covers (240..330, 280..370) and square 2 covers (80..170, 460..550).
+// --- Phone: 400x800 CSS px at 2x, touch only.
 {
   const context = await browser.newContext({ viewport: { width: 400, height: 800 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   const page = await context.newPage();
@@ -59,102 +79,171 @@ const browser = await chromium.launch();
   async function gesture(from, to, { steps = 12, during } = {}) {
     await touch("touchStart", from);
     for (let i = 1; i <= steps; i++) {
-      const t = i / steps;
-      await touch("touchMove", from.map(([x, y], f) => [x + (to[f][0] - x) * t, y + (to[f][1] - y) * t]));
-      if (i === Math.floor(steps / 2) && during) await during(from.map(([x, y], f) => [x + (to[f][0] - x) * t, y + (to[f][1] - y) * t]));
+      const at = from.map(([x, y], f) => [x + (to[f][0] - x) * (i / steps), y + (to[f][1] - y) * (i / steps)]);
+      await touch("touchMove", at);
+      if (i === Math.floor(steps / 2) && during) await during(at);
     }
     await touch("touchEnd", []);
   }
+  const panBy = async (dx, dy) => {
+    const p = await emptyPoint(page);
+    await gesture([[p.x, p.y]], [[p.x + dx, p.y + dy]]);
+  };
   const fresh = async () => { await page.goto(url); await frame(page); };
 
   await fresh();
-  check((await page.evaluate(() => document.body.innerText.trim())) === "", "no text in the UI");
-  check((await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)), "no horizontal scroll");
-  await expectColor(page, 285, 325, "square", "square 1 drawn");
-  await expectColor(page, 125, 505, "square", "square 2 drawn");
+  const text = await page.evaluate(() => document.body.innerText.trim());
+  check(/^\d+ fps · \d+ squares$/.test(text), `only text is the fps counter ("${text}")`);
+  check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "no horizontal scroll");
+  let cam = await camera(page);
+  let squares = await visible(page);
+  check(squares.length >= 2, `a few squares are shown (${squares.length})`);
+  for (const s of squares) {
+    const c = centerOf(cam, s);
+    if (c.x > 0 && c.x < 400 && c.y > 0 && c.y < 800) await expectColor(page, c.x, c.y, "square", `visible square ${s.id} is drawn`);
+  }
   await page.screenshot({ path: shots + "phone-1-start.png" });
 
-  await gesture([[100, 300]], [[103, 302]], { steps: 2 }); // a tap with a little finger wobble
-  await expectColor(page, 100, 300, "circle", "tap puts the circle under the finger");
-  await gesture([[300, 650]], [[300, 650]], { steps: 1 });
-  await expectColor(page, 300, 650, "circle", "second tap moves the circle");
-  await expectColor(page, 100, 300, "background", "old circle spot is cleared");
-  await gesture([[285, 325]], [[285, 325]], { steps: 1 });
-  await expectColor(page, 285, 325, "circle", "tap on a square also moves the circle");
-  await page.screenshot({ path: shots + "phone-2-tapped.png" });
+  // Culling: pan until some square is on screen but wholly outside the border, then make
+  // sure it is not drawn, and that it appears once it crosses into the border.
+  let culled = null;
+  for (let i = 0; i < 12 && !culled; i++) {
+    culled = await page.evaluate(() => {
+      const ids = new Set(unblock.visibleSquares().map((s) => s.id));
+      const c = unblock.scene.camera;
+      return unblock.onScreen().find((s) => {
+        const x = (s.x + s.size / 2) * c.scale + c.offsetX, y = (s.y + s.size / 2) * c.scale + c.offsetY;
+        return !ids.has(s.id) && x > 2 && x < unblock.scene.width - 2 && y > 2 && y < unblock.scene.height - 2;
+      }) ?? null;
+    });
+    if (!culled) await panBy(0, -97);
+  }
+  check(culled !== null, "found a square on screen but outside the border");
+  if (culled) {
+    cam = await camera(page);
+    const c = centerOf(cam, culled);
+    await expectColor(page, c.x, c.y, "background", `square ${culled.id} outside the border is not drawn`);
+    await page.screenshot({ path: shots + "phone-2-culled.png" });
+    // Pan it towards the screen centre; it must show up.
+    const p = await emptyPoint(page);
+    await gesture([[p.x, p.y]], [[p.x + (200 - c.x), p.y + (400 - c.y)]]);
+    cam = await camera(page);
+    const now = centerOf(cam, culled);
+    const shown = (await visible(page)).some((s) => s.id === culled.id);
+    check(shown, `square ${culled.id} is shown once inside the border`);
+    if (shown) await expectColor(page, now.x, now.y, "square", `square ${culled.id} is drawn inside the border`);
+  }
 
+  // Same squares after panning away and back.
   await fresh();
-  await gesture([[100, 150]], [[160, 200]]);
-  await expectColor(page, 380, 410, "square", "background drag pans: square 1 followed the finger");
-  await expectColor(page, 245, 285, "background", "background drag pans: old square 1 corner is empty");
-  await expectColor(page, 160, 200, "background", "a pan does not place the circle");
+  const before = await visible(page);
+  for (let i = 0; i < 4; i++) await panBy(-120, -160);
+  const away = (await visible(page)).map((s) => s.id).join();
+  check(away !== before.map((s) => s.id).join(), "panning away shows other squares");
+  for (let i = 0; i < 4; i++) await panBy(120, 160);
+  check(JSON.stringify(await visible(page)) === JSON.stringify(before), "panning back shows the same squares in the same places");
 
+  // Tap moves the circle.
   await fresh();
+  let p = await emptyPoint(page);
+  await gesture([[p.x, p.y]], [[p.x + 3, p.y + 2]], { steps: 2 });
+  await expectColor(page, p.x, p.y, "circle", "tap puts the circle under the finger");
+  const firstTap = p;
+  await panBy(30, 40);
+  p = await emptyPoint(page);
+  await gesture([[p.x, p.y]], [[p.x, p.y]], { steps: 1 });
+  await expectColor(page, p.x, p.y, "circle", "second tap moves the circle");
+  await expectColor(page, firstTap.x + 30, firstTap.y + 40, "background", "old circle spot is cleared");
+
+  // Drag a square: orange while dragging, green once dropped and stored, still there after reload.
+  await fresh();
+  cam = await camera(page);
+  const square = (await visible(page)).find((s) => { const c = centerOf(cam, s); return c.x > 60 && c.x < 340 && c.y > 160 && c.y < 640; });
+  const start = centerOf(cam, square);
+  const target = { x: start.x < 200 ? start.x + 100 : start.x - 100, y: start.y < 400 ? start.y + 120 : start.y - 120 };
   let midDrag = null;
-  await gesture([[125, 505]], [[325, 205]], {
-    during: async ([[x, y]]) => { await frame(page); midDrag = await colorAt(page, x, y); await page.screenshot({ path: shots + "phone-3-dragging.png" }); },
+  let fpsWhileDragging = "";
+  await gesture([[start.x, start.y]], [[target.x, target.y]], {
+    during: async ([[x, y]]) => {
+      await frame(page);
+      midDrag = await colorAt(page, x, y);
+      fpsWhileDragging = await page.evaluate(() => document.querySelector("#fps").textContent);
+      await page.screenshot({ path: shots + "phone-3-dragging.png" });
+    },
   });
-  check(midDrag === "dragging", `square changes colour while dragged (${midDrag})`);
-  await expectColor(page, 325, 205, "square", "dropped square is back to the normal colour at the drop point");
-  await expectColor(page, 125, 505, "background", "dragged square left its old spot");
-  await expectColor(page, 285, 325, "square", "the camera did not move during a square drag");
+  check(midDrag === "dragging", `square is orange while dragged (${midDrag})`);
+  check(/^[1-9]\d* fps/.test(fpsWhileDragging), `fps counter counts frames during a drag ("${fpsWhileDragging}")`);
+  await expectColor(page, target.x, target.y, "moved", "dropped square turns the stored colour");
+  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem("unblock-me:moved") ?? "[]"));
+  check(stored.length === 1 && stored[0][0] === square.id, `move of ${square.id} is stored (${JSON.stringify(stored)})`);
   await page.screenshot({ path: shots + "phone-4-dropped.png" });
+  await page.reload();
+  await frame(page);
+  await expectColor(page, target.x, target.y, "moved", "after a reload the moved square is restored, in the stored colour");
+  const startEmpty = !(await visible(page)).some((s) => { const c = centerOf(cam, s); return Math.abs(c.x - start.x) < 45 && Math.abs(c.y - start.y) < 45; });
+  check(startEmpty, "the square's generated spot stays empty after the move");
 
+  // Pinch: spread around the centre and move down 100 px at once.
   await fresh();
-  // Fingers spread to twice the distance around the screen centre: 2x zoom there.
-  // Square 1 (world 40..130, -120..-30) then covers x 280..460, y 160..340.
-  await gesture([[150, 400], [250, 400]], [[100, 400], [300, 400]]);
-  await expectColor(page, 290, 170, "square", "pinch zooms: square 1 grew towards the corner");
-  await expectColor(page, 275, 170, "background", "pinch zooms: left of the zoomed square is empty");
-  await expectColor(page, 150, 400, "background", "a pinch does not place the circle");
-  await page.screenshot({ path: shots + "phone-5-pinched.png" });
+  cam = await camera(page);
+  const anchor = { x: (200 - cam.offsetX) / cam.scale, y: (400 - cam.offsetY) / cam.scale };
+  await gesture([[175, 400], [225, 400]], [[150, 500], [250, 500]]);
+  const after = await camera(page);
+  check(Math.abs(after.scale / cam.scale - 2) < 0.01, `pinch doubles the zoom (${(after.scale / cam.scale).toFixed(3)}x)`);
+  const anchorNow = toScreen(after, anchor);
+  check(Math.hypot(anchorNow.x - 200, anchorNow.y - 500) < 1, `the point between the fingers followed them (${anchorNow.x.toFixed(1)},${anchorNow.y.toFixed(1)})`);
+  await page.screenshot({ path: shots + "phone-5-pinch-pan.png" });
 
-  await fresh();
-  // Spread and move both fingers down 100 px at once: zoom and pan together.
-  await gesture([[150, 400], [250, 400]], [[100, 500], [300, 500]]);
-  await expectColor(page, 290, 270, "square", "pinch also pans: square 1 moved down with the fingers");
-  await expectColor(page, 290, 255, "background", "pinch also pans: above it is empty");
-  await page.screenshot({ path: shots + "phone-6-pinch-pan.png" });
-
-  await fresh();
-  // Lift one finger mid-pinch and keep moving the other: it pans, no tap.
-  await touch("touchStart", [[150, 400], [250, 400]]);
-  await touch("touchEnd", [[250, 400]].map(([x, y]) => [x, y])); // finger 0 lifts
-  await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: 280, y: 420, id: 1 }] });
-  await touch("touchEnd", []);
-  await expectColor(page, 315, 345, "square", "remaining finger pans after a pinch");
-  await expectColor(page, 280, 420, "background", "lifting a pinch finger is not a tap");
+  // Zoom limits by pinching hard both ways.
+  await gesture([[199, 400], [201, 400]], [[1, 400], [399, 400]]);
+  let scale = (await camera(page)).scale;
+  check(Math.abs(scale * 180 - 400) < 0.5, `max zoom: two squares fill the width (2 squares = ${(scale * 180).toFixed(1)} px)`);
+  await page.screenshot({ path: shots + "phone-6-max-zoom.png" });
+  await gesture([[1, 400], [399, 400]], [[199, 400], [201, 400]]);
+  scale = (await camera(page)).scale;
+  check(Math.abs(scale * 670 - 400 / 3) < 0.5, `min zoom: 670 world units fill a third of the width (${(scale * 670).toFixed(1)} px)`);
+  const fpsText = await page.evaluate(() => document.querySelector("#fps").textContent);
+  const counts = await page.evaluate(() => [unblock.visibleSquares().length, unblock.onScreen().length]);
+  check(Number(fpsText.split(" · ")[1].split(" ")[0]) === counts[0] && counts[0] < counts[1],
+    `zoomed out, only the ${counts[0]} squares inside the border are drawn, of ${counts[1]} on screen (${fpsText})`);
+  await page.screenshot({ path: shots + "phone-7-min-zoom.png" });
   await context.close();
 }
 
-// --- Desktop: mouse and wheel.
+// --- Desktop: mouse and wheel; dots grow with zoom.
 {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   await page.goto(url);
   await frame(page);
-  // World (0,0) at (640,400): square 1 covers (680..770, 280..370).
-  await page.mouse.click(300, 600);
-  await expectColor(page, 300, 600, "circle", "mouse click places the circle");
-  await page.mouse.move(725, 325);
-  await page.mouse.down();
-  await page.mouse.move(800, 325, { steps: 8 });
-  await expectColor(page, 800, 325, "dragging", "mouse drag colours the square");
-  await page.mouse.move(900, 325, { steps: 8 });
-  await page.mouse.up();
-  await expectColor(page, 900, 325, "square", "mouse drag drops the square");
-  await expectColor(page, 300, 600, "circle", "a square drag leaves the circle alone");
-  await page.mouse.move(100, 100);
-  await page.mouse.down();
-  await page.mouse.move(150, 100, { steps: 8 });
-  await page.mouse.up();
-  await expectColor(page, 350, 600, "circle", "mouse drag on the background pans everything");
-  await page.mouse.move(350, 600);
-  await page.mouse.wheel(0, -400); // zoom in around the cursor
-  await expectColor(page, 350, 600, "circle", "wheel zoom keeps the point under the cursor");
-  // exp(0.8) ≈ 2.23x around (350,600): square 2 (570..660, 460..550) grows to x 840..1040, y 288..489.
-  await expectColor(page, 1035, 480, "square", "wheel zoom grew square 2 away from the cursor");
-  await expectColor(page, 1045, 480, "background", "wheel zoom: right of square 2 is empty");
+  // Width of the dot at world (0,0), which is at the screen centre and not under a square.
+  const dotWidth = async () => {
+    const cam = await camera(page);
+    const c = toScreen(cam, { x: 0, y: 0 });
+    let w = 0;
+    for (let x = Math.round(c.x) - 30; x <= Math.round(c.x) + 30; x++) if ((await colorAt(page, x, c.y)) === "dot") w++;
+    return w;
+  };
+  const before = await dotWidth();
+  await page.mouse.move(640, 400);
+  await page.mouse.wheel(0, -500);
+  await frame(page);
+  const zoom = (await camera(page)).scale;
+  const afterZoom = await dotWidth();
+  check(before >= 3 && afterZoom > before * 2, `dots grow with zoom (${before}px -> ${afterZoom}px at ${zoom.toFixed(2)}x)`);
   await page.screenshot({ path: shots + "desktop-zoomed.png" });
+
+  const p = await emptyPoint(page);
+  await page.mouse.click(p.x, p.y);
+  await expectColor(page, p.x, p.y, "circle", "mouse click places the circle");
+  const cam = await camera(page);
+  const s = (await visible(page)).find((s) => { const c = centerOf(cam, s); return c.x > 200 && c.x < 1080 && c.y > 200 && c.y < 600; });
+  const c = centerOf(cam, s);
+  await page.mouse.move(c.x, c.y);
+  await page.mouse.down();
+  await page.mouse.move(c.x + 60, c.y + 30, { steps: 8 });
+  await expectColor(page, c.x + 60, c.y + 30, "dragging", "mouse drag colours the square");
+  await page.mouse.up();
+  await expectColor(page, c.x + 60, c.y + 30, "moved", "mouse drop stores the square");
 }
 
 await browser.close();

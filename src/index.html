@@ -8,11 +8,13 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='2' y='2' width='12' height='12' rx='2' fill='%234f6d8f'/%3E%3C/svg%3E">
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #f3f2ee; }
+  #fps { position: fixed; top: 6px; left: 8px; font: 11px/1 ui-monospace, monospace; color: #8a877e; pointer-events: none; }
   canvas { display: block; width: 100vw; height: 100dvh; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 </style>
 </head>
 <body>
 <canvas></canvas>
+<div id="fps"></div>
 <script type="module" src="app.js"></script>
 </body>
 </html>

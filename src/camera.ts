@@ -1,12 +1,14 @@
 export type Point = { x: number; y: number };
+export type Rect = { x: number; y: number; width: number; height: number };
 
-/** Maps world to screen: screen = world * scale + offset. */
+/** Maps world to screen: screen = world * scale + offset. The renderer applies this once
+ * as the canvas transform, so everything drawn in world units zooms and pans together. */
 export type Camera = { scale: number; offsetX: number; offsetY: number };
+export type Limits = { min: number; max: number };
 
-export const MIN_SCALE = 0.1;
-export const MAX_SCALE = 10;
+export const NO_LIMITS: Limits = { min: 0, max: Infinity };
 
-const clampScale = (scale: number) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale));
+const clamp = (scale: number, limits: Limits) => Math.min(limits.max, Math.max(limits.min, scale));
 
 export function toWorld(camera: Camera, screen: Point): Point {
   return { x: (screen.x - camera.offsetX) / camera.scale, y: (screen.y - camera.offsetY) / camera.scale };
@@ -14,6 +16,12 @@ export function toWorld(camera: Camera, screen: Point): Point {
 
 export function toScreen(camera: Camera, world: Point): Point {
   return { x: world.x * camera.scale + camera.offsetX, y: world.y * camera.scale + camera.offsetY };
+}
+
+/** The world area under a screen rectangle. */
+export function worldRect(camera: Camera, screen: Rect): Rect {
+  const corner = toWorld(camera, screen);
+  return { ...corner, width: screen.width / camera.scale, height: screen.height / camera.scale };
 }
 
 /** The camera that shows `world` at screen point `screen` with the given scale. */
@@ -26,8 +34,8 @@ export function pan(camera: Camera, dx: number, dy: number): Camera {
 }
 
 /** Zoom by `factor` keeping the world point under `screen` in place (mouse wheel). */
-export function zoomAt(camera: Camera, screen: Point, factor: number): Camera {
-  return anchored(toWorld(camera, screen), screen, clampScale(camera.scale * factor));
+export function zoomAt(camera: Camera, screen: Point, factor: number, limits = NO_LIMITS): Camera {
+  return anchored(toWorld(camera, screen), screen, clamp(camera.scale * factor, limits));
 }
 
 const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
@@ -38,7 +46,7 @@ const midpoint = (a: Point, b: Point): Point => ({ x: (a.x + b.x) / 2, y: (a.y +
  * the midpoint of the fingers at `start` stays under their current midpoint, and the
  * scale follows the change in finger distance. Zoom and pan happen together.
  */
-export function pinch(start: Camera, from: [Point, Point], to: [Point, Point]): Camera {
+export function pinch(start: Camera, from: [Point, Point], to: [Point, Point], limits = NO_LIMITS): Camera {
   const ratio = distance(...to) / Math.max(1, distance(...from));
-  return anchored(toWorld(start, midpoint(...from)), midpoint(...to), clampScale(start.scale * ratio));
+  return anchored(toWorld(start, midpoint(...from)), midpoint(...to), clamp(start.scale * ratio, limits));
 }
