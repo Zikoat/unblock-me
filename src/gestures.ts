@@ -121,7 +121,8 @@ export class Gestures {
     this.mode = { kind: "pinching", ids, from, start: this.scene.camera };
   }
 
-  /** Snap the dragged block to the nearest lattice position; store it if it moved. */
+  /** Snap the dragged block to the nearest lattice position and store where it is. A block
+   * back on its start position has nothing to store: its move is forgotten. */
   private drop(): void {
     const drag = this.scene.dragging;
     if (drag === null || this.mode.kind !== "dragging") return;
@@ -129,7 +130,9 @@ export class Gestures {
     const at = { x: Math.round(drag.x), y: Math.round(drag.y) };
     this.scene.dragging = null;
     if (at.x === block.x && at.y === block.y) return;
-    this.scene.moved.set(block.id, at);
+    const start = this.scene.layout.byId(block.id)!;
+    if (at.x === start.x && at.y === start.y) this.scene.moved.delete(block.id);
+    else this.scene.moved.set(block.id, at);
     this.onChange();
   }
 

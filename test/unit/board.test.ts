@@ -105,6 +105,18 @@ describe("sliding", () => {
     expect(at("a").x).toBe(5);
   });
 
+  test("a block dragged back to its start forgets its move: not green, nothing stored", () => {
+    const { scene, g, at, events } = board(H(0, 0, "a"));
+    drag(g, cell(1, 0.5), cell(3, 0.5));
+    expect(at("a")).toMatchObject({ x: 2, moved: true });
+    drag(g, cell(3, 0.5), cell(2, 0.5));
+    expect(at("a")).toMatchObject({ x: 1, moved: true });
+    drag(g, cell(2, 0.5), cell(1, 0.5));
+    expect(at("a")).toMatchObject({ x: 0, moved: false });
+    expect(scene.moved.has("a")).toBe(false);
+    expect(events.changes).toBe(3);
+  });
+
   test("a second finger during a drag drops the block on the lattice", () => {
     const { scene, g, at } = board(H(0, 0, "a"));
     g.down(1, cell(1, 0.5));
