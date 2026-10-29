@@ -18,13 +18,23 @@ type Mode =
  * Turns pointer events (screen coordinates) into scene changes: a tap on the background
  * moves the circle and a tap on a block marks it, one finger pans the background or slides
  * a block along its long axis until it hits another block, two fingers pinch-zoom and pan.
+ * The reset block never moves: dragging it pans, tapping it calls `onReset`.
  * `onChange` runs when a block was moved or tapped, to store it.
  */
 export class Gestures {
   private mode: Mode = { kind: "idle" };
   private readonly pointers = new Map<number, Point>();
 
-  constructor(private readonly scene: Scene, private readonly onChange: () => void = () => {}) {}
+  constructor(
+    private readonly scene: Scene,
+    { onChange = () => {}, onReset = () => {} }: { onChange?: () => void; onReset?: () => void } = {},
+  ) {
+    this.onChange = onChange;
+    this.onReset = onReset;
+  }
+
+  private readonly onChange: () => void;
+  private readonly onReset: () => void;
 
   down(id: number, at: Point): void {
     this.pointers.set(id, at);
@@ -43,10 +53,10 @@ export class Gestures {
     const mode = this.mode;
     if (mode.kind === "pressed" && mode.id === id) {
       if (Math.hypot(at.x - mode.start.x, at.y - mode.start.y) < TAP_SLOP) return;
-      if (mode.block === null) {
+      if (mode.block === null || mode.block.reset) {
         this.mode = { kind: "panning", id, last: mode.start };
       } else {
-        const { lo, hi } = slideRange(mode.block, this.scene.moved);
+        const { lo, hi } = slideRange(this.scene.layout, mode.block, this.scene);
         this.mode = { kind: "dragging", id, block: mode.block, grab: this.lattice(mode.start), lo, hi };
       }
     }
@@ -59,6 +69,8 @@ export class Gestures {
     if (mode.kind === "pressed" && mode.id === id) {
       if (mode.block === null) {
         this.scene.circle = toWorld(this.scene.camera, mode.start);
+      } else if (mode.block.reset) {
+        this.onReset();
       } else {
         // Tapping a block toggles its mark.
         if (!this.scene.tapped.delete(mode.block.id)) this.scene.tapped.add(mode.block.id);

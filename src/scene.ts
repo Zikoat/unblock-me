@@ -1,5 +1,5 @@
 import { worldRect, type Camera, type Limits, type Point, type Rect } from "./camera";
-import { blocksIn, UNIT, type Block } from "./world";
+import { blocksIn, randomLayout, UNIT, type Block, type Layout } from "./world";
 
 /** Zoomed out fully, this many world units take a third of the screen width. */
 const MIN_ZOOM_SPAN = 670;
@@ -11,7 +11,9 @@ export type Scene = {
   /** Screen size in CSS pixels. */
   width: number;
   height: number;
-  /** Blocks that were dragged: id -> lattice position. Everything else is generated. */
+  /** Where the blocks start. */
+  layout: Layout;
+  /** Blocks that were dragged: id -> lattice position. The rest are where the layout put them. */
   moved: Map<string, Point>;
   /** Blocks that were tapped. */
   tapped: Set<string>;
@@ -21,9 +23,29 @@ export type Scene = {
   dragging: { id: string; x: number; y: number } | null;
 };
 
-export function newScene(width: number, height: number, moved = new Map<string, Point>(), tapped = new Set<string>()): Scene {
-  const scene: Scene = { camera: { scale: 1, offsetX: width / 2, offsetY: height / 2 }, width, height, moved, tapped, circle: null, dragging: null };
+export function newScene(
+  width: number,
+  height: number,
+  { layout = randomLayout(1), moved = new Map<string, Point>(), tapped = new Set<string>() }: { layout?: Layout; moved?: Map<string, Point>; tapped?: Set<string> } = {},
+): Scene {
+  const scene: Scene = { camera: centred(width, height), width, height, layout, moved, tapped, circle: null, dragging: null };
   return resize(scene, width, height);
+}
+
+/** World (0,0), the middle of the reset block, in the middle of the screen at scale 1. */
+export function centred(width: number, height: number): Camera {
+  return { scale: 1, offsetX: width / 2, offsetY: height / 2 };
+}
+
+/** Start over with a new layout: every move, mark and the circle are forgotten. */
+export function restart(scene: Scene, layout: Layout): void {
+  scene.layout = layout;
+  scene.moved.clear();
+  scene.tapped.clear();
+  scene.circle = null;
+  scene.dragging = null;
+  scene.camera = centred(scene.width, scene.height);
+  resize(scene, scene.width, scene.height);
 }
 
 /** Max zoom: two lattice cells fill the width. Min zoom: MIN_ZOOM_SPAN fills a third of it. */
@@ -58,7 +80,7 @@ export function latticeRect(scene: Scene, screen: Rect): Rect {
 /** The blocks to draw and hit-test: only those at least partly inside the border. The
  * dragged block is shown where the finger has it and drawn on top. */
 export function visibleBlocks(scene: Scene): Block[] {
-  const blocks = blocksIn(latticeRect(scene, borderOnScreen(scene)), scene.moved, scene.tapped);
+  const blocks = blocksIn(scene.layout, latticeRect(scene, borderOnScreen(scene)), scene);
   const drag = scene.dragging;
   const index = drag ? blocks.findIndex((b) => b.id === drag.id) : -1;
   if (drag && index >= 0) blocks.push({ ...blocks.splice(index, 1)[0]!, x: drag.x, y: drag.y });
