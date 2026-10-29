@@ -99,7 +99,7 @@ Object.assign(window, {
   },
 });
 
-function draw(scene: Scene): number {
+function draw(scene: Scene): void {
   const dpr = devicePixelRatio || 1;
   const { width, height, camera } = scene;
   if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr)) {
@@ -151,7 +151,6 @@ function draw(scene: Scene): number {
     ctx.lineWidth = 1;
     ctx.strokeRect(border.x + 0.5, border.y + 0.5, border.width - 1, border.height - 1);
   }
-  return blocks.length;
 }
 
 /** A circular arrow in the middle of the block. */
@@ -258,12 +257,23 @@ function restoreCamera(): void {
   }
 }
 
+/** "12s ago", "4m ago", "3h ago", "2d ago". */
+function ago(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  if (s < 60) return `${s}s ago`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
+}
+// The build id is the build time in base 36.
+const builtAt = parseInt(__BUILD_ID__, 36);
+
 // Frames are only drawn when something changes, so the counter shows 0 fps when idle.
+// Next to it: how long ago the running code was built.
 const frames: number[] = [];
-let shown = 0;
 function showFps(now: number): void {
   while (frames.length && frames[0]! <= now - 1000) frames.shift();
-  fps.textContent = `${frames.length} fps · ${shown} blocks`;
+  fps.textContent = `${frames.length} fps · ${ago(Date.now() - builtAt)}`;
 }
 setInterval(() => showFps(performance.now()), 500);
 
@@ -273,7 +283,7 @@ function redraw(): void {
   queued = true;
   requestAnimationFrame((now) => {
     queued = false;
-    shown = draw(scene);
+    draw(scene);
     frames.push(now);
     showFps(now);
   });

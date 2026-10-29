@@ -89,7 +89,7 @@ const browser = await chromium.launch();
   // Random layout with the UI blocks in the middle.
   await fresh();
   const text = await page.evaluate(() => document.body.innerText.trim());
-  check(/^\d+ fps · \d+ blocks$/.test(text), `only text is the fps counter ("${text}")`);
+  check(/^\d+ fps · \d+[smhd] ago$/.test(text), `only text is the fps counter with the build age ("${text}")`);
   for (const [x, what] of [[-0.85, "border toggle"], [0.15, "reset"], [1.15, "fullscreen"]]) {
     await expectColor(page, cell(x, 0.15), "reset", `the ${what} block is black, in the middle row`);
   }
