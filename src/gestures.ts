@@ -14,15 +14,16 @@ type Mode =
   | { kind: "pinching"; ids: [number, number]; from: [Point, Point]; start: Camera };
 
 /**
- * Turns pointer events (screen coordinates) into scene changes: tap moves the circle,
- * one finger pans the background or drags a square, two fingers pinch-zoom and pan.
- * `onMoved` runs when a dragged square is dropped, to store the moves.
+ * Turns pointer events (screen coordinates) into scene changes: a tap on the background
+ * moves the circle and a tap on a square marks it, one finger pans the background or drags
+ * a square, two fingers pinch-zoom and pan. `onChange` runs when a square was dropped or
+ * tapped, to store it.
  */
 export class Gestures {
   private mode: Mode = { kind: "idle" };
   private readonly pointers = new Map<number, Point>();
 
-  constructor(private readonly scene: Scene, private readonly onMoved: () => void = () => {}) {}
+  constructor(private readonly scene: Scene, private readonly onChange: () => void = () => {}) {}
 
   down(id: number, at: Point): void {
     this.pointers.set(id, at);
@@ -56,7 +57,13 @@ export class Gestures {
     if (!this.pointers.delete(id)) return;
     const mode = this.mode;
     if (mode.kind === "pressed" && mode.id === id) {
-      this.scene.circle = toWorld(this.scene.camera, mode.start);
+      if (mode.squareId === null) {
+        this.scene.circle = toWorld(this.scene.camera, mode.start);
+      } else {
+        // Tapping a square toggles its mark.
+        if (!this.scene.tapped.delete(mode.squareId)) this.scene.tapped.add(mode.squareId);
+        this.onChange();
+      }
     }
     this.end(id);
   }
@@ -95,7 +102,7 @@ export class Gestures {
   private drop(): void {
     if (this.scene.draggingId === null) return;
     this.scene.draggingId = null;
-    this.onMoved();
+    this.onChange();
   }
 
   private end(id: number): void {

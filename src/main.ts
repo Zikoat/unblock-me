@@ -9,42 +9,45 @@ const COLORS = {
   border: "#b9b6ad",
   square: "#4f6d8f",
   moved: "#3f9a7a",
+  tapped: "#8b5fbf",
   dragging: "#e0823d",
   circle: "#d64545",
 };
 const DOT_SPACING = 100; // world units
 const DOT_SIZE = 4;
-const STORAGE_KEY = "unblock-me:moved";
+const MOVED_KEY = "unblock-me:moved";
+const TAPPED_KEY = "unblock-me:tapped";
 
 const canvas = document.querySelector("canvas")!;
 const fps = document.querySelector<HTMLElement>("#fps")!;
 const ctx = canvas.getContext("2d")!;
 
-function loadMoved(): Map<string, Point> {
+function load<T>(key: string, fallback: T): T {
   try {
-    const saved: [string, number, number][] = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "[]");
-    return new Map(saved.map(([id, x, y]) => [id, { x, y }]));
+    return JSON.parse(localStorage.getItem(key) ?? "null") ?? fallback;
   } catch {
-    return new Map();
+    return fallback;
   }
 }
 
-function saveMoved(): void {
+function save(): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify([...scene.moved].map(([id, p]) => [id, p.x, p.y])));
+    localStorage.setItem(MOVED_KEY, JSON.stringify([...scene.moved].map(([id, p]) => [id, p.x, p.y])));
+    localStorage.setItem(TAPPED_KEY, JSON.stringify([...scene.tapped]));
   } catch {
-    // Private mode or full storage: moves just don't survive a reload.
+    // Private mode or full storage: changes just don't survive a reload.
   }
 }
 
-const scene = newScene(innerWidth, innerHeight, loadMoved());
-const gestures = new Gestures(scene, saveMoved);
+const moved = load<[string, number, number][]>(MOVED_KEY, []);
+const scene = newScene(innerWidth, innerHeight, new Map(moved.map(([id, x, y]) => [id, { x, y }])), new Set(load<string[]>(TAPPED_KEY, [])));
+const gestures = new Gestures(scene, save);
 // For tests and debugging in the console.
 Object.assign(window, {
   unblock: {
     scene,
     visibleSquares: () => visibleSquares(scene),
-    onScreen: () => squaresIn(worldRect(scene.camera, { x: 0, y: 0, width: scene.width, height: scene.height }), scene.moved),
+    onScreen: () => squaresIn(worldRect(scene.camera, { x: 0, y: 0, width: scene.width, height: scene.height }), scene.moved, scene.tapped),
   },
 });
 
@@ -72,7 +75,10 @@ function draw(scene: Scene): number {
 
   const squares = visibleSquares(scene);
   for (const square of squares) {
-    ctx.fillStyle = square.id === scene.draggingId ? COLORS.dragging : square.moved ? COLORS.moved : COLORS.square;
+    ctx.fillStyle = square.id === scene.draggingId ? COLORS.dragging
+      : square.tapped ? COLORS.tapped
+      : square.moved ? COLORS.moved
+      : COLORS.square;
     ctx.beginPath();
     ctx.roundRect(square.x, square.y, square.size, square.size, 8);
     ctx.fill();

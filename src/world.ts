@@ -1,6 +1,6 @@
 import type { Point, Rect } from "./camera";
 
-export type Square = { id: string; x: number; y: number; size: number; moved: boolean };
+export type Square = { id: string; x: number; y: number; size: number; moved: boolean; tapped: boolean };
 
 export const SQUARE_SIZE = 90;
 /** The world is cut into cells; each cell holds at most one square, placed inside it so
@@ -40,6 +40,7 @@ export function generated(cx: number, cy: number): Square | null {
     y: cy * CELL + next() * room,
     size: SQUARE_SIZE,
     moved: false,
+    tapped: false,
   };
 }
 
@@ -51,7 +52,7 @@ const intersects = (s: Square, r: Rect) =>
  * area are generated, plus the moved squares, which live wherever they were dropped.
  * Moved squares come last so they draw on top.
  */
-export function squaresIn(area: Rect, moved: ReadonlyMap<string, Point>): Square[] {
+export function squaresIn(area: Rect, moved: ReadonlyMap<string, Point>, tapped: ReadonlySet<string> = new Set()): Square[] {
   const found: Square[] = [];
   // A square can stick out of its cell's top-left corner by up to a square size.
   const x0 = Math.floor((area.x - SQUARE_SIZE) / CELL);
@@ -61,11 +62,11 @@ export function squaresIn(area: Rect, moved: ReadonlyMap<string, Point>): Square
   for (let cx = x0; cx <= x1; cx++) {
     for (let cy = y0; cy <= y1; cy++) {
       const square = generated(cx, cy);
-      if (square && !moved.has(square.id) && intersects(square, area)) found.push(square);
+      if (square && !moved.has(square.id) && intersects(square, area)) found.push({ ...square, tapped: tapped.has(square.id) });
     }
   }
   for (const [id, at] of moved) {
-    const square = { id, ...at, size: SQUARE_SIZE, moved: true };
+    const square = { id, ...at, size: SQUARE_SIZE, moved: true, tapped: tapped.has(id) };
     if (intersects(square, area)) found.push(square);
   }
   return found;

@@ -24,7 +24,7 @@ const url = `http://localhost:${server.address().port}/`;
 
 const COLORS = {
   background: [243, 242, 238], dot: [211, 209, 202], border: [185, 182, 173],
-  square: [79, 109, 143], moved: [63, 154, 122], dragging: [224, 130, 61], circle: [214, 69, 69],
+  square: [79, 109, 143], moved: [63, 154, 122], tapped: [139, 95, 191], dragging: [224, 130, 61], circle: [214, 69, 69],
 };
 let failures = 0;
 const check = (ok, what) => {
@@ -155,7 +155,29 @@ const browser = await chromium.launch();
   await expectColor(page, p.x, p.y, "circle", "second tap moves the circle");
   await expectColor(page, firstTap.x + 30, firstTap.y + 40, "background", "old circle spot is cleared");
 
+  // Tap a square: it turns purple, the circle stays where it was, and it is still purple
+  // after panning it out of the border and back, and after a reload.
+  cam = await camera(page);
+  const tapTarget = (await visible(page)).find((s) => { const c = centerOf(cam, s); return c.x > 60 && c.x < 340 && c.y > 160 && c.y < 640; });
+  const t = centerOf(cam, tapTarget);
+  const circleBefore = await page.evaluate(() => unblock.scene.circle);
+  await gesture([[t.x, t.y]], [[t.x + 3, t.y + 3]], { steps: 2 });
+  await expectColor(page, t.x, t.y, "tapped", "tapping a square turns it purple");
+  check(JSON.stringify(await page.evaluate(() => unblock.scene.circle)) === JSON.stringify(circleBefore), "tapping a square leaves the circle where it was");
+  await page.screenshot({ path: shots + "phone-3-tapped-square.png" });
+  await panBy(0, -350);
+  await panBy(0, -350);
+  await panBy(0, 350);
+  await panBy(0, 350);
+  await page.reload();
+  await frame(page);
+  cam = await camera(page);
+  await expectColor(page, centerOf(cam, tapTarget).x, centerOf(cam, tapTarget).y, "tapped", "the tapped colour survives panning away and a reload");
+  await gesture([[centerOf(cam, tapTarget).x, centerOf(cam, tapTarget).y]], [[centerOf(cam, tapTarget).x, centerOf(cam, tapTarget).y]], { steps: 1 });
+  await expectColor(page, centerOf(cam, tapTarget).x, centerOf(cam, tapTarget).y, "square", "a second tap turns it back");
+
   // Drag a square: orange while dragging, green once dropped and stored, still there after reload.
+  await page.evaluate(() => localStorage.clear());
   await fresh();
   cam = await camera(page);
   const square = (await visible(page)).find((s) => { const c = centerOf(cam, s); return c.x > 60 && c.x < 340 && c.y > 160 && c.y < 640; });
@@ -168,7 +190,7 @@ const browser = await chromium.launch();
       await frame(page);
       midDrag = await colorAt(page, x, y);
       fpsWhileDragging = await page.evaluate(() => document.querySelector("#fps").textContent);
-      await page.screenshot({ path: shots + "phone-3-dragging.png" });
+      await page.screenshot({ path: shots + "phone-4-dragging.png" });
     },
   });
   check(midDrag === "dragging", `square is orange while dragged (${midDrag})`);
@@ -176,7 +198,8 @@ const browser = await chromium.launch();
   await expectColor(page, target.x, target.y, "moved", "dropped square turns the stored colour");
   const stored = await page.evaluate(() => JSON.parse(localStorage.getItem("unblock-me:moved") ?? "[]"));
   check(stored.length === 1 && stored[0][0] === square.id, `move of ${square.id} is stored (${JSON.stringify(stored)})`);
-  await page.screenshot({ path: shots + "phone-4-dropped.png" });
+  check(await page.evaluate(() => unblock.scene.tapped.size === 0), "dragging a square does not mark it as tapped");
+  await page.screenshot({ path: shots + "phone-5-dropped.png" });
   await page.reload();
   await frame(page);
   await expectColor(page, target.x, target.y, "moved", "after a reload the moved square is restored, in the stored colour");

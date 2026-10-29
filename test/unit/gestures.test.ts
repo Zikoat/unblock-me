@@ -6,9 +6,9 @@ import { CELL, generated, SQUARE_SIZE, squareAt, squaresIn } from "../../src/wor
 
 const setup = () => {
   const scene = newScene(400, 800);
-  let drops = 0;
-  const g = new Gestures(scene, () => drops++);
-  return { scene, g, drops: () => drops };
+  let changes = 0;
+  const g = new Gestures(scene, () => changes++);
+  return { scene, g, changes: () => changes };
 };
 const center = (scene: Scene, s: { x: number; y: number }) =>
   toScreen(scene.camera, { x: s.x + SQUARE_SIZE / 2, y: s.y + SQUARE_SIZE / 2 });
@@ -99,7 +99,7 @@ describe("generated world", () => {
     const moved = new Map([[home.id, { x: 5000, y: 5000 }]]);
     expect(squaresIn({ x: home.x, y: home.y, width: 10, height: 10 }, moved)).toEqual([]);
     expect(squaresIn({ x: 5050, y: 5050, width: 10, height: 10 }, moved)).toEqual([
-      { id: home.id, x: 5000, y: 5000, size: SQUARE_SIZE, moved: true },
+      { id: home.id, x: 5000, y: 5000, size: SQUARE_SIZE, moved: true, tapped: false },
     ]);
   });
 });
@@ -157,14 +157,30 @@ describe("gestures", () => {
     expect(scene.circle).toEqual(toWorld(scene.camera, { x: 100, y: 400 }));
   });
 
-  test("a tap on a square moves the circle and does not move the square", () => {
+  test("a tap on a square marks it, and a second tap unmarks it; the circle stays", () => {
+    const { scene, g, changes } = setup();
+    const square = visibleSquares(scene)[0]!;
+    const at = center(scene, square);
+    g.down(1, at);
+    g.move(1, { x: at.x + 4, y: at.y + 3 });
+    g.up(1, { x: at.x + 4, y: at.y + 3 });
+    expect(scene.circle).toBeNull();
+    expect(scene.moved.size).toBe(0);
+    expect(visibleSquares(scene).find((s) => s.id === square.id)).toMatchObject({ tapped: true, x: square.x, y: square.y });
+    expect(changes()).toBe(1);
+    g.down(1, at);
+    g.up(1, at);
+    expect(visibleSquares(scene).find((s) => s.id === square.id)).toMatchObject({ tapped: false });
+  });
+
+  test("dragging a square is not a tap", () => {
     const { scene, g } = setup();
     const square = visibleSquares(scene)[0]!;
     const at = center(scene, square);
     g.down(1, at);
-    g.up(1, at);
-    expect(scene.circle).toEqual(toWorld(scene.camera, at));
-    expect(scene.moved.size).toBe(0);
+    g.move(1, { x: at.x + 30, y: at.y });
+    g.up(1, { x: at.x + 30, y: at.y });
+    expect(scene.tapped.size).toBe(0);
   });
 
   test("dragging the background pans and does not tap", () => {
@@ -180,7 +196,7 @@ describe("gestures", () => {
   });
 
   test("dragging a square stores its new place, marks it while dragging and draws it on top", () => {
-    const { scene, g, drops } = setup();
+    const { scene, g, changes } = setup();
     const square = visibleSquares(scene)[0]!;
     const at = center(scene, square);
     g.down(1, at);
@@ -190,7 +206,7 @@ describe("gestures", () => {
     g.move(1, { x: at.x + 100, y: at.y + 40 });
     g.up(1, { x: at.x + 100, y: at.y + 40 });
     expect(scene.draggingId).toBeNull();
-    expect(drops()).toBe(1);
+    expect(changes()).toBe(1);
     const moved = scene.moved.get(square.id)!;
     expect(moved.x).toBeCloseTo(square.x + 100 / scene.camera.scale);
     expect(moved.y).toBeCloseTo(square.y + 40 / scene.camera.scale);
@@ -228,15 +244,15 @@ describe("gestures", () => {
     expect(scene.circle).toBeNull();
   });
 
-  test("a second finger during a square drag drops the square and pinches", () => {
-    const { scene, g, drops } = setup();
+  test("a second finger during a square drag changes the square and pinches", () => {
+    const { scene, g, changes } = setup();
     const square = visibleSquares(scene)[0]!;
     const at = center(scene, square);
     g.down(1, at);
     g.move(1, { x: at.x + 40, y: at.y });
     g.down(2, { x: 300, y: 600 });
     expect(scene.draggingId).toBeNull();
-    expect(drops()).toBe(1);
+    expect(changes()).toBe(1);
     const dropped = { ...scene.moved.get(square.id)! };
     g.move(1, { x: at.x + 90, y: at.y });
     expect(scene.moved.get(square.id)).toEqual(dropped);

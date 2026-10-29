@@ -14,14 +14,16 @@ export type Scene = {
   height: number;
   /** Squares that were dragged: id -> top-left corner. Everything else is generated. */
   moved: Map<string, Point>;
+  /** Squares that were tapped. */
+  tapped: Set<string>;
   /** Where the last tap landed, in world coordinates. */
   circle: Point | null;
   /** The square being dragged, drawn in another colour. */
   draggingId: string | null;
 };
 
-export function newScene(width: number, height: number, moved = new Map<string, Point>()): Scene {
-  const scene: Scene = { camera: { scale: 1, offsetX: width / 2, offsetY: height / 2 }, width, height, moved, circle: null, draggingId: null };
+export function newScene(width: number, height: number, moved = new Map<string, Point>(), tapped = new Set<string>()): Scene {
+  const scene: Scene = { camera: { scale: 1, offsetX: width / 2, offsetY: height / 2 }, width, height, moved, tapped, circle: null, draggingId: null };
   return resize(scene, width, height);
 }
 
@@ -50,7 +52,7 @@ export function borderOnScreen(scene: Scene): Rect {
 
 /** The squares to draw and hit-test: only those at least partly inside the border. */
 export function visibleSquares(scene: Scene): Square[] {
-  const squares = squaresIn(worldRect(scene.camera, borderOnScreen(scene)), scene.moved);
+  const squares = squaresIn(worldRect(scene.camera, borderOnScreen(scene)), scene.moved, scene.tapped);
   // The dragged square draws on top of everything.
   const dragged = squares.findIndex((s) => s.id === scene.draggingId);
   if (dragged >= 0) squares.push(...squares.splice(dragged, 1));
