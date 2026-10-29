@@ -1,1 +1,0 @@
-Open work is in `TODO.md`. Run `bun run check` and `bun run e2e` before committing, and rebuild (`bun run build`) so the VM homepage serves the change. Keep the UI free of text apart from the debug fps counter.
