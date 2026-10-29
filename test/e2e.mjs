@@ -134,12 +134,12 @@ const browser = await chromium.launch();
   check(seedAfter !== seedBefore, `with a new seed (${seedBefore} -> ${seedAfter})`);
   check((await blockIds(page)) !== blocksBefore, "and different blocks");
   check(await page.evaluate(() => unblock.scene.moved.size === 0 && unblock.scene.tapped.size === 0 && unblock.scene.circle === null), "and no moves, marks or circle");
-  check(await page.evaluate(() => unblock.scene.border === true), "and the border back on");
+  check(await page.evaluate(() => unblock.scene.border === false), "and the border back off");
   check(await page.evaluate(() => unblock.scene.camera.offsetX === 170 && unblock.scene.camera.offsetY === 370 && unblock.scene.camera.scale === 1), "and the view centred");
   const stored = await page.evaluate(() => Object.fromEntries(Object.keys(localStorage).sort().map((k) => [k, localStorage.getItem(k)])));
   check(JSON.stringify(stored) === JSON.stringify({
     "someone-else": "keep me",
-    "unblock-me:border": "true",
+    "unblock-me:border": "false",
     "unblock-me:v4:moved": "[]",
     "unblock-me:v4:seed": String(seedAfter),
     "unblock-me:v4:tapped": "[]",
@@ -157,26 +157,29 @@ const browser = await chromium.launch();
   const camAfter = await page.evaluate(() => ({ ...unblock.scene.camera }));
   check(Math.abs(camAfter.offsetX - cam.offsetX - 60) < 0.5 && (await block(page, "reset")).x === 0, "dragging the reset block pans the board, the block stays");
 
-  // The border toggle: off culls to the screen edge and hides the border line.
+  // The border toggle: off by default, culling to the screen edge; on draws the smaller
+  // border and culls to it.
   await fresh();
   const borderLine = [40.5, 200]; // on the left edge of the 80% border
-  await expectColor(page, borderLine, "border", "the border line is drawn");
-  const withBorder = (await page.evaluate(() => unblock.visibleBlocks())).length;
+  check(await page.evaluate(() => unblock.scene.border === false), "the border is off by default");
+  check((await colorAt(page, ...borderLine)) !== "border", "so no border line is drawn");
   // The middle of the switch: the light track when on, dark when off.
-  await expectColor(page, cell(-0.5, 0.5), "background", "the switch in the toggle block is on (light track)");
+  await expectColor(page, cell(-0.5, 0.5), "reset", "and the switch in the toggle block is off (dark track)");
+  const withoutBorder = (await page.evaluate(() => unblock.visibleBlocks())).length;
   await tap(cell(-0.5, 0.5));
   await frame(page);
-  const withoutBorder = (await page.evaluate(() => unblock.visibleBlocks())).length;
-  check(await page.evaluate(() => unblock.scene.border === false), "tapping the border toggle turns the border off");
-  check(withoutBorder > withBorder, `more blocks are drawn without the border (${withBorder} -> ${withoutBorder})`);
-  check((await colorAt(page, ...borderLine)) !== "border", "and the border line is gone");
-  await expectColor(page, cell(-0.5, 0.5), "reset", "and the switch in the toggle block is off (dark track)");
-  await page.screenshot({ path: shots + "phone-2b-border-off.png" });
+  const withBorder = (await page.evaluate(() => unblock.visibleBlocks())).length;
+  check(await page.evaluate(() => unblock.scene.border === true), "tapping the border toggle turns the border on");
+  await expectColor(page, borderLine, "border", "and draws the border line");
+  check(withBorder < withoutBorder, `fewer blocks are drawn with the border (${withoutBorder} -> ${withBorder})`);
+  await expectColor(page, cell(-0.5, 0.5), "background", "and the switch in the toggle block is on (light track)");
+  await page.screenshot({ path: shots + "phone-2b-border-on.png" });
   await page.reload();
   await frame(page);
-  check(await page.evaluate(() => unblock.scene.border === false), "the border setting survives a reload");
+  check(await page.evaluate(() => unblock.scene.border === true), "the border setting survives a reload");
   await tap(cell(-0.5, 0.5));
-  await expectColor(page, borderLine, "border", "tapping it again brings the border back");
+  await frame(page);
+  check((await colorAt(page, ...borderLine)) !== "border", "tapping it again turns the border off");
 
   // The fullscreen block.
   await tap(cell(1.5, 0.5));

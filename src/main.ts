@@ -56,7 +56,7 @@ const scene = newScene(innerWidth, innerHeight, {
   layout: randomLayout(seed),
   moved: new Map(moved.map(([id, x, y]) => [id, { x, y }])),
   tapped: new Set(load<string[]>(TAPPED_KEY, [])),
-  border: load<boolean>(BORDER_KEY, true),
+  border: load<boolean>(BORDER_KEY, false),
 });
 restoreCamera();
 // A fresh start (first visit or after a reset) keeps its seed from the first load on.
