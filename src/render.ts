@@ -40,7 +40,7 @@ export type Sparkle = { x: number; y: number; dx: number; dy: number; born: numb
 const CUE_DELAY = 200, CUE_GROW = 450, CUE_HOLD = 700, CUE_FADE = 450;
 export const CUE_MS = CUE_DELAY + CUE_GROW + CUE_HOLD + CUE_FADE;
 /** How long a stuck block shakes, in ms. */
-export const SHAKE_MS = 360;
+export const SHAKE_MS = 220;
 /** How long a tap's ripple lasts, in ms. */
 export const RIPPLE_MS = 600;
 /** How long a new red block's heartbeat lasts, in ms. */
@@ -153,7 +153,49 @@ export function draw(
     ctx.fill();
   }
 
-  // The new red block's way to its target: a red trail growing from it along its lane.
+  // A throbbing block grows over its neighbours, so it goes on top.
+  if (throb) blocks.sort((a, b) => Number(a.id === throb.id) - Number(b.id === throb.id));
+  for (const shown of blocks) {
+    const block = shown.id === sliding?.id ? { ...shown, x: sliding.x, y: sliding.y } : shown;
+    // Red blocks stay red after their goal is reached, a darker red.
+    const isGoal = block.id === goal?.id;
+    const wasGoal = !isGoal && scene.done.some((g) => g.id === block.id);
+    ctx.fillStyle = block.ui ? COLORS.ui
+      : block.wall ? COLORS.wall
+      : block.id === scene.dragging?.id ? COLORS.dragging
+      : block.id === scene.stuckId ? COLORS.stuck
+      : isGoal ? COLORS.goal
+      : wasGoal ? COLORS.done
+      : block.moved ? COLORS.moved
+      : COLORS.block;
+    const beat = throb?.id === block.id ? throbScale((now - throb.born) / THROB_MS) : 1;
+    // A stuck block shakes along its axis, a few px each way, dying down.
+    const st = shake?.id === block.id ? (now - shake.born) / SHAKE_MS : 1;
+    const jolt = st >= 0 && st < 1 ? Math.sin(st * Math.PI * 6) * 4 * (1 - st) : 0;
+    if (beat !== 1 || jolt) {
+      ctx.save();
+      if (jolt) ctx.translate(block.w > block.h ? jolt : 0, block.w > block.h ? 0 : jolt);
+      const cx = (block.x + block.w / 2) * UNIT, cy = (block.y + block.h / 2) * UNIT;
+      ctx.translate(cx, cy);
+      ctx.scale(beat, beat);
+      ctx.translate(-cx, -cy);
+    }
+    ctx.beginPath();
+    ctx.roundRect(block.x * UNIT + GAP, block.y * UNIT + GAP, block.w * UNIT - 2 * GAP, block.h * UNIT - 2 * GAP, block.wall ? 3 : 8);
+    ctx.fill();
+    if (block.ui === "reset") resetIcon(ctx, block);
+    else if (block.ui === "border") borderIcon(ctx, block, scene.border);
+    else if (block.ui === "fullscreen") fullscreenIcon(ctx, block, fullscreen);
+    else if (block.ui === "reports") reportsIcon(ctx, block);
+    else if (block.ui === "upload") uploadIcon(ctx, block);
+    else if (block.ui === "fps") fpsIcon(ctx, block, fps);
+    else if (block.ui === "density") densityIcon(ctx, block, density);
+    else if (block.ui === "home") homeIcon(ctx, block);
+    if (beat !== 1 || jolt) ctx.restore();
+  }
+
+  // The new red block's way to its target: a red trail growing from it along its lane,
+  // over the blocks in the way.
   const cueing = cue && goal && cue.id === goal.id ? blocks.find((b) => b.id === goal.id) : null;
   if (cue && goal && cueing) {
     const t = now - cue.born - CUE_DELAY;
@@ -178,47 +220,6 @@ export function draw(
         ctx.fill();
       }
     }
-  }
-
-  // A throbbing block grows over its neighbours, so it goes on top.
-  if (throb) blocks.sort((a, b) => Number(a.id === throb.id) - Number(b.id === throb.id));
-  for (const shown of blocks) {
-    const block = shown.id === sliding?.id ? { ...shown, x: sliding.x, y: sliding.y } : shown;
-    // Red blocks stay red after their goal is reached, a darker red.
-    const isGoal = block.id === goal?.id;
-    const wasGoal = !isGoal && scene.done.some((g) => g.id === block.id);
-    ctx.fillStyle = block.ui ? COLORS.ui
-      : block.wall ? COLORS.wall
-      : block.id === scene.dragging?.id ? COLORS.dragging
-      : block.id === scene.stuckId ? COLORS.stuck
-      : isGoal ? COLORS.goal
-      : wasGoal ? COLORS.done
-      : block.moved ? COLORS.moved
-      : COLORS.block;
-    const beat = throb?.id === block.id ? throbScale((now - throb.born) / THROB_MS) : 1;
-    // A stuck block shakes along its axis, a few px each way, dying down.
-    const st = shake?.id === block.id ? (now - shake.born) / SHAKE_MS : 1;
-    const jolt = st >= 0 && st < 1 ? Math.sin(st * Math.PI * 6) * 5 * (1 - st) : 0;
-    if (beat !== 1 || jolt) {
-      ctx.save();
-      if (jolt) ctx.translate(block.w > block.h ? jolt : 0, block.w > block.h ? 0 : jolt);
-      const cx = (block.x + block.w / 2) * UNIT, cy = (block.y + block.h / 2) * UNIT;
-      ctx.translate(cx, cy);
-      ctx.scale(beat, beat);
-      ctx.translate(-cx, -cy);
-    }
-    ctx.beginPath();
-    ctx.roundRect(block.x * UNIT + GAP, block.y * UNIT + GAP, block.w * UNIT - 2 * GAP, block.h * UNIT - 2 * GAP, block.wall ? 3 : 8);
-    ctx.fill();
-    if (block.ui === "reset") resetIcon(ctx, block);
-    else if (block.ui === "border") borderIcon(ctx, block, scene.border);
-    else if (block.ui === "fullscreen") fullscreenIcon(ctx, block, fullscreen);
-    else if (block.ui === "reports") reportsIcon(ctx, block);
-    else if (block.ui === "upload") uploadIcon(ctx, block);
-    else if (block.ui === "fps") fpsIcon(ctx, block, fps);
-    else if (block.ui === "density") densityIcon(ctx, block, density);
-    else if (block.ui === "home") homeIcon(ctx, block);
-    if (beat !== 1 || jolt) ctx.restore();
   }
 
   // A reached target keeps a check, above whatever block is on it.
@@ -406,13 +407,30 @@ function sliderTrack(ctx: CanvasRenderingContext2D, block: Block, at: number): v
 }
 
 /** Three rising bars on a baseline: the reports. */
-/** "fps", bright while the counter shows. */
+/** "fps" with a switch under it, like the border toggle's. */
 function fpsIcon(ctx: CanvasRenderingContext2D, block: Block, on: boolean): void {
-  ctx.fillStyle = on ? COLORS.icon : "rgba(243, 242, 238, 0.35)";
-  ctx.font = `600 ${UNIT * 0.26}px ui-monospace, monospace`;
+  const x = block.x * UNIT;
+  const y = block.y * UNIT;
+  ctx.fillStyle = COLORS.icon;
+  ctx.font = `600 ${UNIT * 0.22}px ui-monospace, monospace`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText("fps", (block.x + 0.5) * UNIT, (block.y + 0.52) * UNIT);
+  ctx.fillText("fps", x + UNIT / 2, y + UNIT * 0.34);
+  const w = UNIT * 0.36;
+  const h = UNIT * 0.18;
+  const left = x + (UNIT - w) / 2;
+  const top = y + UNIT * 0.56;
+  ctx.beginPath();
+  ctx.roundRect(left, top, w, h, h / 2);
+  ctx.fillStyle = on ? COLORS.icon : COLORS.ui;
+  ctx.fill();
+  ctx.strokeStyle = COLORS.icon;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(on ? left + w - h / 2 : left + h / 2, top + h / 2, h / 2 - 2.5, 0, Math.PI * 2);
+  ctx.fillStyle = on ? COLORS.ui : COLORS.icon;
+  ctx.fill();
 }
 
 /** An arrow up out of a tray: send the play data. */

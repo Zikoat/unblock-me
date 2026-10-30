@@ -105,16 +105,17 @@ const browser = await chromium.launch();
 
   // Random layout with the UI blocks in the middle.
   await fresh();
+  check(await page.evaluate(() => document.body.innerText.trim() === "" && getComputedStyle(document.querySelector("#fps")).display === "none"), "no text on the page: the fps counter starts off");
+  // The fps toggle shows and hides the counter.
+  await tap(cell(3.5, 2.5));
+  await page.waitForTimeout(100);
   const text = await page.evaluate(() => document.body.innerText.trim());
-  check(/^\d+ fps · \d+[smhd] ago · 12 tries$/.test(text), `only text is the debug counter: fps, build age, density ("${text}")`);
-  // The fps toggle hides and shows the counter.
-  await tap(cell(3.5, 2.5));
-  check(await page.evaluate(() => getComputedStyle(document.querySelector("#fps")).display === "none" && getComputedStyle(document.querySelector("#spin")).display === "none"), "the fps toggle hides the counter");
-  await tap(cell(3.5, 2.5));
-  check(await page.evaluate(() => getComputedStyle(document.querySelector("#fps")).display !== "none"), "and shows it again");
+  check(/^\d+ fps · \d+[smhd] ago$/.test(text), `the fps toggle shows the debug counter: fps and build age ("${text}")`);
   await page.waitForTimeout(1200);
   const idleFps = await page.evaluate(() => parseInt(document.querySelector("#fps").textContent));
   check(idleFps > 10, `with nothing moving the counter still counts frames (${idleFps} fps)`);
+  await tap(cell(3.5, 2.5));
+  check(await page.evaluate(() => getComputedStyle(document.querySelector("#fps")).display === "none" && getComputedStyle(document.querySelector("#spin")).display === "none"), "and hides it again");
   for (const [x, y, what] of [[-0.85, 0.15, "home"], [0.15, 0.15, "reset"], [1.15, 0.15, "fullscreen"], [-0.85, 2.15, "density"], [0.15, 2.15, "border toggle"], [1.15, 2.15, "upload"], [2.15, 2.15, "reports"], [3.15, 2.15, "fps toggle"]]) {
     await expectColor(page, cell(x, y), "reset", `the ${what} block is black`);
   }
@@ -172,7 +173,7 @@ const browser = await chromium.launch();
   check(JSON.stringify(rest) === JSON.stringify({
     "someone-else": "keep me",
     "unblock-me:border": "false",
-    "unblock-me:fps": "true",
+    "unblock-me:fps": "false",
     "unblock-me:tries": "12",
     "unblock-me:v6:history": "[]",
     "unblock-me:v6:moved": "[]",

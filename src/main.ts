@@ -523,11 +523,11 @@ function ago(ms: number): string {
 // The build id is the build time in base 36.
 const builtAt = parseInt(__BUILD_ID__, 36);
 
-// The fps counter, with how long ago the running code was built and the density.
+// The fps counter, with how long ago the running code was built.
 const frames: number[] = [];
 function showFps(now: number): void {
   while (frames.length && frames[0]! <= now - 1000) frames.shift();
-  fps.textContent = `${frames.length} fps · ${ago(Date.now() - builtAt)} · ${tries} tries`;
+  fps.textContent = `${frames.length} fps · ${ago(Date.now() - builtAt)}`;
 }
 setInterval(() => showFps(performance.now()), 500);
 
@@ -573,7 +573,7 @@ function redraw(): void {
 // counter would drop to 0 whenever the board is still. The spinner keeps frames coming,
 // only while the counter shows.
 const spin = document.querySelector<HTMLElement>("#spin")!;
-let showingFps = load<boolean>(FPS_KEY, true);
+let showingFps = load<boolean>(FPS_KEY, false);
 let ticking = false;
 function tick(now: number): void {
   if (!showingFps) {
@@ -671,8 +671,11 @@ function goalTip(at: Point): string | null {
     lines.push(`${g.used === undefined ? "Moves so far" : "Moves used"}: ${used}`);
     if (!d) lines.unshift("Fewest moves: measuring…");
     else {
-      lines.unshift(`Fewest moves: ${d.moves ?? `at least ${d.atLeast} (solved in ${g.solution.length})`}`);
-      lines.push(`Difficulty: ${d.score.toFixed(1)}${d.moves === null ? "+" : ""} (about ${Math.round(d.branching)} choices a move)`);
+      // When the search stopped early, the fewest moves is between its lower bound and the
+      // goal's own solution.
+      const fewest = d.moves ?? (d.atLeast >= g.solution.length ? g.solution.length : `${d.atLeast} to ${g.solution.length}`);
+      lines.unshift(`Fewest moves: ${fewest}`);
+      lines.push(`Difficulty: ${d.score.toFixed(1)}${d.moves === null ? "+" : ""}`);
       const worth = starsFor(d.score, g.tries ?? tries);
       lines.push(g.used === undefined ? `Worth ${worth} of 10 stars` : `Stars: ${starsEarned(worth, d.moves ?? d.atLeast, g.used)} of ${worth} (worth ${worth} of 10)`);
     }

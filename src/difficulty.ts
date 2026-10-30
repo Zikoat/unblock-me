@@ -178,7 +178,10 @@ export function starsFor(score: number, tries: number): number {
   return Math.min(10, Math.max(0, Math.round((10 * (score - lo)) / (hi - lo))));
 }
 
-/** The stars earned: all of them in the fewest moves, fewer the more moves it took. */
+/** The stars earned: all of them in the fewest moves, fewer the more moves it took, but
+ * never more than one star lost per extra move (the kinder of "one star per extra move" and
+ * "worth x fewest / used"). */
 export function starsEarned(worth: number, fewest: number, used: number): number {
-  return Math.round(worth * Math.min(1, fewest / Math.max(used, 1)));
+  const extra = Math.max(0, used - fewest);
+  return Math.max(worth - extra, Math.round(worth * Math.min(1, fewest / Math.max(used, 1))), 0);
 }

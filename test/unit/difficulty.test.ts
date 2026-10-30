@@ -38,9 +38,11 @@ describe("stars", () => {
     expect(starsFor(80, 12)).toBeGreaterThan(starsFor(80, 15));
   });
 
-  test("all stars in the fewest moves, fewer with more moves", () => {
+  test("all stars in the fewest moves, fewer with more moves, at most one lost per extra move", () => {
     expect(starsEarned(8, 4, 4)).toBe(8);
+    expect(starsEarned(8, 4, 5)).toBe(7); // worth x fewest / used would give 6
     expect(starsEarned(8, 4, 8)).toBe(4);
+    expect(starsEarned(10, 14, 20)).toBe(7); // worth - extra would give 4
     expect(starsEarned(8, 4, 2)).toBe(8);
   });
 });
