@@ -232,6 +232,18 @@ describe("quick push: tapping a block", () => {
     expect(column.at("v").y).toBe(-3);
   });
 
+  test("the red block goes towards its target first, and stops on it", () => {
+    const { scene, g, at } = row(H(4, 0, "r"));
+    scene.goal = { id: "r", target: { x: 1, y: 0 }, solution: [] };
+    tap(g, cell(5, 0.5));
+    expect(at("r").x).toBe(1); // left, though right is free, and not on to the wall at 0
+    tap(g, cell(2, 0.5)); // on its target: the usual way, right
+    expect(at("r").x).toBe(6);
+    scene.goal = { id: "r", target: { x: 2, y: 3 }, solution: [] }; // not in its lane
+    tap(g, cell(7, 0.5));
+    expect(at("r").x).toBe(0);
+  });
+
   test("against the end it would go to, it goes all the way the other way", () => {
     const { g, at } = row(H(1, 0, "a"));
     tap(g, cell(2, 0.5));

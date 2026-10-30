@@ -99,10 +99,14 @@ export function quickPush(scene: Scene, block: Block): Point | null {
   const lo = s.before ? s.lo : Math.max(s.lo, pos - QUICK_PUSH_MAX);
   const hi = s.after ? s.hi : Math.min(s.hi, pos + QUICK_PUSH_MAX);
   if (lo === pos && hi === pos) return null;
-  // Up is towards lower y, right towards higher x.
-  const up = !isHorizontal(block);
-  const toLow = up ? lo !== pos : hi === pos;
-  const to = toLow ? lo : hi;
+  // The red block goes towards its target first, and stops on it. Others go up or right
+  // first (up is towards lower y, right towards higher x).
+  const goal = scene.goal?.id === block.id ? scene.goal : null;
+  const target = goal && (isHorizontal(block) ? (goal.target.y === block.y ? goal.target.x : null) : goal.target.x === block.x ? goal.target.y : null);
+  const preferLow = target !== null && target !== pos ? target < pos : !isHorizontal(block);
+  const toLow = preferLow ? lo !== pos : hi === pos;
+  let to = toLow ? lo : hi;
+  if (target !== null && (toLow ? target < pos && target >= to : target > pos && target <= to)) to = target;
   return isHorizontal(block) ? { x: to, y: block.y } : { x: block.x, y: to };
 }
 
