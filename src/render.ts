@@ -35,6 +35,8 @@ export type Sparkle = { x: number; y: number; dx: number; dy: number; born: numb
 
 /** `density` is the slider's position, 0..1. `sliding` draws one block somewhere between
  * cells while a tap's slide is animated. `now` times the sparkles. */
+/** How long a stuck block shakes, in ms. */
+export const SHAKE_MS = 360;
 /** How long a tap's ripple lasts, in ms. */
 export const RIPPLE_MS = 600;
 /** How long a new red block's heartbeat lasts, in ms. */
@@ -45,7 +47,7 @@ const throbScale = (t: number) => (t <= 0 || t >= 1 ? 1 : 1 + 0.15 * Math.sin(Ma
 export function draw(
   canvas: HTMLCanvasElement,
   scene: Scene,
-  { fullscreen, density, fps = true, sliding, sparkles = [], throb = null, ripple = null, now = 0 }: {
+  { fullscreen, density, fps = true, sliding, sparkles = [], throb = null, ripples = [], shake = null, now = 0 }: {
     fullscreen: boolean;
     density: number;
     /** Whether the fps counter is showing. */
@@ -55,8 +57,10 @@ export function draw(
     sparkles?: Sparkle[];
     /** A block that just became red, and when, for one heartbeat. */
     throb?: { id: string; born: number } | null;
-    /** When the last background tap's ripple started. */
-    ripple?: { born: number } | null;
+    /** Background taps' ripples: where (world units) and when each started. */
+    ripples?: { at: { x: number; y: number }; born: number }[];
+    /** A block that was tapped but cannot move, shaking since `born`. */
+    shake?: { id: string; born: number } | null;
     now?: number;
   },
 ): void {
@@ -159,8 +163,12 @@ export function draw(
       : block.moved ? COLORS.moved
       : COLORS.block;
     const beat = throb?.id === block.id ? throbScale((now - throb.born) / THROB_MS) : 1;
-    if (beat !== 1) {
+    // A stuck block shakes along its axis, a few px each way, dying down.
+    const st = shake?.id === block.id ? (now - shake.born) / SHAKE_MS : 1;
+    const jolt = st >= 0 && st < 1 ? Math.sin(st * Math.PI * 6) * 5 * (1 - st) : 0;
+    if (beat !== 1 || jolt) {
       ctx.save();
+      if (jolt) ctx.translate(block.w > block.h ? jolt : 0, block.w > block.h ? 0 : jolt);
       const cx = (block.x + block.w / 2) * UNIT, cy = (block.y + block.h / 2) * UNIT;
       ctx.translate(cx, cy);
       ctx.scale(beat, beat);
@@ -177,7 +185,7 @@ export function draw(
     else if (block.ui === "fps") fpsIcon(ctx, block, fps);
     else if (block.ui === "density") densityIcon(ctx, block, density);
     else if (block.ui === "home") homeIcon(ctx, block);
-    if (beat !== 1) ctx.restore();
+    if (beat !== 1 || jolt) ctx.restore();
   }
 
   // A reached target keeps a check, above whatever block is on it.
@@ -190,14 +198,14 @@ export function draw(
 
   // A tap on the background: one small yellow ring spreading out and fading, like a drop
   // landing in water. Nothing stays.
-  if (ripple && scene.circle) {
+  for (const ripple of ripples) {
     const t = (now - ripple.born) / RIPPLE_MS;
     if (t >= 0 && t < 1) {
       const spread = 1 - Math.pow(1 - t, 3);
       ctx.strokeStyle = `rgba(242, 182, 50, ${(1 - t) * 0.9})`;
       ctx.lineWidth = (3 - 2 * spread) / scene.camera.scale;
       ctx.beginPath();
-      ctx.arc(scene.circle.x, scene.circle.y, (4 + 26 * spread) / scene.camera.scale, 0, Math.PI * 2);
+      ctx.arc(ripple.at.x, ripple.at.y, (4 + 26 * spread) / scene.camera.scale, 0, Math.PI * 2);
       ctx.stroke();
     }
   }

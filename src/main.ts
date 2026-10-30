@@ -6,7 +6,7 @@ import { viewCentre } from "./goal";
 import type { GoalRequest } from "./goal-worker";
 import { Gestures } from "./gestures";
 import { fixedLayout, MAX_TRIES, MIN_TRIES, randomLayout, TRIES, UNIT, type Placed, type Ui } from "./layout";
-import { draw, RIPPLE_MS, THROB_MS, goalBand, redArrow, uiArrow, type Sparkle } from "./render";
+import { draw, RIPPLE_MS, SHAKE_MS, THROB_MS, goalBand, redArrow, uiArrow, type Sparkle } from "./render";
 import { ease, slideDuration } from "./slide";
 import { blockAt, blocksIn, slideRange, type Move } from "./rules";
 import { borderOnScreen, goalSolved, latticeRect, newScene, relayout, resize, restart, undo, visibleBlocks, whereIs } from "./scene";
@@ -296,7 +296,10 @@ function sliding(now: number): { id: string; x: number; y: number; from: Point; 
 // target keeps a check.
 let sparkles: Sparkle[] = [];
 let throb: { id: string; born: number } | null = null;
-let ripple: { born: number } | null = null;
+// Each tap's ripple runs to its end, however many taps come in the meantime.
+let ripples: { at: Point; born: number }[] = [];
+// A tapped block that cannot move shakes.
+let shake: { id: string; born: number } | null = null;
 function reachGoal(now: number): void {
   const goal = scene.goal;
   if (!goal || !goalSolved(scene) || animation?.move.id === goal.id) return;
@@ -339,6 +342,10 @@ const gestures = new Gestures(scene, {
     reachGoal(performance.now()); // a drag lands at once; a tap's slide reaches it at its end
   },
   onPush: animate,
+  onStuck: (id) => {
+    shake = { id, born: -1 };
+    redraw();
+  },
   onUi: (ui) => {
     if (ui === "reset") {
       forgetEverything();
@@ -533,8 +540,10 @@ function redraw(): void {
     const moving = sliding(now);
     if (throb && throb.born < 0) throb.born = now;
     if (throb && now > throb.born + THROB_MS) throb = null;
-    if (ripple && ripple.born < 0) ripple.born = now;
-    if (ripple && now > ripple.born + RIPPLE_MS) ripple = null;
+    for (const r of ripples) if (r.born < 0) r.born = now;
+    ripples = ripples.filter((r) => now <= r.born + RIPPLE_MS);
+    if (shake && shake.born < 0) shake.born = now;
+    if (shake && now > shake.born + SHAKE_MS) shake = null;
     draw(canvas, scene, {
       fullscreen: document.fullscreenElement !== null,
       density: slider?.ui === "density" ? slider.at : (tries - MIN_TRIES) / (MAX_TRIES - MIN_TRIES),
@@ -542,14 +551,15 @@ function redraw(): void {
       sliding: moving,
       sparkles,
       throb,
-      ripple,
+      ripples,
+      shake,
       now,
     });
     sparkles = sparkles.filter((s) => now < s.born + s.life);
     undoButton.disabled = scene.history.length === 0;
     const debug = (window as unknown as { unblock: { frames: { t: number; x: number; y: number }[] | null } }).unblock;
     if (debug.frames && moving) debug.frames.push({ t: now, x: moving.x, y: moving.y });
-    if (animation || sparkles.length || flight || throb || ripple) redraw();
+    if (animation || sparkles.length || flight || throb || ripples.length || shake) redraw();
   });
 }
 
@@ -745,7 +755,7 @@ canvas.addEventListener("pointerup", (e) => {
   }
   const tapped = scene.circle;
   gestures.up(e.pointerId, point(e));
-  if (scene.circle !== tapped) ripple = { born: -1 }; // a tap on the background
+  if (scene.circle && scene.circle !== tapped) ripples.push({ at: scene.circle, born: -1 }); // a tap on the background
   redraw();
 });
 canvas.addEventListener("pointercancel", (e) => {

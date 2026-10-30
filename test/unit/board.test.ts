@@ -244,6 +244,16 @@ describe("quick push: tapping a block", () => {
     expect(at("r").x).toBe(0);
   });
 
+  test("a block that cannot move either way is not moved, and is reported to shake", () => {
+    const stuck: string[] = [];
+    const scene = newScene(1200, 1200, { layout: fixedLayout([W(-1, 0), H(0, 0, "a"), W(2, 0)]) });
+    scene.camera = { scale: 1, offsetX: 600, offsetY: 600 };
+    const g = new Gestures(scene, { onStuck: (id) => stuck.push(id) });
+    tap(g, cell(1, 0.5));
+    expect(stuck).toEqual(["a"]);
+    expect(scene.history).toEqual([]);
+  });
+
   test("against the end it would go to, it goes all the way the other way", () => {
     const { g, at } = row(H(1, 0, "a"));
     tap(g, cell(2, 0.5));

@@ -41,19 +41,25 @@ export class Gestures {
       onUi = () => {},
       onAdjust = () => {},
       onPush = () => {},
+      onStuck = () => {},
     }: {
       onChange?: () => void;
       onUi?: (ui: Ui) => void;
       onAdjust?: (ui: Ui, dx: number, done: boolean) => void;
       /** A tap pushed a block (to animate it). */
       onPush?: (move: Move) => void;
+      /** A tap on a block that cannot move either way (to shake it). */
+      onStuck?: (id: string) => void;
     } = {},
   ) {
     this.onChange = onChange;
     this.onUi = onUi;
     this.onAdjust = onAdjust;
     this.onPush = onPush;
+    this.onStuck = onStuck;
   }
+
+  private readonly onStuck: (id: string) => void;
 
   private readonly onPush: (move: Move) => void;
 
@@ -111,6 +117,8 @@ export class Gestures {
           record(this.scene, move);
           this.onPush(move);
           this.onChange();
+        } else {
+          this.onStuck(mode.block.id);
         }
       }
     }
