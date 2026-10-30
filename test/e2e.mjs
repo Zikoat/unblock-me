@@ -155,7 +155,7 @@ const browser = await chromium.launch();
     "someone-else": "keep me",
     "unblock-me:border": "false",
     "unblock-me:ease": '"Ease out cubic"',
-    "unblock-me:speed": "1",
+    "unblock-me:speed": String(0.25 * 16 ** 0.65), // the knob at 65%
     "unblock-me:tap-mode": '"topright"',
     "unblock-me:tries": "7",
     "unblock-me:v5:history": "[]",
@@ -308,11 +308,15 @@ const browser = await chromium.launch();
   check((await block(page, "a")).x === -1, "against the wall, a tap sends it all the way back");
   await page.waitForTimeout(450);
   // The slide is animated: just after the tap the block is drawn between its old and new cells.
+  await page.evaluate(() => (unblock.frames = []));
   await tap(cell(0, 2.5)); // right again, animated
   await page.waitForTimeout(60);
   const midway = await colorAt(page, ...cell(0.5, 2.5)); // a cell it passes through
   await page.waitForTimeout(500);
   check(midway === "moved" && (await colorAt(page, ...cell(0.5, 2.5))) === "background", `a tapped block glides over the cells between (${midway} on the way, gone after)`);
+  const slideXs = await page.evaluate(() => { const f = unblock.frames.map((f) => f.x); unblock.frames = null; return f; });
+  check(slideXs[0] === -1 && slideXs.every((x, i) => i === 0 || x >= slideXs[i - 1]) && slideXs.at(-1) <= 1,
+    `the slide starts drawing at its start cell and only moves forward (${slideXs.map((x) => x.toFixed(2)).join(" ")})`);
   await tap(cell(0.5, -0.5)); // undo that extra push
   await page.waitForTimeout(450);
 
@@ -367,8 +371,15 @@ const browser = await chromium.launch();
   const edge = [];
   for (let y = 2.1; y < 2.9; y += 0.1) edge.push(await colorAt(page, cell(1, 0)[0] + 3, cell(0, y)[1]));
   check(edge.filter((c) => c === "goal").length >= 3 && edge.includes("background"), `the target has a dashed red outline (${edge.join(" ")})`);
+  await page.evaluate(() => (unblock.frames = []));
   await tap(cell(-2, 2.5));
   check((await block(page, "r")).x === 1, "a tap pushes the red block onto its target");
+  // Mid-slide, where the red block is drawn right now there is no check yet.
+  const drawnAt = await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => r(unblock.frames.at(-1)?.x))));
+  const midSlide = await colorAt(page, cell(drawnAt + 1, 2.5)[0] - 2.5, cell(0, 2.5)[1] + 6);
+  check(drawnAt !== undefined && drawnAt < 1 && midSlide === "goal", `no check while it is still sliding (drawn at x ${drawnAt?.toFixed(2)}: ${midSlide})`);
+  await page.evaluate(() => (unblock.frames = null));
+  await page.waitForTimeout(450);
   // The check's corner point, a little left of and below the block's middle.
   await expectColor(page, [cell(2, 2.5)[0] - 2.5, cell(2, 2.5)[1] + 6], "background", "and a white check shows it is solved");
   await page.screenshot({ path: shots + "phone-7-solved.png" });

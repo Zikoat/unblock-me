@@ -66,8 +66,8 @@ function save(): void {
 
 const seed = load<number>(SEED_KEY, Math.floor(Math.random() * 2 ** 32));
 let ease = easeNamed(load<string>(EASE_KEY, DEFAULT_EASE));
-/** How fast slides play: 1 is normal, see speedAt. */
-let speed = load<number>(SPEED_KEY, 1);
+/** How fast slides play: 1 is normal, see speedAt. The default, about 1.5x, felt best. */
+let speed = load<number>(SPEED_KEY, speedAt(0.65));
 let tries = load<number>(TRIES_KEY, TRIES);
 const moved = load<[string, number, number][]>(MOVED_KEY, []);
 const storedGoal = load<{ seed: number; tries: number; goal: Goal } | null>(GOAL_KEY, null);
@@ -116,14 +116,18 @@ function slide(ui: Ui, from: number, dx: number): number {
 }
 
 // A tapped (or undone) block glides to its new cell; the move itself is already made.
-let animation: { move: Move; start: number; duration: number } | null = null;
+// The clock starts at the first frame that draws it: started at the tap, the first frame
+// came a frame or two late and the block jumped ~20% of the way (measured with
+// test/experiments/slide-frames.mjs).
+let animation: { move: Move; start: number | null; duration: number } | null = null;
 function animate(move: Move): void {
   const cells = Math.abs(move.to.x - move.from.x) + Math.abs(move.to.y - move.from.y);
-  animation = { move, start: performance.now(), duration: slideDuration(cells) / speed };
+  animation = { move, start: null, duration: slideDuration(cells) / speed };
 }
 function sliding(now: number): { id: string; x: number; y: number } | null {
   if (!animation) return null;
-  const t = Math.min(1, (now - animation.start) / animation.duration);
+  animation.start ??= now;
+  const t = Math.min(1, Math.max(0, (now - animation.start) / animation.duration));
   if (t >= 1) {
     animation = null;
     return null;
@@ -265,6 +269,8 @@ Object.assign(window, {
     onScreen: () => blocksIn(scene.layout, latticeRect(scene, { x: 0, y: 0, width: scene.width, height: scene.height }), scene),
     slideRange: (id: string) => slideRange(scene.layout, visibleBlocks(scene).find((b) => b.id === id)!, scene),
     redraw: () => redraw(),
+    /** Frames drawn while recording: when, and where the sliding block was drawn. */
+    frames: null as { t: number; x: number; y: number }[] | null,
     /** Resolves once a goal requested by the app has arrived. */
     goalReady: () => (scene.goal ? Promise.resolve() : new Promise<void>((resolve) => goalWaiters.push(resolve))),
     /** Replace the random layout with exactly these blocks, and optionally a goal (for tests). */
@@ -342,12 +348,15 @@ function redraw(): void {
   queued = true;
   requestAnimationFrame((now) => {
     queued = false;
+    const moving = sliding(now);
     draw(canvas, scene, {
       fullscreen: document.fullscreenElement !== null,
       density: slider?.ui === "density" ? slider.at : (tries - MIN_TRIES) / (MAX_TRIES - MIN_TRIES),
       ease: { f: ease.f, speed: slider?.ui === "ease" ? slider.at : positionOf(speed) },
-      sliding: sliding(now),
+      sliding: moving,
     });
+    const debug = (window as unknown as { unblock: { frames: { t: number; x: number; y: number }[] | null } }).unblock;
+    if (debug.frames && moving) debug.frames.push({ t: now, x: moving.x, y: moving.y });
     if (animation) redraw();
     frames.push(now);
     showFps(now);

@@ -56,7 +56,8 @@ export function draw(
   }
 
   const goal = scene.goal;
-  const solved = goalSolved(scene);
+  // Solved only once the red block has landed, not while it is still sliding there.
+  const solved = goalSolved(scene) && sliding?.id !== goal?.id;
   if (goal) {
     // The target: the red block's outline where it has to go, filled in once it is there.
     const red = scene.layout.byId(goal.id)!;
