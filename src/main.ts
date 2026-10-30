@@ -185,7 +185,7 @@ function requestGoal(near: Point = viewCentre(scene.camera, scene.width, scene.h
     showGoal(ahead.ready.goal);
     return;
   }
-  const request: GoalRequest = { job: ++job, seed, tries, placed, near, moved: [...scene.moved], effort: EFFORT, exclude, avoid: targetsOf(scene.done) };
+  const request: GoalRequest = { job: ++job, seed, tries, placed, near, moved: [...scene.moved], effort: EFFORT, level: 0, exclude, avoid: targetsOf(scene.done) };
   worker.postMessage(request);
 }
 type Reply = { job: number; goal: Goal | null } | { job: number; of: { id: string; target: Point }; difficulty: Difficulty };
@@ -217,7 +217,7 @@ function showGoal(goal: Goal | null): void {
   goalWaiters = [];
 };
 
-// The next goal is made ahead, on its own worker, whenever the red block is one move from its
+// The next goal is made ahead (trying harder: level 2), on its own worker, whenever the red block is one move from its
 // target: on the board as it will be when it lands there. If the board is exactly that when
 // it lands, the next goal shows at once.
 const ahead = {
@@ -250,7 +250,7 @@ function lookAhead(): void {
   const key = boardKey(moved, exclude, goal.target);
   if (key === ahead.asked || ahead.ready?.key === key) return;
   ahead.asked = key;
-  const request: GoalRequest = { job: ++ahead.job, seed, tries, placed, near: goal.target, moved: [...moved], effort: EFFORT, exclude, avoid: targetsOf([...scene.done, goal]) };
+  const request: GoalRequest = { job: ++ahead.job, seed, tries, placed, near: goal.target, moved: [...moved], effort: EFFORT, level: 2, exclude, avoid: targetsOf([...scene.done, goal]) };
   ahead.worker.postMessage(request);
 }
 ahead.worker.onmessage = (event: MessageEvent<Reply>) => {

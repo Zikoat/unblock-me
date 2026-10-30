@@ -29,13 +29,13 @@ describe("difficulty", () => {
 
 describe("stars", () => {
   test("a goal's worth follows the usual range at its density", () => {
-    expect(starsFor(12.8, 7)).toBe(0);
-    expect(starsFor(31.4, 7)).toBe(10);
-    expect(starsFor(22, 7)).toBe(5);
-    expect(starsFor(100, 30)).toBe(10);
+    expect(starsFor(52, 7)).toBe(0);
+    expect(starsFor(69, 7)).toBe(10);
+    expect(starsFor(60.5, 7)).toBe(5);
+    expect(starsFor(120, 30)).toBe(10);
     expect(starsFor(0, 1)).toBe(0);
     // Between measured densities it blends the two.
-    expect(starsFor(30, 12)).toBeGreaterThan(starsFor(30, 15));
+    expect(starsFor(80, 12)).toBeGreaterThan(starsFor(80, 15));
   });
 
   test("all stars in the fewest moves, fewer with more moves", () => {

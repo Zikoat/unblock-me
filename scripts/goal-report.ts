@@ -5,15 +5,16 @@
 //   scripts/capped.sh 1500 900 bun scripts/goal-report.ts [boards per density]
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { difficulty, starsEarned, starsFor } from "../src/difficulty";
+import { starsEarned, starsFor } from "../src/difficulty";
 import type { Goal } from "../src/goal";
-import { makeGoalFast } from "../src/goal-fast";
+import { makeGoalHard } from "../src/goal-search";
 import { randomLayout, TRIES } from "../src/layout";
 import { reportPage } from "./report-page";
 import { reportsDir, writeReportsIndex } from "./reports-index";
 
 const SWEEP = [1, 2, 4, 7, 10, 13, 15, 20, 25, 30];
-const BOARDS = Number(process.argv[2] ?? 30);
+const BOARDS = Number(process.argv[2] ?? 20);
+const LEVEL = 2; // goals made ahead, as the game mostly plays them
 
 type Sample = { score: number; moves: number; capped: boolean; branching: number; distance: number; solution: number; makeMs: number; measureMs: number; stars: number };
 const METRICS = [
@@ -23,8 +24,7 @@ const METRICS = [
   { key: "distance", name: "Distance", sub: "Cells from the red block's start to its target", digits: 0 },
   { key: "solution", name: "Moves in the made solution", sub: "The generator's own solution, an upper bound on fewest moves", digits: 0 },
   { key: "stars", name: "Stars it is worth", sub: "0 to 10, from its difficulty within its density's usual range", digits: 0 },
-  { key: "measureMs", name: "Time to measure difficulty (ms)", sub: "On this VM; phones are several times slower", digits: 0 },
-  { key: "makeMs", name: "Time to make the goal (ms)", sub: "On this VM", digits: 0 },
+  { key: "makeMs", name: "Time to make and measure the goal (ms)", sub: "Level 2, as goals made ahead are; on this VM, phones are several times slower", digits: 0 },
 ] as const;
 type Key = (typeof METRICS)[number]["key"];
 
@@ -40,12 +40,11 @@ const rows = SWEEP.map((tries) => {
     const layout = randomLayout(seed * 7919, { tries });
     const near = { x: (seed % 5) * 7, y: 6 + (seed % 3) * 5 };
     let t = performance.now();
-    const goal = makeGoalFast(layout, near, { effort: 12, perCell: 6 }, { prune: true, lookahead: true, goalBudget: 50_000 });
+    const goal = makeGoalHard(layout, near, { effort: 12 }, LEVEL);
     const makeMs = performance.now() - t;
     if (!goal) continue;
-    t = performance.now();
-    const d = difficulty(layout, new Map(), goal);
-    const measureMs = performance.now() - t;
+    const d = goal.difficulty; // measured while choosing it
+    const measureMs = 0;
     const red = layout.byId(goal.id)!;
     samples.push({
       score: d.score, moves: d.moves ?? d.atLeast, capped: d.moves === null, branching: d.branching,
@@ -107,7 +106,7 @@ const html = reportPage({
   tr.app td { font-weight: 600; }`,
   body: `
   <h1>Goal report</h1>
-  <p class="lede">Goals made the way the game makes them, ${BOARDS} random boards per density (tries per chunk; the game uses
+  <p class="lede">Goals made the way the game makes them ahead of time (level ${LEVEL}), ${BOARDS} random boards per density (tries per chunk; the game uses
   ${TRIES} now). Each bar shows the middle half of the goals (25th to 75th percentile), the line through it the median, and the
   whiskers the 5th to 95th percentile.${played.length ? ` Orange dots are your ${played.length} reached goals (from ${playedFrom}).` : " No play data has been sent yet; send it with the upload block in the game."}
   Made ${made.toISOString().slice(0, 16).replace("T", " ")} UTC.</p>

@@ -153,17 +153,18 @@ export function shortest(win: Window, r: number, want: number, limit: number): D
   return { moves: null, atLeast: Infinity, searched: expanded, branching: 0, score: 0 };
 }
 
-/** The usual difficulty at each density (tries): the 5th and 95th percentile over 30 boards
- * each, from test/experiments/difficulty-range.ts. Re-measure when the measure changes. */
+/** The usual difficulty at each density (tries): the 5th and 95th percentile over 20 boards
+ * each of goals made ahead (makeGoalHard level 2), from test/experiments/difficulty-range.ts.
+ * Re-measure when the measure or the goal search changes. */
 const RANGE: [tries: number, low: number, high: number][] = [
-  [1, 3.7, 9.0],
-  [4, 3.8, 15.5],
-  [7, 12.8, 31.4],
-  [10, 18.1, 43.3],
-  [15, 18.1, 46.4],
-  [20, 30.2, 64.2],
-  [25, 33.2, 63.9],
-  [30, 39.8, 67.9],
+  [1, 9.0, 22.6],
+  [4, 37.5, 56.2],
+  [7, 52.0, 69.0],
+  [10, 58.3, 99.7],
+  [15, 67.5, 110.9],
+  [20, 73.8, 109.4],
+  [25, 75.0, 108.5],
+  [30, 75.3, 114.6],
 ];
 
 /** How many stars (0..10) a goal is worth: its difficulty within the usual range for its
