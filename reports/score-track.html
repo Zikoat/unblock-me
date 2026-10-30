@@ -155,16 +155,16 @@ function track(g, x0, y0, w, used, undone) {
   el("rect", { x: x0, y: y0, width: fill, height: h, fill: C.used }, bar);
   // Gray stripes from the medal to the 5th star: beating the game's solution.
   el("rect", { x: x0 + (FEWEST - 1) * w, y: y0, width: w, height: h, fill: "url(#hatch)" }, bar);
-  const r = h * 0.36, cy = y0 + h / 2;
+  const r = h * 0.25, cy = y0 + h / 2;
   // The medal last: it sits on top where it meets the 5th star.
   for (const m of [...MARKS].reverse()) {
     const cx = x0 + m.at * w, lost = used > m.at;
     el("line", { x1: cx, x2: cx, y1: y0, y2: y0 + h, stroke: C.cut, "stroke-width": Math.max(1, w * 0.14) }, bar);
-    if (m.kind === "star") icon(g, STARS, pick.star, cx, cy, r * 2, lost ? "lost" : "kept");
-    else icon(g, MEDALS, pick.medal, cx, cy, r * 2, undone ? "undone" : lost ? "lost" : "kept");
+    if (m.kind === "star") icon(g, STARS, pick.star, cx, cy, r * 2.4, lost ? "lost" : "kept");
+    else icon(g, MEDALS, pick.medal, cx, cy, r * 2.4, undone ? "undone" : lost ? "lost" : "kept");
   }
   // The last star, outside the track: it is never lost.
-  icon(g, STARS, pick.star, x0 + width + r * 1.6, cy, r * 2, "kept");
+  icon(g, STARS, pick.star, x0 + width + r * 2, cy, r * 2.4, "kept");
   return width;
 }
 
