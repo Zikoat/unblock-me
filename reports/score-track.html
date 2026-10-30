@@ -144,7 +144,7 @@ const OPTIONS = {
     none: { name: "None", color: "none" },
   } },
 };
-const pick = { medal: "rosette", star: "drawn", zone: "white", line: "a45", starLine: "orange" };
+const pick = { medal: "rosette", star: "drawn", zone: "gray", line: "a25", starLine: "orange" };
 const opt = (k) => OPTIONS[k].items[pick[k]];
 
 /** An icon in one state: kept (colour), lost (gray) or undone (gray and faint). */
@@ -166,6 +166,9 @@ function track(g, x0, y0, w, used, undone) {
   if (opt("zone").color) el("rect", { x: x0, y: y0, width: LOW * w, height: h, fill: opt("zone").color }, bar);
   el("rect", { x: x0, y: y0, width: fill, height: h, fill: C.used, "fill-opacity": 0.78 }, bar); // the zone shows through
   const r = h * 0.25, cy = y0 + h / 2;
+  // The move count, on the left of the track (before the medal).
+  const count = el("text", { x: x0 + h * 0.35, y: cy, "dominant-baseline": "central", "font-size": h * 0.62, "font-weight": 700, "font-family": "system-ui, sans-serif", fill: used > 0 ? "#ffffff" : "#6b6e73" }, g);
+  count.textContent = used;
   // The medal last: it sits on top where it meets the 5th star.
   for (const m of [...MARKS].reverse()) {
     const cx = x0 + m.at * w, lost = used > m.at;
