@@ -21,8 +21,19 @@ export const COLORS = {
 const DOT_SIZE = 4; // world units, one dot per lattice corner
 const GAP = 3; // world units between a block's edge and its lattice cells
 
-/** `density` is the slider's position, 0..1. */
-export function draw(canvas: HTMLCanvasElement, scene: Scene, { fullscreen, density }: { fullscreen: boolean; density: number }): void {
+/** `density` is the slider's position, 0..1. `sliding` draws one block somewhere between
+ * cells while a tap's slide is animated. */
+export function draw(
+  canvas: HTMLCanvasElement,
+  scene: Scene,
+  { fullscreen, density, ease, sliding }: {
+    fullscreen: boolean;
+    density: number;
+    /** The current ease and the speed slider's position, 0..1. */
+    ease: { f: (t: number) => number; speed: number };
+    sliding?: { id: string; x: number; y: number } | null;
+  },
+): void {
   const ctx = canvas.getContext("2d")!;
   const dpr = devicePixelRatio || 1;
   const { width, height, camera } = scene;
@@ -62,7 +73,8 @@ export function draw(canvas: HTMLCanvasElement, scene: Scene, { fullscreen, dens
     ctx.setLineDash([]);
   }
 
-  for (const block of visibleBlocks(scene)) {
+  for (const shown of visibleBlocks(scene)) {
+    const block = shown.id === sliding?.id ? { ...shown, x: sliding.x, y: sliding.y } : shown;
     const isGoal = block.id === goal?.id;
     ctx.fillStyle = block.ui ? COLORS.ui
       : block.wall ? COLORS.wall
@@ -81,6 +93,7 @@ export function draw(canvas: HTMLCanvasElement, scene: Scene, { fullscreen, dens
     else if (block.ui === "home") homeIcon(ctx, block);
     else if (block.ui === "undo") undoIcon(ctx, block);
     else if (block.ui === "tapmode") tapModeIcon(ctx, block, scene.tapMode === "topright");
+    else if (block.ui === "ease") easeIcon(ctx, block, ease.f, ease.speed);
     if (isGoal && solved) checkIcon(ctx, block);
   }
 
@@ -194,20 +207,7 @@ function densityIcon(ctx: CanvasRenderingContext2D, block: Block, density: numbe
       ctx.stroke();
     }
   }
-  const left = x + UNIT * 0.24;
-  const right = x + UNIT * 0.76;
-  const mid = y + UNIT * 0.7;
-  ctx.strokeStyle = COLORS.icon;
-  ctx.lineWidth = 2;
-  ctx.lineCap = "round";
-  ctx.beginPath();
-  ctx.moveTo(left, mid);
-  ctx.lineTo(right, mid);
-  ctx.stroke();
-  ctx.fillStyle = COLORS.icon;
-  ctx.beginPath();
-  ctx.arc(left + (right - left) * density, mid, UNIT * 0.065, 0, Math.PI * 2);
-  ctx.fill();
+  sliderTrack(ctx, block, density);
 }
 
 /** A house: the homepage. */
@@ -299,6 +299,54 @@ function tapModeIcon(ctx: CanvasRenderingContext2D, block: Block, topRight: bool
   ctx.beginPath();
   ctx.arc(topRight ? left + w - h / 2 : left + h / 2, top + h / 2, h / 2 - 2.5, 0, Math.PI * 2);
   ctx.fillStyle = topRight ? COLORS.ui : COLORS.icon;
+  ctx.fill();
+}
+
+/** The current ease's curve, above a slider for the speed. */
+function easeIcon(ctx: CanvasRenderingContext2D, block: Block, f: (t: number) => number, speed: number): void {
+  const x0 = (block.x + 0.3) * UNIT;
+  const y0 = (block.y + 0.52) * UNIT;
+  const w = UNIT * 0.4;
+  const h = UNIT * 0.3;
+  ctx.strokeStyle = COLORS.icon;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.lineWidth = 1.2;
+  ctx.globalAlpha = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(x0, y0 - h);
+  ctx.lineTo(x0, y0);
+  ctx.lineTo(x0 + w, y0);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  for (let i = 0; i <= 24; i++) {
+    const t = i / 24;
+    const px = x0 + t * w;
+    const py = y0 - f(t) * h;
+    if (i) ctx.lineTo(px, py);
+    else ctx.moveTo(px, py);
+  }
+  ctx.stroke();
+  sliderTrack(ctx, block, speed);
+}
+
+/** The slider at the bottom of a slider block, with its knob at `at` (0..1). */
+function sliderTrack(ctx: CanvasRenderingContext2D, block: Block, at: number): void {
+  const left = (block.x + 0.24) * UNIT;
+  const right = (block.x + 0.76) * UNIT;
+  const mid = (block.y + 0.7) * UNIT;
+  ctx.strokeStyle = COLORS.icon;
+  ctx.lineWidth = 2;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(left, mid);
+  ctx.lineTo(right, mid);
+  ctx.stroke();
+  ctx.fillStyle = COLORS.icon;
+  ctx.beginPath();
+  ctx.arc(left + (right - left) * at, mid, UNIT * 0.065, 0, Math.PI * 2);
   ctx.fill();
 }
 

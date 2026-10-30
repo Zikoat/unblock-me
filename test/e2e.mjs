@@ -87,6 +87,7 @@ const browser = await chromium.launch();
     { id: "home", x: -1, y: -1, w: 1, h: 1, ui: "home" },
     { id: "undo", x: 0, y: -1, w: 1, h: 1, ui: "undo" },
     { id: "tapmode", x: 1, y: -1, w: 1, h: 1, ui: "tapmode" },
+    { id: "ease", x: 2, y: -1, w: 1, h: 1, ui: "ease" },
     { id: "density", x: -2, y: 0, w: 1, h: 1, ui: "density" },
     { id: "border", x: -1, y: 0, w: 1, h: 1, ui: "border" },
     { id: "reset", x: 0, y: 0, w: 1, h: 1, ui: "reset" },
@@ -101,7 +102,7 @@ const browser = await chromium.launch();
   for (const [x, what] of [[-1.85, "density"], [-0.85, "border toggle"], [0.15, "reset"], [1.15, "fullscreen"], [2.15, "reports"]]) {
     await expectColor(page, cell(x, 0.15), "reset", `the ${what} block is black, in the lower UI row`);
   }
-  for (const [x, what] of [[-0.85, "home"], [0.15, "undo"], [1.15, "tap mode"]]) {
+  for (const [x, what] of [[-0.85, "home"], [0.15, "undo"], [1.15, "tap mode"], [2.15, "ease"]]) {
     await expectColor(page, cell(x, -0.85), "reset", `the ${what} block is black, in the upper UI row`);
   }
   const iconPixels = await page.evaluate(() => {
@@ -153,6 +154,8 @@ const browser = await chromium.launch();
   check(JSON.stringify(rest) === JSON.stringify({
     "someone-else": "keep me",
     "unblock-me:border": "false",
+    "unblock-me:ease": '"Ease out cubic"',
+    "unblock-me:speed": "1",
     "unblock-me:tap-mode": '"topright"',
     "unblock-me:tries": "7",
     "unblock-me:v5:history": "[]",
@@ -298,10 +301,21 @@ const browser = await chromium.launch();
   await place([...UI, Wall(-2, 2), H("a", -1, 2), Wall(3, 2)]);
   await tap(cell(0, 2.5));
   check((await block(page, "a")).x === 1, "a tap slides a free block right (the default mode) to the wall");
+  await page.waitForTimeout(450); // the slide is animated
   await expectColor(page, cell(2, 2.5), "moved", "and it is drawn there");
   check(await page.evaluate(() => unblock.scene.circle === null), "a tap on a block does not move the circle");
   await tap(cell(2, 2.5));
   check((await block(page, "a")).x === -1, "against the wall, a tap sends it all the way back");
+  await page.waitForTimeout(450);
+  // The slide is animated: just after the tap the block is drawn between its old and new cells.
+  await tap(cell(0, 2.5)); // right again, animated
+  await page.waitForTimeout(60);
+  const midway = await colorAt(page, ...cell(0.5, 2.5)); // a cell it passes through
+  await page.waitForTimeout(500);
+  check(midway === "moved" && (await colorAt(page, ...cell(0.5, 2.5))) === "background", `a tapped block glides over the cells between (${midway} on the way, gone after)`);
+  await tap(cell(0.5, -0.5)); // undo that extra push
+  await page.waitForTimeout(450);
+
   // Undo, with the undo block (top row, middle).
   await tap(cell(0.5, -0.5));
   check((await block(page, "a")).x === 1, "the undo block takes back the last move");
@@ -317,6 +331,26 @@ const browser = await chromium.launch();
   check((await block(page, "a")).x === -2, "in nearer-end mode a free block goes to the closer wall (left, 1 cell)");
   await tap(cell(-1.5, -3));
   await expectColor(page, cell(-1.5, -3), "circle", "a tap on the background puts the circle there");
+
+  // The ease block opens a list of eases, each a name and a graph; picking one is stored.
+  await fresh();
+  await tap(cell(2.5, -0.5));
+  const menu = await page.evaluate(() => {
+    const m = document.querySelector("#eases");
+    return { shown: getComputedStyle(m).display === "block", rows: [...m.querySelectorAll("button")].map((b) => [b.textContent, !!b.querySelector("svg polyline"), b.getAttribute("aria-pressed")]) };
+  });
+  check(menu.shown && menu.rows.length >= 8 && menu.rows.every(([name, graph]) => name && graph), `the ease block opens a list of ${menu.rows.length} eases, each a name and a graph`);
+  check(menu.rows.find(([, , on]) => on === "true")?.[0] === "Ease out cubic", "ease out cubic is picked by default");
+  await page.screenshot({ path: shots + "phone-5b-eases.png" });
+  await page.waitForTimeout(400); // the list ignores clicks right after it opens
+  await page.click("#eases button:nth-child(1)");
+  check(await page.evaluate(() => getComputedStyle(document.querySelector("#eases")).display === "none" && localStorage.getItem("unblock-me:ease") === '"Linear"'), "picking Linear closes the list and stores it");
+
+  // Its slider sets the speed: dragging the knob from the middle (1x) to the right end is 4x.
+  const easeKnob = [cell(2 + 0.24, 0)[0] + 0.52 * UNIT * 0.5, cell(0, -1 + 0.7)[1]];
+  await gesture([easeKnob], [[easeKnob[0] + 40, easeKnob[1]]]);
+  check(await page.evaluate(() => localStorage.getItem("unblock-me:speed") === "4"), `dragging the ease block's knob right sets 4x speed (${await page.evaluate(() => localStorage.getItem("unblock-me:speed"))})`);
+  check(await page.evaluate(() => getComputedStyle(document.querySelector("#eases")).display === "none"), "and does not open the list");
 
   // The goal: a red block and a dashed red target, made by the worker; solving fills it in.
   await fresh();

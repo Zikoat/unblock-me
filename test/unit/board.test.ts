@@ -15,11 +15,14 @@ const W = (x: number, y: number, id?: string): Placed => ({ id, x, y, w: 1, h: 1
 function board(...placed: Placed[]) {
   const scene = newScene(1200, 1200, { layout: fixedLayout(placed) });
   scene.camera = { scale: 1, offsetX: 600, offsetY: 600 };
-  const events = { changes: 0, ui: [] as Ui[], adjust: [] as [number, boolean][] };
+  const events = { changes: 0, ui: [] as Ui[], adjust: [] as [number, boolean][], adjusted: [] as Ui[] };
   const g = new Gestures(scene, {
     onChange: () => events.changes++,
     onUi: (ui) => events.ui.push(ui),
-    onAdjust: (steps, done) => events.adjust.push([steps, done]),
+    onAdjust: (ui, dx, done) => {
+      events.adjust.push([dx, done]);
+      events.adjusted.push(ui);
+    },
   });
   const at = (id: string) => visibleBlocks(scene).find((b) => b.id === id)!;
   return { scene, g, events, at };
@@ -180,6 +183,14 @@ describe("density slider", () => {
     expect(events.ui).toEqual(["density"]);
     expect(events.adjust).toEqual([]);
   });
+
+  test("the ease block is a slider too, and says which one is dragged", () => {
+    const { g, events } = board(density(), { id: "ease", x: 2, y: -1, w: 1, h: 1, ui: "ease" });
+    drag(g, cell(2.5, -0.5), cell(3, -0.5), 2);
+    drag(g, cell(-1.5, 0.5), cell(-1, 0.5), 2);
+    expect(new Set(events.adjusted)).toEqual(new Set(["ease", "density"]));
+    expect(events.adjusted[0]).toBe("ease");
+  });
 });
 
 describe("quick push: tapping a block", () => {
@@ -288,17 +299,17 @@ describe("taps on the background", () => {
 });
 
 describe("UI blocks", () => {
-  // Top row: home (-1,-1), undo (0,-1), tap mode (1,-1).
+  // Top row: home (-1,-1), undo (0,-1), tap mode (1,-1), ease (2,-1).
   // Bottom row: density (-2,0), border (-1,0), reset (0,0), fullscreen (1,0), reports (2,0).
   const ui = () => UI_BLOCKS.map((b) => ({ ...b }));
   const spots = [
-    ["home", -0.5, -0.5], ["undo", 0.5, -0.5], ["tapmode", 1.5, -0.5],
+    ["home", -0.5, -0.5], ["undo", 0.5, -0.5], ["tapmode", 1.5, -0.5], ["ease", 2.5, -0.5],
     ["border", -0.5, 0.5], ["reset", 0.5, 0.5], ["fullscreen", 1.5, 0.5], ["reports", 2.5, 0.5],
   ] as const;
 
   test("they are 1x1, in two rows in the middle", () => {
     expect(ui().map((b) => [b.id, b.x, b.y, b.w, b.h])).toEqual([
-      ["home", -1, -1, 1, 1], ["undo", 0, -1, 1, 1], ["tapmode", 1, -1, 1, 1],
+      ["home", -1, -1, 1, 1], ["undo", 0, -1, 1, 1], ["tapmode", 1, -1, 1, 1], ["ease", 2, -1, 1, 1],
       ["density", -2, 0, 1, 1], ["border", -1, 0, 1, 1], ["reset", 0, 0, 1, 1], ["fullscreen", 1, 0, 1, 1], ["reports", 2, 0, 1, 1],
     ]);
   });
@@ -311,9 +322,9 @@ describe("UI blocks", () => {
     expect(scene.circle).toBeNull();
   });
 
-  test("dragging one pans the board instead of moving it", () => {
+  test("dragging one pans the board instead of moving it (the sliders aside)", () => {
     const { scene, g, at, events } = board(...ui());
-    for (const [id, x, y] of spots) {
+    for (const [id, x, y] of spots.filter(([id]) => id !== "ease")) {
       const before = scene.camera;
       drag(g, cell(x, y), cell(x + 2, y + 1));
       expect(scene.camera).toEqual({ ...before, offsetX: before.offsetX + 2 * UNIT, offsetY: before.offsetY + UNIT });
@@ -363,7 +374,7 @@ describe("UI blocks", () => {
     expect([scene.border, scene.tapMode]).toEqual([false, "nearest"]);
     // Centred on the middle of the reset block.
     expect(toScreen(scene.camera, { x: UNIT / 2, y: UNIT / 2 })).toEqual({ x: 600, y: 600 });
-    expect(visibleBlocks(scene).map((b) => b.id).sort()).toEqual(["border", "density", "fullscreen", "home", "new", "reports", "reset", "tapmode", "undo"]);
+    expect(visibleBlocks(scene).map((b) => b.id).sort()).toEqual(["border", "density", "ease", "fullscreen", "home", "new", "reports", "reset", "tapmode", "undo"]);
   });
 });
 

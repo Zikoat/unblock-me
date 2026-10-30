@@ -10,6 +10,11 @@
   html, body { margin: 0; height: 100%; overflow: hidden; background: #f3f2ee; }
   #fps { position: fixed; top: 6px; left: 8px; font: 11px/1 ui-monospace, monospace; color: #8a877e; pointer-events: none; }
   #tip { position: fixed; display: none; max-width: 260px; padding: 7px 10px; border-radius: 8px; background: #1d1d1f; color: #f3f2ee; font: 13px/1.4 system-ui, sans-serif; pointer-events: none; box-shadow: 0 4px 14px rgba(0,0,0,.18); z-index: 2; }
+  #eases { position: fixed; display: none; z-index: 3; background: #1d1d1f; border-radius: 12px; padding: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.25); max-height: 70vh; overflow-y: auto; }
+  #eases button { -webkit-tap-highlight-color: transparent; outline: none; display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px 10px 6px 6px; border: 0; border-radius: 8px; background: none; color: #f3f2ee; font: 14px system-ui, sans-serif; text-align: left; cursor: pointer; }
+  #eases button:hover, #eases button:focus-visible { background: #2c2c2e; }
+  #eases button[aria-pressed="true"] { background: #3a3a3d; }
+  #eases svg { flex: none; }
   canvas { display: block; width: 100vw; height: 100dvh; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 </style>
 </head>
@@ -17,6 +22,7 @@
 <canvas></canvas>
 <div id="fps"></div>
 <div id="tip" role="tooltip"></div>
+<div id="eases" role="menu"></div>
 <script type="module" src="app.js"></script>
 </body>
 </html>

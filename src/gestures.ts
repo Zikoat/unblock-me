@@ -1,7 +1,10 @@
 import { pan, pinch, toWorld, zoomAt, type Camera, type Point } from "./camera";
 import { limits, quickPush, record, visibleBlocks, type Scene } from "./scene";
 import { UNIT, type Block, type Ui } from "./layout";
-import { blockAt, slideRange } from "./rules";
+import { blockAt, slideRange, type Move } from "./rules";
+
+/** UI blocks that are also sliders: a drag on them adjusts instead of panning. */
+const SLIDERS = new Set<Ui>(["density", "ease"]);
 
 /** A press that moves less than this many screen pixels is a tap. */
 export const TAP_SLOP = 10;
@@ -14,7 +17,7 @@ type Mode =
   /** `grab` is where the finger went down, `lo`..`hi` how far the block can slide. */
   | { kind: "dragging"; id: number; block: Block; grab: Point; lo: number; hi: number }
   /** Dragging sideways on the density block. */
-  | { kind: "adjusting"; id: number; start: Point; dx: number }
+  | { kind: "adjusting"; id: number; ui: Ui; start: Point; dx: number }
   | { kind: "pinching"; ids: [number, number]; from: [Point, Point]; start: Camera };
 
 /**
@@ -23,8 +26,9 @@ type Mode =
  * one finger pans the background or slides a block along its long axis until it hits
  * another block, two fingers pinch-zoom and pan.
  * UI blocks and walls never move: dragging one pans, tapping a UI block calls `onUi` with
- * its kind. The density block is a slider instead: dragging on it calls `onAdjust` with how
- * far the finger has moved sideways since the press (screen px), and once more with `done`.
+ * its kind. The density and ease blocks are also sliders: dragging on one calls `onAdjust`
+ * with how far the finger has moved sideways since the press (screen px), and once more
+ * with `done`.
  * `onChange` runs when a block was moved, to store it.
  */
 export class Gestures {
@@ -37,16 +41,26 @@ export class Gestures {
       onChange = () => {},
       onUi = () => {},
       onAdjust = () => {},
-    }: { onChange?: () => void; onUi?: (ui: Ui) => void; onAdjust?: (dx: number, done: boolean) => void } = {},
+      onPush = () => {},
+    }: {
+      onChange?: () => void;
+      onUi?: (ui: Ui) => void;
+      onAdjust?: (ui: Ui, dx: number, done: boolean) => void;
+      /** A tap pushed a block (to animate it). */
+      onPush?: (move: Move) => void;
+    } = {},
   ) {
     this.onChange = onChange;
     this.onUi = onUi;
     this.onAdjust = onAdjust;
+    this.onPush = onPush;
   }
+
+  private readonly onPush: (move: Move) => void;
 
   private readonly onChange: () => void;
   private readonly onUi: (ui: Ui) => void;
-  private readonly onAdjust: (dx: number, done: boolean) => void;
+  private readonly onAdjust: (ui: Ui, dx: number, done: boolean) => void;
 
   down(id: number, at: Point): void {
     this.pointers.set(id, at);
@@ -65,8 +79,8 @@ export class Gestures {
     const mode = this.mode;
     if (mode.kind === "pressed" && mode.id === id) {
       if (Math.hypot(at.x - mode.start.x, at.y - mode.start.y) < TAP_SLOP) return;
-      if (mode.block?.ui === "density") {
-        this.mode = { kind: "adjusting", id, start: mode.start, dx: 0 };
+      if (mode.block?.ui && SLIDERS.has(mode.block.ui)) {
+        this.mode = { kind: "adjusting", id, ui: mode.block.ui, start: mode.start, dx: 0 };
       } else if (mode.block === null || mode.block.ui || mode.block.wall) {
         this.mode = { kind: "panning", id, last: mode.start };
       } else {
@@ -88,7 +102,9 @@ export class Gestures {
       } else if (!mode.block.wall) {
         const to = quickPush(this.scene, mode.block);
         if (to) {
-          record(this.scene, { id: mode.block.id, from: { x: mode.block.x, y: mode.block.y }, to });
+          const move = { id: mode.block.id, from: { x: mode.block.x, y: mode.block.y }, to };
+          record(this.scene, move);
+          this.onPush(move);
           this.onChange();
         }
       }
@@ -125,7 +141,7 @@ export class Gestures {
         : { id: block.id, x: block.x, y: clamp(block.y + now.y - grab.y) };
     } else if (mode.kind === "adjusting" && mode.id === id) {
       mode.dx = at.x - mode.start.x;
-      this.onAdjust(mode.dx, false);
+      this.onAdjust(mode.ui, mode.dx, false);
     } else if (mode.kind === "pinching" && mode.ids.includes(id)) {
       const now = mode.ids.map((p) => this.pointers.get(p)!) as [Point, Point];
       this.scene.camera = pinch(mode.start, mode.from, now, limits(this.scene));
@@ -157,7 +173,7 @@ export class Gestures {
   private finishAdjust(): void {
     const mode = this.mode;
     if (mode.kind !== "adjusting") return;
-    this.onAdjust(mode.dx, true);
+    this.onAdjust(mode.ui, mode.dx, true);
   }
 
   private end(id: number): void {

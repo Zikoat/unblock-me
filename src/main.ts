@@ -5,6 +5,7 @@ import { viewCentre } from "./goal";
 import type { GoalRequest } from "./goal-worker";
 import { Gestures } from "./gestures";
 import { fixedLayout, MAX_TRIES, MIN_TRIES, randomLayout, TRIES, UNIT, type Placed, type Ui } from "./layout";
+import { DEFAULT_EASE, EASES, easeNamed, positionOf, slideDuration, speedAt } from "./eases";
 import { draw } from "./render";
 import { blockAt, blocksIn, slideRange, type Move } from "./rules";
 import { latticeRect, newScene, relayout, resize, restart, undo, visibleBlocks, type TapMode } from "./scene";
@@ -18,6 +19,8 @@ const GOAL_KEY = "unblock-me:v5:goal";
 const BORDER_KEY = "unblock-me:border";
 const TRIES_KEY = "unblock-me:tries";
 const TAP_MODE_KEY = "unblock-me:tap-mode";
+const EASE_KEY = "unblock-me:ease";
+const SPEED_KEY = "unblock-me:speed";
 const CAMERA_KEY = "unblock-me:camera"; // carried over a live reload only
 /** How many cells the goal's red block is pushed. */
 const EFFORT = 12;
@@ -33,6 +36,7 @@ const shared = new URLSearchParams(location.search).get("board");
 const canvas = document.querySelector("canvas")!;
 const fps = document.querySelector<HTMLElement>("#fps")!;
 const tip = document.querySelector<HTMLElement>("#tip")!;
+const easeMenu = document.querySelector<HTMLElement>("#eases")!;
 
 function load<T>(key: string, fallback: T): T {
   try {
@@ -49,6 +53,8 @@ function save(): void {
     localStorage.setItem(BORDER_KEY, JSON.stringify(scene.border));
     localStorage.setItem(TRIES_KEY, JSON.stringify(tries));
     localStorage.setItem(TAP_MODE_KEY, JSON.stringify(scene.tapMode));
+    localStorage.setItem(EASE_KEY, JSON.stringify(ease.name));
+    localStorage.setItem(SPEED_KEY, JSON.stringify(speed));
     localStorage.setItem(MOVED_KEY, JSON.stringify([...scene.moved].map(([id, p]) => [id, p.x, p.y])));
     localStorage.setItem(HISTORY_KEY, JSON.stringify(scene.history));
     // A goal belongs to one seed and density.
@@ -59,6 +65,9 @@ function save(): void {
 }
 
 const seed = load<number>(SEED_KEY, Math.floor(Math.random() * 2 ** 32));
+let ease = easeNamed(load<string>(EASE_KEY, DEFAULT_EASE));
+/** How fast slides play: 1 is normal, see speedAt. */
+let speed = load<number>(SPEED_KEY, 1);
 let tries = load<number>(TRIES_KEY, TRIES);
 const moved = load<[string, number, number][]>(MOVED_KEY, []);
 const storedGoal = load<{ seed: number; tries: number; goal: Goal } | null>(GOAL_KEY, null);
@@ -97,11 +106,36 @@ worker.onmessage = (event: MessageEvent<{ job: number; goal: Goal | null }>) => 
 };
 if (!scene.goal) requestGoal();
 
-// While the density slider is held: where its knob is (0..1), following the finger.
-let slider: { from: number; at: number } | null = null;
+// While a slider is held: where its knob is (0..1), following the finger.
+let slider: { ui: Ui; from: number; at: number } | null = null;
+/** Move the held slider's knob by `dx` screen px from where the drag started. */
+function slide(ui: Ui, from: number, dx: number): number {
+  slider ??= { ui, from, at: from };
+  slider.at = Math.min(1, Math.max(0, slider.from + dx / (TRACK * UNIT * scene.camera.scale)));
+  return slider.at;
+}
+
+// A tapped (or undone) block glides to its new cell; the move itself is already made.
+let animation: { move: Move; start: number; duration: number } | null = null;
+function animate(move: Move): void {
+  const cells = Math.abs(move.to.x - move.from.x) + Math.abs(move.to.y - move.from.y);
+  animation = { move, start: performance.now(), duration: slideDuration(cells) / speed };
+}
+function sliding(now: number): { id: string; x: number; y: number } | null {
+  if (!animation) return null;
+  const t = Math.min(1, (now - animation.start) / animation.duration);
+  if (t >= 1) {
+    animation = null;
+    return null;
+  }
+  const { move } = animation;
+  const e = ease.f(t);
+  return { id: move.id, x: move.from.x + (move.to.x - move.from.x) * e, y: move.from.y + (move.to.y - move.from.y) * e };
+}
 
 const gestures = new Gestures(scene, {
   onChange: save,
+  onPush: animate,
   onUi: (ui) => {
     if (ui === "reset") {
       forgetEverything();
@@ -115,29 +149,91 @@ const gestures = new Gestures(scene, {
     } else if (ui === "home") {
       location.href = "/";
     } else if (ui === "undo") {
-      if (undo(scene)) save();
+      const move = undo(scene);
+      if (move) {
+        animate({ id: move.id, from: move.to, to: move.from });
+        save();
+      }
+    } else if (ui === "ease") {
+      openEaseMenu();
     } else if (ui === "tapmode") {
       scene.tapMode = scene.tapMode === "nearest" ? "topright" : "nearest";
       save();
     }
   },
-  // The density slider: the knob stays under the finger, and the board shows that density
-  // right away (same seed, no goal). The goal is made once the finger lifts.
-  onAdjust: (dx, done) => {
-    slider ??= { from: (tries - MIN_TRIES) / (MAX_TRIES - MIN_TRIES), at: 0 };
-    slider.at = Math.min(1, Math.max(0, slider.from + dx / (TRACK * UNIT * scene.camera.scale)));
-    const next = Math.round(MIN_TRIES + slider.at * (MAX_TRIES - MIN_TRIES));
-    if (next !== tries) {
-      tries = next;
-      relayout(scene, randomLayout(seed, { tries }));
+  // The sliders keep their knob under the finger. Density shows the board at that density
+  // right away (same seed, no goal), and the goal is made once the finger lifts. Ease sets
+  // how fast slides play.
+  onAdjust: (ui, dx, done) => {
+    if (ui === "density") {
+      const at = slide(ui, (tries - MIN_TRIES) / (MAX_TRIES - MIN_TRIES), dx);
+      const next = Math.round(MIN_TRIES + at * (MAX_TRIES - MIN_TRIES));
+      if (next !== tries) {
+        tries = next;
+        relayout(scene, randomLayout(seed, { tries }));
+      }
+      if (done && !scene.goal) requestGoal();
+    } else if (ui === "ease") {
+      speed = speedAt(slide(ui, positionOf(speed), dx));
     }
     if (done) {
       slider = null;
-      if (!scene.goal) requestGoal();
       save();
     }
   },
 });
+
+/** A small graph of an ease: time across, progress up. */
+function easeGraph(f: (t: number) => number): SVGSVGElement {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("width", "56");
+  svg.setAttribute("height", "40");
+  svg.setAttribute("viewBox", "0 0 56 40");
+  const points: string[] = [];
+  for (let i = 0; i <= 40; i++) points.push(`${(4 + (i / 40) * 48).toFixed(1)},${(34 - f(i / 40) * 26).toFixed(1)}`);
+  const axes = document.createElementNS(ns, "path");
+  axes.setAttribute("d", "M4 4V34H52");
+  axes.setAttribute("stroke", "#5a5a5e");
+  axes.setAttribute("fill", "none");
+  const line = document.createElementNS(ns, "polyline");
+  line.setAttribute("points", points.join(" "));
+  line.setAttribute("stroke", "#f3f2ee");
+  line.setAttribute("stroke-width", "2");
+  line.setAttribute("fill", "none");
+  line.setAttribute("stroke-linejoin", "round");
+  svg.append(axes, line);
+  return svg;
+}
+
+/** The list of eases: a name and a graph each. Picking one closes it; try it by tapping
+ * blocks. */
+function openEaseMenu(): void {
+  easeMenu.replaceChildren(...EASES.map((e) => {
+    const row = document.createElement("button");
+    row.setAttribute("role", "menuitemradio");
+    row.setAttribute("aria-pressed", String(e.name === ease.name));
+    const name = document.createElement("span");
+    name.textContent = e.name;
+    row.append(easeGraph(e.f), name);
+    row.addEventListener("click", () => {
+      // The click a touch sends after lifting can land on the list that just opened under it.
+      if (performance.now() - openedAt < 350) return;
+      ease = e;
+      save();
+      easeMenu.style.display = "none";
+    });
+    return row;
+  }));
+  easeMenu.style.display = "block";
+  openedAt = performance.now();
+  const w = easeMenu.offsetWidth;
+  const h = easeMenu.offsetHeight;
+  easeMenu.style.left = `${Math.max(8, Math.min(innerWidth - w - 8, lastTap.x - w / 2))}px`;
+  easeMenu.style.top = `${Math.max(8, Math.min(innerHeight - h - 8, lastTap.y + 20))}px`;
+}
+let lastTap = { x: 0, y: 0 };
+let openedAt = 0;
 
 /** Delete everything Unblock Me stored and reload: a new seed, default settings, centred.
  * Only our own keys go, since other pages on this origin keep theirs in the same storage. */
@@ -246,7 +342,13 @@ function redraw(): void {
   queued = true;
   requestAnimationFrame((now) => {
     queued = false;
-    draw(canvas, scene, { fullscreen: document.fullscreenElement !== null, density: slider?.at ?? (tries - MIN_TRIES) / (MAX_TRIES - MIN_TRIES) });
+    draw(canvas, scene, {
+      fullscreen: document.fullscreenElement !== null,
+      density: slider?.ui === "density" ? slider.at : (tries - MIN_TRIES) / (MAX_TRIES - MIN_TRIES),
+      ease: { f: ease.f, speed: slider?.ui === "ease" ? slider.at : positionOf(speed) },
+      sliding: sliding(now),
+    });
+    if (animation) redraw();
     frames.push(now);
     showFps(now);
   });
@@ -270,6 +372,7 @@ function tooltip(ui: Ui): string {
     case "reset": return "Start over: a new board, and everything forgotten.";
     case "fullscreen": return "Fullscreen on or off.";
     case "reports": return "Reports about the board.";
+    case "ease": return "How a tapped block slides. Tap to pick an easing curve; drag sideways to make it slower or faster.";
   }
 }
 
@@ -291,6 +394,8 @@ canvas.addEventListener("pointerdown", (e) => {
   if (e.pointerType === "mouse" && e.button !== 0) return;
   canvas.setPointerCapture(e.pointerId);
   tip.style.display = "none";
+  easeMenu.style.display = "none";
+  animation = null; // a new touch shows every block where it really is
   gestures.down(e.pointerId, point(e));
   redraw();
 });
@@ -300,6 +405,7 @@ canvas.addEventListener("pointermove", (e) => {
   redraw();
 });
 canvas.addEventListener("pointerup", (e) => {
+  lastTap = { x: e.clientX, y: e.clientY };
   gestures.up(e.pointerId, point(e));
   redraw();
 });
