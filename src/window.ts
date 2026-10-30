@@ -233,7 +233,7 @@ export class Window {
     }
     const queue: { i: number; regions: number[][] }[] = blockers.map((i) => ({ i, regions: [crossing] }));
     const blockerWays: Sweep[][] = [];
-    for (let n = 0; n < queue.length && n < 24; n++) {
+    for (let n = 0; n < queue.length; n++) {
       const { i, regions } = queue[n]!;
       let common: number[] | null = null;
       const ways: { further: number[]; cells: number[] }[] = [];
