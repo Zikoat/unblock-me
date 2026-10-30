@@ -188,22 +188,17 @@ export function draw(
   }
   for (const s of sparkles) sparkle(ctx, s, now);
 
-  // A tap on the background: a small yellow ring spreading out and fading, like a drop
+  // A tap on the background: one small yellow ring spreading out and fading, like a drop
   // landing in water. Nothing stays.
   if (ripple && scene.circle) {
     const t = (now - ripple.born) / RIPPLE_MS;
     if (t >= 0 && t < 1) {
-      const e = 1 - Math.pow(1 - t, 3);
-      for (const [delay, size] of [[0, 1], [0.18, 0.6]] as const) {
-        const k = (t - delay) / (1 - delay);
-        if (k <= 0) continue;
-        const spread = 1 - Math.pow(1 - k, 3);
-        ctx.strokeStyle = `rgba(242, 182, 50, ${(1 - k) * 0.9})`;
-        ctx.lineWidth = (3 - 2 * e) / scene.camera.scale;
-        ctx.beginPath();
-        ctx.arc(scene.circle.x, scene.circle.y, ((4 + 26 * spread) * size) / scene.camera.scale, 0, Math.PI * 2);
-        ctx.stroke();
-      }
+      const spread = 1 - Math.pow(1 - t, 3);
+      ctx.strokeStyle = `rgba(242, 182, 50, ${(1 - t) * 0.9})`;
+      ctx.lineWidth = (3 - 2 * spread) / scene.camera.scale;
+      ctx.beginPath();
+      ctx.arc(scene.circle.x, scene.circle.y, (4 + 26 * spread) / scene.camera.scale, 0, Math.PI * 2);
+      ctx.stroke();
     }
   }
 
