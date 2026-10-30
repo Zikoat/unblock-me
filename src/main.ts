@@ -238,7 +238,7 @@ function reachGoal(now: number): void {
   const goal = scene.goal;
   if (!goal || !goalSolved(scene) || animation?.move.id === goal.id) return;
   // Done: its target keeps a check, and the next goal starts from a block close to it.
-  goal.used = Math.max(1, scene.history.length - (goal.begun ?? 0));
+  goal.used = Math.max(1, movesSince(goal.begun ?? 0));
   scene.done.push(goal);
   scene.goal = null;
   requestGoal(goal.target);
@@ -490,6 +490,13 @@ function tooltip(ui: Ui): string | null {
   }
 }
 
+/** Moves made since history had `begun` entries, where moving one block several times in a
+ * row counts once (as in the fewest-moves count). */
+function movesSince(begun: number): number {
+  let moves = 0;
+  for (let i = begun; i < scene.history.length; i++) if (i === begun || scene.history[i]!.id !== scene.history[i - 1]!.id) moves++;
+  return moves;
+}
 /** A goal's numbers, over its red block or its target (the current goal or a reached one). */
 function goalTip(at: Point): string | null {
   const inside = (p: Point, w: number, h: number) => at.x >= p.x && at.x < p.x + w && at.y >= p.y && at.y < p.y + h;
@@ -503,7 +510,7 @@ function goalTip(at: Point): string | null {
       `Distance: ${from ? `${Math.abs(g.target.x - from.x) + Math.abs(g.target.y - from.y)} cells` : "unknown"}`,
     ];
     const d = g.difficulty;
-    const used = g.used ?? Math.max(0, scene.history.length - (g.begun ?? 0));
+    const used = g.used ?? movesSince(g.begun ?? 0);
     lines.push(`${g.used === undefined ? "Moves so far" : "Moves used"}: ${used}`);
     if (!d) lines.unshift("Fewest moves: measuring…");
     else {
