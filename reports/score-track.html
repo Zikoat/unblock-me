@@ -128,7 +128,7 @@ setGoal(13, 15);
 
 const C = {
   bg: "#e6e9ec", dot: "#d3d1ca", block: "#4f6d8f", red: "#d64545", target: "rgba(214,69,69,0.14)", targetLine: "rgba(214,69,69,0.45)",
-  left: "#eaa49c", used: "#8e3f3c", zone: "#d9dbde", line: "rgba(80, 82, 86, 0.25)", star: "#fdd835", starLine: "#e07b00",
+  left: "#eaa49c", used: "#8e3f3c", line: "rgba(80, 82, 86, 0.25)", star: "#fdd835", starLine: "#e07b00",
 };
 /** The look, from the sliders: total track width and height (in the rows' units), icon
  * size and corner radius (shares of the height), and the move count's size. */
@@ -212,7 +212,7 @@ function track(g, x0, y0, used, { undone = false, scale = 1, size = null, style 
   // While collapsing (after the finish) the track fades and only the stars stay.
   const bar = el("g", { "clip-path": `url(#${clip})`, opacity: 1 - collapse }, g);
   const done = Math.min(used, END);
-  el("rect", { x: x0, y: y0, width: used >= END ? width : done * w, height: h, fill: C.used, "fill-opacity": 0.78 }, bar); // the zone shows through
+  el("rect", { x: x0, y: y0, width: used >= END ? width : done * w, height: h, fill: C.used, "fill-opacity": 0.78 }, bar);
   // Icons as big as the look says, but never wider than the gap between two stars.
   const cy = y0 + h / 2, s = Math.min(h * 0.7, STEP * w * 0.95) * LOOK.icons, ms = s * 0.74;
   for (const m of MARKS) if (m.kind === "star") el("line", { x1: at(m.at), x2: at(m.at), y1: y0, y2: y0 + h, stroke: C.line, "stroke-width": Math.max(1, w * 0.14) }, bar);

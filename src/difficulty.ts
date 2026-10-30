@@ -29,7 +29,8 @@ export type Difficulty = {
   /** The difficulty: log2 of branching^moves, the size of the tree of move sequences as
    * long as the shortest solution. Each point doubles it. */
   score: number;
-  /** A shortest solution, when found. */
+  /** A shortest solution, when found; else the shortest the search came across, if any
+   * (no solution is shorter than `atLeast`, and this one is an upper bound). */
   solution?: Move[];
 };
 
@@ -72,15 +73,41 @@ export function measure(board: Board, goal: Goal, { limit = 50_000, margin = MAR
   return shortest(win, r, want, limit);
 }
 
-/** A* from the window's start to slider `r` at `want`: boards in order of moves made plus
- * the lower bound on moves left (Window.lower), so the first solved board taken out ends a
- * shortest solution. Stops at `limit` boards with a lower bound. */
+/** The fewest moves that get slider `r` to `want`: A* (astar below, weight 1) up to
+ * `limit` boards, after a greedy phase (weight GREEDY) on a share of them that finds some
+ * solution fast. The greedy solution is the answer when it is as short as A*'s lower
+ * bound, and the best known solution when A* stops at the cap. */
 export function shortest(win: Window, r: number, want: number, limit: number): Difficulty {
+  const quick = tuning.greedyShare > 0 ? astar(win, r, want, Math.ceil(limit * tuning.greedyShare), tuning.greedy) : null;
+  const upper = quick?.g ?? Infinity;
+  const exact = astar(win, r, want, limit, 1, upper);
+  const expanded = exact.expanded + (quick?.expanded ?? 0);
+  const branching = expanded ? (exact.choices + (quick?.choices ?? 0)) / expanded : 1;
+  const result = (g: number | null, atLeast: number, solution: Move[] | undefined): Difficulty => ({ moves: g, atLeast, searched: expanded, branching, score: (g ?? atLeast) * Math.log2(Math.max(branching, 1)), solution });
+  if (exact.g !== null) return result(exact.g, exact.g, exact.solution);
+  if (upper < Infinity && upper <= exact.f) return result(upper, upper, quick!.solution);
+  if (exact.f === Infinity) return { moves: null, atLeast: Infinity, searched: expanded, branching: 0, score: 0 };
+  return result(null, exact.f, quick?.solution);
+}
+
+/** Share of the cap the greedy phase gets, and its weight on the lower bound (f = g +
+ * weight * h): tuned on test/experiments/cap-tune.ts. */
+export const tuning = { greedyShare: 0.25, greedy: 4 };
+
+type Search = { g: number | null; f: number; solution?: Move[]; expanded: number; choices: number };
+
+/** Weighted A* from the window's start to slider `r` at `want`: boards in order of moves
+ * made plus `w` times the lower bound on moves left (Window.lower), so with w = 1 the
+ * first solved board taken out ends a shortest solution, and with w > 1 some solution
+ * sooner. Stops at `limit` boards (a count, so the same whatever the machine); `f` is then
+ * the bucket in hand, a lower bound on any solution when w = 1. Boards that cannot beat
+ * `upper` moves are not searched. */
+function astar(win: Window, r: number, want: number, limit: number, w: number, upper = Infinity): Search {
   const pool = new Pool(win.sliders.length);
-  // Buckets by f, of (state, moves made when pushed) pairs; an entry whose moves are no
-  // longer the state's best is stale.
+  // Buckets by f, of (state, moves made when pushed) pairs packed as state * 256 + moves;
+  // an entry whose moves are no longer the state's best is stale.
   const buckets: number[][] = [];
-  const best: number[] = []; // moves made to each pooled state
+  let best = new Int32Array(1024); // moves made to each pooled state
   // A state goes in with the cheap bound (the grid shows the state being expanded; a
   // child is patched onto it), and gets the full bound when it comes out: if that puts
   // it in a later bucket, it goes back in there. Correct, since buckets are taken in
@@ -92,9 +119,9 @@ export function shortest(win: Window, r: number, want: number, limit: number): D
   let refinedAt = new Uint8Array(1024); // 1 once a state has had its full bound
   let f = 0;
   const push = (i: number, g: number, h: number) => {
-    const at = Math.max(g + h, f);
-    if (at === Infinity) return;
-    (buckets[at] ??= []).push(i, g);
+    const at = Math.max(g + w * h, f);
+    if (at === Infinity || g + h >= upper) return;
+    (buckets[at] ??= []).push(i * 256 + g);
   };
   const root = pool.add(win.start, 0, -1, 0);
   best[root] = 0;
@@ -102,31 +129,23 @@ export function shortest(win: Window, r: number, want: number, limit: number): D
   push(root, 0, win.lowerCheap(win.start, 0, r, want));
   let expanded = 0, choices = 0;
   const child = new Uint8Array(win.sliders.length);
-  const done = (g: number | null, atLeast: number, i: number | null): Difficulty => {
-    const branching = expanded ? choices / expanded : 1;
-    const moves = g ?? atLeast;
-    return { moves: g, atLeast, searched: expanded, branching, score: moves * Math.log2(Math.max(branching, 1)), solution: i === null ? undefined : pool.path(win, i) };
-  };
   for (f = 0; f < buckets.length; f++) {
     const bucket = buckets[f];
     while (bucket?.length) {
-      const g = bucket.pop()!;
-      const i = bucket.pop()!;
+      const e = bucket.pop()!;
+      const g = e % 256, i = (e - g) / 256;
       if (best[i] !== g) continue; // reached cheaper since
       const at = pool.offset(i);
-      if (pool.data[at + r] === want) return done(g, g, i);
-      if (pool.count > limit) return done(null, f, null);
+      if (pool.data[at + r] === want) return { g, f, solution: pool.path(win, i), expanded, choices };
+      if (pool.count > limit || expanded > limit) return { g: null, f: w === 1 ? f : 0, expanded, choices };
       win.fill(pool.data, at);
-      if (i >= refinedAt.length) {
-        const bigger = new Uint8Array(Math.max(1024, refinedAt.length * 2, i + 1));
-        bigger.set(refinedAt);
-        refinedAt = bigger;
-      }
       if (!refinedAt[i]) {
         refinedAt[i] = 1;
-        const full = g + win.lower(pool.data, at, r, want);
+        const h = win.lower(pool.data, at, r, want);
+        if (g + h >= upper) continue;
+        const full = g + w * h;
         if (full > f) {
-          if (full < Infinity) (buckets[full] ??= []).push(i, g);
+          if (full < Infinity) (buckets[full] ??= []).push(i * 256 + g);
           continue;
         }
       }
@@ -138,19 +157,37 @@ export function shortest(win: Window, r: number, want: number, limit: number): D
         child.set(pool.data.subarray(at, at + pool.n));
         child[k] = to;
         let j = pool.find(child, 0);
-        if (j === undefined) j = pool.add(child, 0, i, g + 1);
-        else if (best[j]! <= g + 1) continue;
-        else pool.parent[j] = i;
+        if (j === undefined) {
+          j = pool.add(child, 0, i, g + 1);
+          if (j >= best.length) {
+            const size = Math.max(1024, best.length * 2, j + 1);
+            const b = new Int32Array(size);
+            b.set(best);
+            best = b;
+            const ra = new Uint8Array(size);
+            ra.set(refinedAt);
+            refinedAt = ra;
+          }
+        } else if (best[j]! <= g + 1) continue;
+        else {
+          // Reached in fewer moves: with w = 1 it is searched again from here (the bounds
+          // are not consistent, so this happens, rarely); a weighted search only takes
+          // the shorter way in, or it would search the same boards over and over.
+          pool.parent[j] = i;
+          best[j] = g + 1;
+          if (w !== 1) continue;
+        }
         best[j] = g + 1;
+        refinedAt[j] = 0;
         const from = pool.data[at + k]!;
         win.patch(k, from, to);
         push(j, g + 1, win.lowerCheap(child, 0, r, want));
         win.patch(k, to, from);
-        if (j < refinedAt.length) refinedAt[j] = 0;
       }
     }
   }
-  return { moves: null, atLeast: Infinity, searched: expanded, branching: 0, score: 0 };
+  // Nothing left to search: no solution within the window (shorter than `upper`).
+  return { g: null, f: upper, expanded, choices };
 }
 
 /** The usual difficulty at each density (tries): the 5th and 95th percentile over 20 boards

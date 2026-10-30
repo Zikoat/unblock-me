@@ -158,7 +158,7 @@ export function makeGoalTournament(layout: Layout, near: Point, options: Tournam
   const top = candidates.slice(0, finalists);
   for (const c of top) {
     c.difficulty = measure(board, c, { limit: exact });
-    if (c.difficulty.solution) c.solution = c.difficulty.solution;
+    if (c.difficulty.solution && c.difficulty.solution.length < c.solution.length) c.solution = c.difficulty.solution;
   }
   top.sort(rank);
   const best = top[0] ?? null;
