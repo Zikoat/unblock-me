@@ -5,7 +5,7 @@ import { viewCentre } from "./goal";
 import type { GoalRequest } from "./goal-worker";
 import { Gestures } from "./gestures";
 import { fixedLayout, MAX_TRIES, MIN_TRIES, randomLayout, TRIES, UNIT, type Placed, type Ui } from "./layout";
-import { draw, goalBand, redArrow, uiArrow, type Sparkle } from "./render";
+import { draw, THROB_MS, goalBand, redArrow, uiArrow, type Sparkle } from "./render";
 import { ease, slideDuration } from "./slide";
 import { blockAt, blocksIn, slideRange, type Move } from "./rules";
 import { borderOnScreen, goalSolved, latticeRect, newScene, relayout, resize, restart, undo, visibleBlocks, whereIs } from "./scene";
@@ -86,6 +86,7 @@ function save(): void {
   } catch {
     // Private mode or full storage: changes just don't survive a reload.
   }
+  lookAhead();
 }
 
 const seed = load<number>(SEED_KEY, Math.floor(Math.random() * 2 ** 32));
@@ -116,20 +117,65 @@ let goalWaiters: (() => void)[] = [];
  * red block. */
 function requestGoal(near: Point = viewCentre(scene.camera, scene.width, scene.height)): void {
   if (shared) return;
-  const request: GoalRequest = {
-    job: ++job, seed, tries, placed, near, moved: [...scene.moved], effort: EFFORT, exclude: scene.done.map((g) => g.id),
-  };
+  const exclude = scene.done.map((g) => g.id);
+  // Made already while the red block was one move away: no wait.
+  const key = boardKey(scene.moved, exclude, near);
+  if (ahead.ready?.key === key) {
+    showGoal(ahead.ready.goal);
+    return;
+  }
+  const request: GoalRequest = { job: ++job, seed, tries, placed, near, moved: [...scene.moved], effort: EFFORT, exclude };
   worker.postMessage(request);
 }
 worker.onmessage = (event: MessageEvent<{ job: number; goal: Goal | null }>) => {
   if (event.data.job !== job) return;
-  scene.goal = event.data.goal;
+  showGoal(event.data.goal);
+};
+function showGoal(goal: Goal | null): void {
+  job++; // anything still on its way is stale
+  scene.goal = goal;
+  // The new red block throbs once; its clock starts at the first frame drawn.
+  if (scene.goal) throb = { id: scene.goal.id, born: -1 };
   save();
   redraw();
   goalWaiters.forEach((resolve) => resolve());
   goalWaiters = [];
 };
+
+// The next goal is made ahead, on its own worker, whenever the red block is one move from its
+// target: on the board as it will be when it lands there. If the board is exactly that when
+// it lands, the next goal shows at once.
+const ahead = {
+  worker: new Worker("goal-worker.js"),
+  job: 0,
+  asked: "",
+  ready: null as { key: string; goal: Goal | null } | null,
+};
+function boardKey(moved: ReadonlyMap<string, Point>, exclude: string[], near: Point): string {
+  return JSON.stringify([seed, tries, placed, [...moved].sort(([a], [b]) => (a < b ? -1 : 1)), exclude, near]);
+}
+function lookAhead(): void {
+  const goal = scene.goal;
+  const red = goal && scene.layout.byId(goal.id);
+  const at = goal && whereIs(scene, goal.id);
+  if (shared || !goal || !red || !at) return;
+  const { lo, hi } = slideRange(scene.layout, { ...red, ...at }, scene);
+  const along = red.w > red.h ? goal.target.x : goal.target.y;
+  const inLane = red.w > red.h ? goal.target.y === at.y : goal.target.x === at.x;
+  if (!inLane || along < lo || along > hi) return;
+  const moved = new Map(scene.moved).set(goal.id, goal.target);
+  const exclude = [...scene.done.map((g) => g.id), goal.id];
+  const key = boardKey(moved, exclude, goal.target);
+  if (key === ahead.asked || ahead.ready?.key === key) return;
+  ahead.asked = key;
+  const request: GoalRequest = { job: ++ahead.job, seed, tries, placed, near: goal.target, moved: [...moved], effort: EFFORT, exclude };
+  ahead.worker.postMessage(request);
+}
+ahead.worker.onmessage = (event: MessageEvent<{ job: number; goal: Goal | null }>) => {
+  if (event.data.job === ahead.job) ahead.ready = { key: ahead.asked, goal: event.data.goal };
+};
 if (!scene.goal) requestGoal();
+else lookAhead();
 
 // While a slider is held: where its knob is (0..1), following the finger.
 let slider: { ui: Ui; from: number; at: number } | null = null;
@@ -166,6 +212,7 @@ function sliding(now: number): { id: string; x: number; y: number; from: Point; 
 // The first time the red block lands on its target, stars fly out of it; from then on the
 // target keeps a check.
 let sparkles: Sparkle[] = [];
+let throb: { id: string; born: number } | null = null;
 function reachGoal(now: number): void {
   const goal = scene.goal;
   if (!goal || !goalSolved(scene) || animation?.move.id === goal.id) return;
@@ -286,6 +333,7 @@ Object.assign(window, {
       placed = blocks;
       restart(scene, fixedLayout(blocks));
       scene.goal = goal;
+      lookAhead();
       redraw();
     },
   },
@@ -377,18 +425,21 @@ function redraw(): void {
     placeView();
     cameraMoved();
     const moving = sliding(now);
+    if (throb && throb.born < 0) throb.born = now;
+    if (throb && now > throb.born + THROB_MS) throb = null;
     draw(canvas, scene, {
       fullscreen: document.fullscreenElement !== null,
       density: slider?.ui === "density" ? slider.at : (tries - MIN_TRIES) / (MAX_TRIES - MIN_TRIES),
       sliding: moving,
       sparkles,
+      throb,
       now,
     });
     sparkles = sparkles.filter((s) => now < s.born + s.life);
     undoButton.disabled = scene.history.length === 0;
     const debug = (window as unknown as { unblock: { frames: { t: number; x: number; y: number }[] | null } }).unblock;
     if (debug.frames && moving) debug.frames.push({ t: now, x: moving.x, y: moving.y });
-    if (animation || sparkles.length || flight) redraw();
+    if (animation || sparkles.length || flight || throb) redraw();
     frames.push(now);
     showFps(now);
   });

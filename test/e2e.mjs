@@ -494,20 +494,28 @@ const browser = await chromium.launch();
   check(drawnAt !== undefined && drawnAt < 1 && (await page.evaluate(() => unblock.scene.done.length)) === 0, `not reached while it is still sliding (drawn at x ${drawnAt?.toFixed(2)})`);
   await page.evaluate(() => (unblock.frames = null));
   // On landing: reached, stars fly out of it, and a check shows on the target.
-  const starsSeen = await page.evaluate(() => new Promise((resolve) => {
-    const c = document.querySelector("canvas");
+  // n is the next red block (column 0, rows 6..7): as it turns red it throbs, for a moment
+  // reaching past its top edge.
+  const [starsSeen, beat, landedAt, shownAt] = await page.evaluate(([x, y]) => new Promise((resolve) => {
+    const c = document.querySelector("canvas"), d = c.width / c.clientWidth;
     let best = 0, frames = 0;
+    const beat = [], landed = [], shown = [];
     const look = () => {
+      const [r, g] = c.getContext("2d").getImageData(Math.round(x * d), Math.round((y - 3) * d), 1, 1).data;
+      beat.push(r - g > 80);
+      landed.push(unblock.scene.done.length > 0);
+      shown.push(unblock.scene.done.length > 0 && !!unblock.scene.goal);
       const data = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
       let n = 0;
       for (let i = 0; i < data.length; i += 16) if (Math.abs(data[i] - 242) < 20 && Math.abs(data[i + 1] - 182) < 30 && data[i + 2] < 110) n++;
       best = Math.max(best, n);
-      if (++frames < 40) requestAnimationFrame(look); else resolve(best);
+      if (++frames < 40) requestAnimationFrame(look); else resolve([best, beat, landed.indexOf(true), shown.indexOf(true)]);
     };
     look();
-  }));
+  }), cell(0.5, 6));
   check(starsSeen > 20, `stars fly out when it lands (${starsSeen} star pixels at most)`);
   check(await page.evaluate(() => unblock.scene.done.map((g) => g.id).join() === "r"), "the goal counts as reached");
+  check(shownAt === landedAt && beat.indexOf(true) >= 0 && !beat.at(-1), `and the next red block, made ahead, shows at once and throbs once (landed on frame ${landedAt}, next goal on frame ${shownAt}, past its edge from frame ${beat.indexOf(true)} for ${beat.filter(Boolean).length} frames, then back)`);
   // The next goal: a block close to the reached target becomes the red block.
   await page.evaluate(() => unblock.goalReady());
   const next = await page.evaluate(() => unblock.scene.goal);

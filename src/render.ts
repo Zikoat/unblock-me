@@ -31,15 +31,22 @@ export type Sparkle = { x: number; y: number; dx: number; dy: number; born: numb
 
 /** `density` is the slider's position, 0..1. `sliding` draws one block somewhere between
  * cells while a tap's slide is animated. `now` times the sparkles. */
+/** How long a new red block's heartbeat lasts, in ms. */
+export const THROB_MS = 450;
+/** One heartbeat: up to 15% larger and back, quick out, slower settle. */
+const throbScale = (t: number) => (t <= 0 || t >= 1 ? 1 : 1 + 0.15 * Math.sin(Math.PI * Math.pow(t, 0.7)));
+
 export function draw(
   canvas: HTMLCanvasElement,
   scene: Scene,
-  { fullscreen, density, sliding, sparkles = [], now = 0 }: {
+  { fullscreen, density, sliding, sparkles = [], throb = null, now = 0 }: {
     fullscreen: boolean;
     density: number;
     /** Where the sliding block is drawn now, and where its slide runs from and to. */
     sliding?: { id: string; x: number; y: number; from: { x: number; y: number }; to: { x: number; y: number } } | null;
     sparkles?: Sparkle[];
+    /** A block that just became red, and when, for one heartbeat. */
+    throb?: { id: string; born: number } | null;
     now?: number;
   },
 ): void {
@@ -98,6 +105,8 @@ export function draw(
     const home = scene.layout.byId(sliding.id);
     if (home) blocks.push({ ...home, moved: scene.moved.has(sliding.id) });
   }
+  // A throbbing block grows over its neighbours, so it goes on top.
+  if (throb) blocks.sort((a, b) => Number(a.id === throb.id) - Number(b.id === throb.id));
   for (const shown of blocks) {
     const block = shown.id === sliding?.id ? { ...shown, x: sliding.x, y: sliding.y } : shown;
     // Red blocks stay red after their goal is reached.
@@ -109,6 +118,14 @@ export function draw(
       : isGoal ? COLORS.goal
       : block.moved ? COLORS.moved
       : COLORS.block;
+    const beat = throb?.id === block.id ? throbScale((now - throb.born) / THROB_MS) : 1;
+    if (beat !== 1) {
+      ctx.save();
+      const cx = (block.x + block.w / 2) * UNIT, cy = (block.y + block.h / 2) * UNIT;
+      ctx.translate(cx, cy);
+      ctx.scale(beat, beat);
+      ctx.translate(-cx, -cy);
+    }
     ctx.beginPath();
     ctx.roundRect(block.x * UNIT + GAP, block.y * UNIT + GAP, block.w * UNIT - 2 * GAP, block.h * UNIT - 2 * GAP, block.wall ? 3 : 8);
     ctx.fill();
@@ -118,6 +135,7 @@ export function draw(
     else if (block.ui === "reports") reportsIcon(ctx, block);
     else if (block.ui === "density") densityIcon(ctx, block, density);
     else if (block.ui === "home") homeIcon(ctx, block);
+    if (beat !== 1) ctx.restore();
   }
 
   // A reached target keeps a check, above whatever block is on it.
