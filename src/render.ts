@@ -100,7 +100,8 @@ export function draw(
   }
   for (const shown of blocks) {
     const block = shown.id === sliding?.id ? { ...shown, x: sliding.x, y: sliding.y } : shown;
-    const isGoal = block.id === goal?.id;
+    // Red blocks stay red after their goal is reached.
+    const isGoal = block.id === goal?.id || scene.done.some((g) => g.id === block.id);
     ctx.fillStyle = block.ui ? COLORS.ui
       : block.wall ? COLORS.wall
       : block.id === scene.dragging?.id ? COLORS.dragging

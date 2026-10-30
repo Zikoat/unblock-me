@@ -514,6 +514,7 @@ const browser = await chromium.launch();
   check(next?.id === "n", `the next goal's red block is the block next to the reached target (${next?.id}, target ${JSON.stringify(next?.target)})`);
   await page.waitForTimeout(100);
   await expectColor(page, cell(0.5, 6.5), "goal", "and it is red now");
+  await expectColor(page, cell(1.25, 4.5), "goal", "and the reached red block stays red");
   await expectColor(page, checkSpot, "background", "a white check sits on the target, over the red block");
   await page.screenshot({ path: shots + "phone-7-solved.png" });
   // The check stays on the target after the red block leaves, and no stars come again.
