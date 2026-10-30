@@ -127,7 +127,7 @@ export function makeGoalHard(layout: Layout, near: Point, options: GoalOptions =
 /** How a goal's difficulty is weighed against its distance: difficulty / distance^alpha.
  * 0 ranks by difficulty alone (nearly always the furthest cell: each nearer cell's proof
  * is a prefix of the further one's); 1 by difficulty per cell. */
-export const tradeoff = { alpha: 0.67 }; // distances 3-12, three quarters of the difficulty (test/experiments/effort-sweep.ts)
+export const tradeoff = { alpha: 0.6 }; // distances 3-12, most of the difficulty (test/experiments/effort-sweep.ts, reports/play-analysis.html)
 export const balance = (g: { difficulty: Difficulty; distance: number }) => g.difficulty.score / Math.pow(g.distance, tradeoff.alpha);
 
 /** The push search's targets, ranked by the difficulty measure. */
