@@ -2,7 +2,7 @@
 // camera transform, so it all zooms and pans together.
 import { worldRect } from "./camera";
 import { intersects, UI_AREA, UNIT, type Block } from "./layout";
-import { starsEarned, starsFor } from "./difficulty";
+import { starsEarned, starsWorth } from "./stars";
 import { bestKnown, medal, type Goal } from "./goal";
 import { borderOnScreen, latticeRect, quickPush, visibleBlocks, whereIs, type Scene } from "./scene";
 
@@ -457,15 +457,15 @@ function uploadIcon(ctx: CanvasRenderingContext2D, block: Block): void {
   ctx.stroke();
 }
 
-/** A reached goal's stars along its long edge: what it was worth (0..10), the earned ones
+/** A reached goal's stars along its long edge: what it was worth (1..5), the earned ones
  * filled in gold. */
 function goalStars(ctx: CanvasRenderingContext2D, g: Goal, cells: Cells): void {
   const d = g.difficulty;
   if (!d || g.used === undefined) return;
-  const worth = starsFor(d.score, g.tries ?? 7);
+  const worth = starsWorth(bestKnown(g)!);
   const earned = starsEarned(worth, bestKnown(g)!, g.used);
   const horizontal = cells.w > cells.h;
-  const step = 10.5, r = 4.2;
+  const step = 13, r = 5.2;
   const long = (horizontal ? cells.w : cells.h) * UNIT;
   const first = (long - step * (worth - 1)) / 2;
   for (let i = 0; i < worth; i++) {

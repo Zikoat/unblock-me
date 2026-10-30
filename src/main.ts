@@ -1,6 +1,7 @@
 // The app: wires the canvas, the gestures, storage, goals and live reload together.
 import type { Point, Rect } from "./camera";
-import { starsEarned, starsFor, type Difficulty } from "./difficulty";
+import type { Difficulty } from "./difficulty";
+import { MAX_STARS, starsEarned, starsWorth } from "./stars";
 import { bestKnown, medal, viewCentre, type Goal } from "./goal";
 import type { GoalRequest } from "./goal-worker";
 import { Gestures } from "./gestures";
@@ -28,6 +29,7 @@ const EFFORT = 12;
 const TRACK = 0.52;
 
 declare const __BUILD_ID__: string;
+declare const __COMMIT__: string;
 
 // ?board=<JSON list of placed blocks> opens exactly that board (for sharing a board, and
 // for tests). Nothing is stored while it is open.
@@ -79,7 +81,9 @@ function load<T>(key: string, fallback: T): T {
 // The play log: what happened when, for analysing goals and their difficulty against how they
 // were really played (sent with the play data). Append-only; the oldest events go past LOG_MAX.
 type LogEvent =
-  | { e: "goal"; id: string; target: Point; start?: Point; tries: number; seed: number; solution: number; moved: [string, number, number][] }
+  | { e: "load"; commit: string }
+  | { e: "error"; message: string; where: string }
+  | { e: "goal"; commit: string; id: string; target: Point; start?: Point; tries: number; seed: number; solution: number; moved: [string, number, number][] }
   | { e: "move" | "undo"; id: string; from: Point; to: Point }
   | { e: "reached"; id: string; used: number }
   | { e: "reset"; goal: string | null }
@@ -163,6 +167,17 @@ const scene = newScene(innerWidth, innerHeight, {
 });
 // The stored history was logged before this page loaded; log only what comes after it.
 logged = scene.history.length;
+// Each page load starts a stretch of play on one build.
+log({ e: "load", commit: __COMMIT__ });
+// Errors go in the log too, so a bug seen in play shows up in the play data.
+addEventListener("error", (e: ErrorEvent) => {
+  log({ e: "error", message: String(e.message).slice(0, 300), where: `${e.filename?.split("/").pop()}:${e.lineno}:${e.colno}` });
+  save();
+});
+addEventListener("unhandledrejection", (e: PromiseRejectionEvent) => {
+  log({ e: "error", message: String(e.reason?.message ?? e.reason).slice(0, 300), where: "promise" });
+  save();
+});
 restoreCamera();
 // A fresh start (first visit or after a reset) keeps its seed from the first load on.
 if (localStorage.getItem(SEED_KEY) === null) save();
@@ -207,7 +222,7 @@ function showGoal(goal: Goal | null): void {
     goal.tries = tries;
     goal.begun = scene.history.length;
     // A snapshot of the board, so the goal can be measured again later.
-    log({ e: "goal", id: goal.id, target: goal.target, start: goal.start, tries, seed, solution: goal.solution.length, moved: [...scene.moved].map(([id, p]) => [id, p.x, p.y]) });
+    log({ e: "goal", commit: __COMMIT__, id: goal.id, target: goal.target, start: goal.start, tries, seed, solution: goal.solution.length, moved: [...scene.moved].map(([id, p]) => [id, p.x, p.y]) });
   }
   // The new red block throbs once; its clock starts at the first frame drawn.
   if (scene.goal) throb = { id: scene.goal.id, born: -1 };
@@ -523,11 +538,11 @@ function ago(ms: number): string {
 // The build id is the build time in base 36.
 const builtAt = parseInt(__BUILD_ID__, 36);
 
-// The fps counter, with how long ago the running code was built.
+// The fps counter, with how long ago the running code was built and from which commit.
 const frames: number[] = [];
 function showFps(now: number): void {
   while (frames.length && frames[0]! <= now - 1000) frames.shift();
-  fps.textContent = `${frames.length} fps · ${ago(Date.now() - builtAt)}`;
+  fps.textContent = `${frames.length} fps · ${ago(Date.now() - builtAt)} · ${__COMMIT__}`;
 }
 setInterval(() => showFps(performance.now()), 500);
 
@@ -541,6 +556,9 @@ function redraw(): void {
     placeView();
     cameraMoved();
     const moving = sliding(now);
+    // A red block standing on its target always counts, whatever ended its slide (a reload
+    // mid-slide, a frame that failed): reachGoal does nothing otherwise.
+    if (!animation) reachGoal(now);
     if (throb && throb.born < 0) throb.born = now;
     if (throb && now > throb.born + THROB_MS) throb = null;
     if (cue && cue.born < 0) cue.born = now;
@@ -623,7 +641,7 @@ function playData() {
       stored[key] = value; // not JSON (the device id)
     }
   }
-  return { sentAt: new Date().toISOString(), build: builtAt, device, userAgent: navigator.userAgent, screen: { width: innerWidth, height: innerHeight, dpr: devicePixelRatio }, stored };
+  return { sentAt: new Date().toISOString(), build: builtAt, commit: __COMMIT__, device, userAgent: navigator.userAgent, screen: { width: innerWidth, height: innerHeight, dpr: devicePixelRatio }, stored };
 }
 /** Send it; `quiet` (automatic) replaces this device's last upload and shows nothing. */
 async function sendPlayData(quiet = false): Promise<boolean> {
@@ -675,8 +693,8 @@ function goalTip(at: Point): string | null {
       const fewest = d.moves ?? (d.atLeast >= g.solution.length ? g.solution.length : `${d.atLeast} to ${g.solution.length}`);
       lines.unshift(`Fewest moves: ${fewest}`);
       lines.push(`Difficulty: ${d.score.toFixed(1)}${d.moves === null ? "+" : ""}`);
-      const worth = starsFor(d.score, g.tries ?? tries);
-      lines.push(g.used === undefined ? `Worth ${worth} of 10 stars` : `Stars: ${starsEarned(worth, bestKnown(g)!, g.used)} of ${worth} (worth ${worth} of 10)`);
+      const worth = starsWorth(bestKnown(g)!);
+      lines.push(g.used === undefined ? `Worth ${worth} of ${MAX_STARS} stars` : `Stars: ${starsEarned(worth, bestKnown(g)!, g.used)} of ${worth}`);
       if (medal(g)) lines.push(`Medal: ${g.used} moves, fewer than the game's best (${bestKnown(g)})`);
     }
     return lines.join("\n");

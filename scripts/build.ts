@@ -10,6 +10,10 @@ const outdir = join(root, "dist");
 
 async function build(): Promise<void> {
   const id = Date.now().toString(36);
+  // The commit the code is built from, with "+" when the source has changes not yet
+  // committed: play data records it, so each move can be matched to the code it ran on.
+  const git = (...args: string[]) => Bun.spawnSync(["git", ...args], { cwd: join(src, "..") }).stdout.toString().trim();
+  const commit = (git("rev-parse", "--short", "HEAD") || "unknown") + (git("status", "--porcelain", "--", "src", "scripts") ? "+" : "");
   await mkdir(outdir, { recursive: true });
   const result = await Bun.build({
     entrypoints: [join(src, "main.ts")],
@@ -17,7 +21,7 @@ async function build(): Promise<void> {
     target: "browser",
     naming: "app.js",
     minify: true,
-    define: { __BUILD_ID__: JSON.stringify(id) },
+    define: { __BUILD_ID__: JSON.stringify(id), __COMMIT__: JSON.stringify(commit) },
   });
   const worker = await Bun.build({
     entrypoints: [join(src, "goal-worker.ts")],
