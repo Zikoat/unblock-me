@@ -200,19 +200,17 @@ let clips = 0;
  * passed) and "hollow" (outlines until the goal, then filled one at a time). `finish` is how
  * far the finish animation is: the stars filled so far (with `pop` for the newest).
  */
-function track(g, x0, y0, used, { undone = false, scale = 1, size = null, style = "now", finish = null, collapse = 0, upright = false, endInside = false, trace = null } = {}) {
+function track(g, x0, y0, used, { undone = false, scale = 1, size = null, style = "now", finish = null, collapse = 0, upright = false, trace = null } = {}) {
   // `size` (width and height) overrides the look's, e.g. to fit inside the goal's target.
   const width = size ? size.width : LOOK.width * scale, h = size ? size.height : LOOK.height * scale;
-  // When the track fills a goal, its last star sits just inside the right end, the moves
-  // spread over the rest.
-  const w = (width - (endInside ? h * 0.45 : 0)) / END;
+  const w = width / END;
   const at = (m) => x0 + m * w;
   const clip = `track${++clips}`;
   el("rect", { x: x0, y: y0, width, height: h, rx: Math.min(h / 2, h * LOOK.radius) }, el("clipPath", { id: clip }, g));
   // While collapsing (after the finish) the track fades and only the stars stay.
   const bar = el("g", { "clip-path": `url(#${clip})`, opacity: 1 - collapse }, g);
   const done = Math.min(used, END);
-  el("rect", { x: x0, y: y0, width: used >= END ? width : done * w, height: h, fill: C.used, "fill-opacity": 0.78 }, bar);
+  el("rect", { x: x0, y: y0, width: done * w, height: h, fill: C.used, "fill-opacity": 0.78 }, bar);
   // Icons as big as the look says, but never wider than the gap between two stars.
   const cy = y0 + h / 2, s = Math.min(h * 0.7, STEP * w * 0.95) * LOOK.icons, ms = s * 0.74;
   for (const m of MARKS) if (m.kind === "star") el("line", { x1: at(m.at), x2: at(m.at), y1: y0, y2: y0 + h, stroke: C.line, "stroke-width": Math.max(1, w * 0.14) }, bar);
@@ -301,8 +299,8 @@ function drawBoard(used, undone) {
   const tx = 6, ty = 5;
   el("rect", { x: tx * CELL + 1, y: ty * CELL + 1, width: 2 * CELL - 2, height: CELL - 2, rx: 7, fill: C.target, stroke: C.targetLine, "stroke-width": 2, "stroke-dasharray": "5 4" }, svg);
   block(tx + 7, ty, 2, 1, C.red);
-  // The track fills the target; the last star sits just inside its right end.
-  track(el("g", {}, svg), tx * CELL + 1, ty * CELL + 1, used, { undone, size: { width: 2 * CELL - 2, height: CELL - 2 }, endInside: true });
+  // The track fills the target; the last star sits on its right edge.
+  track(el("g", {}, svg), tx * CELL + 1, ty * CELL + 1, used, { undone, size: { width: 2 * CELL - 2, height: CELL - 2 } });
   document.getElementById("readout").textContent = `${used} moves: ${verdict(used, undone)}.`;
 }
 
@@ -323,7 +321,7 @@ function drawBoardVertical(used, undone) {
   const len = 2 * CELL - 2, thick = CELL - 2;
   // Local (u, v) on the track goes to (x + v, y + len - u) on the board: u runs up.
   const g = el("g", { transform: `translate(${tx * CELL + 1} ${ty * CELL + 1 + len}) rotate(-90)` }, svg);
-  track(g, 0, 0, used, { undone, size: { width: len, height: thick }, endInside: true, upright: true });
+  track(g, 0, 0, used, { undone, size: { width: len, height: thick }, upright: true });
 }
 
 function row(box, left, svg, right) {
