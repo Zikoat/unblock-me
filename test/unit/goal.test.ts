@@ -104,6 +104,14 @@ describe("the next goal", () => {
     expect(makeGoal(layout, { x: 2, y: 1 }, { effort: 3, exclude: new Set(["r", "v", "t"]) })).toBeNull();
   });
 
+  test("a target never shares a cell with an earlier one: it stops short", () => {
+    const layout = fixedLayout([W(-1, 0), H("r", 0, 0), W(9, 0)]);
+    expect(makeGoal(layout, { x: 0, y: 0 }, { effort: 3 })!.target).toEqual({ x: 3, y: 0 });
+    const goal = makeGoal(layout, { x: 0, y: 0 }, { effort: 3, avoid: [{ x: 4, y: 0, width: 2, height: 1 }] })!;
+    expect(goal.target).toEqual({ x: 2, y: 0 });
+    expect(replay(layout, goal.solution)).toBeTruthy();
+  });
+
   test("it starts from the board as it is, moved blocks included", () => {
     // r has been moved onto x 4; a goal made near there finds it at x 4.
     const layout = fixedLayout([H("r", 0, 0), W(-1, 0)]);

@@ -1,9 +1,9 @@
 // Goals: a red block and the cells it has to reach. Made by shuffling the board with one
 // intent, pushing a single block as far as it will go along its axis, so every goal is
 // reachable by construction.
-import type { Point } from "./camera";
+import type { Point, Rect } from "./camera";
 import { clearCell, replay, type Move } from "./frozen";
-import { UNIT, type Block, type Layout } from "./layout";
+import { intersects, UNIT, type Block, type Layout } from "./layout";
 import { blocksIn, isHorizontal, position, slide, type Changes } from "./rules";
 
 export type Goal = {
@@ -27,6 +27,8 @@ export type GoalOptions = {
   /** Blocks that may not be the red block (earlier red blocks), nor share a track with:
    * the same row for a horizontal block, the same column for a vertical one. */
   exclude?: ReadonlySet<string>;
+  /** Earlier targets (cells): a new target never shares a cell with one. */
+  avoid?: readonly Rect[];
 };
 
 /** One drag can move a block several cells: merge back-to-back moves of the same block. */
@@ -62,8 +64,9 @@ export function simplify(layout: Layout, moves: Move[], start: ReadonlyMap<strin
 
 /** Push `red` one cell at a time in `dir` (+1 or -1 along its axis), clearing each cell it
  * steps into, up to `effort` cells or until a cell cannot be cleared. Moves are applied to
- * `moved`. */
-function push(layout: Layout, moved: Map<string, Point>, red: Block, dir: number, effort: number, perCell: number): Move[] {
+ * `moved`; `steps` gets, for each cell stepped, where the red block got to and how many of
+ * the moves it took. */
+function push(layout: Layout, moved: Map<string, Point>, red: Block, dir: number, effort: number, perCell: number, steps: { at: Point; moves: number }[]): Move[] {
   const changes: Changes = { moved };
   const keep = new Set([red.id]);
   const moves: Move[] = [];
@@ -79,6 +82,7 @@ function push(layout: Layout, moved: Map<string, Point>, red: Block, dir: number
     const to = isHorizontal(at) ? { x: at.x + dir, y: at.y } : { x: at.x, y: at.y + dir };
     moved.set(red.id, to);
     moves.push({ id: red.id, from: { x: at.x, y: at.y }, to });
+    steps.push({ at: to, moves: moves.length });
   }
   return moves;
 }
@@ -88,7 +92,7 @@ function push(layout: Layout, moved: Map<string, Point>, red: Block, dir: number
  * push each both ways along its axis, and keep the one that got furthest (fewest moves on a
  * tie). Null when no block nearby can be pushed even one cell.
  */
-export function makeGoal(layout: Layout, near: Point, { effort = 12, perCell = 4, moved: start = new Map(), exclude = new Set() }: GoalOptions = {}): Goal | null {
+export function makeGoal(layout: Layout, near: Point, { effort = 12, perCell = 4, moved: start = new Map(), exclude = new Set(), avoid = [] }: GoalOptions = {}): Goal | null {
   const track = (b: Block) => `${isHorizontal(b) ? "row" : "column"} ${isHorizontal(b) ? b.y : b.x}`;
   const taken = new Set([...exclude].flatMap((id) => {
     const b = layout.byId(id);
@@ -103,11 +107,14 @@ export function makeGoal(layout: Layout, near: Point, { effort = 12, perCell = 4
     for (const dir of [1, -1]) {
       // (Pushing it the other way first and starting there was tried: that push clears the
       // lane behind it, so the way back is always one drag.)
-      const moved = new Map(start);
-      const solution = simplify(layout, push(layout, moved, red, dir, effort, perCell), start);
-      const end = moved.get(red.id) ?? { x: red.x, y: red.y };
+      const steps: { at: Point; moves: number }[] = [];
+      const moves = push(layout, new Map(start), red, dir, effort, perCell, steps);
+      // The furthest it got without its target sharing a cell with an earlier one.
+      const step = steps.filter((s) => !avoid.some((a) => intersects({ ...s.at, w: red.w, h: red.h }, a))).at(-1);
+      if (!step) continue;
+      const end = step.at;
+      const solution = simplify(layout, moves.slice(0, step.moves), start);
       const distance = Math.abs(end.x - red.x) + Math.abs(end.y - red.y);
-      if (distance === 0) continue;
       if (!best || distance > best.distance || (distance === best.distance && solution.length < best.solution.length)) {
         best = { id: red.id, target: end, solution, distance };
       }

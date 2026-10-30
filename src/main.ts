@@ -1,5 +1,5 @@
 // The app: wires the canvas, the gestures, storage, goals and live reload together.
-import type { Point } from "./camera";
+import type { Point, Rect } from "./camera";
 import type { Goal } from "./goal";
 import { viewCentre } from "./goal";
 import type { GoalRequest } from "./goal-worker";
@@ -124,7 +124,7 @@ function requestGoal(near: Point = viewCentre(scene.camera, scene.width, scene.h
     showGoal(ahead.ready.goal);
     return;
   }
-  const request: GoalRequest = { job: ++job, seed, tries, placed, near, moved: [...scene.moved], effort: EFFORT, exclude };
+  const request: GoalRequest = { job: ++job, seed, tries, placed, near, moved: [...scene.moved], effort: EFFORT, exclude, avoid: targetsOf(scene.done) };
   worker.postMessage(request);
 }
 worker.onmessage = (event: MessageEvent<{ job: number; goal: Goal | null }>) => {
@@ -151,6 +151,13 @@ const ahead = {
   asked: "",
   ready: null as { key: string; goal: Goal | null } | null,
 };
+/** The cells of these goals' targets. */
+function targetsOf(goals: Goal[]): Rect[] {
+  return goals.flatMap((g) => {
+    const red = scene.layout.byId(g.id);
+    return red ? [{ x: g.target.x, y: g.target.y, width: red.w, height: red.h }] : [];
+  });
+}
 function boardKey(moved: ReadonlyMap<string, Point>, exclude: string[], near: Point): string {
   return JSON.stringify([seed, tries, placed, [...moved].sort(([a], [b]) => (a < b ? -1 : 1)), exclude, near]);
 }
@@ -168,7 +175,7 @@ function lookAhead(): void {
   const key = boardKey(moved, exclude, goal.target);
   if (key === ahead.asked || ahead.ready?.key === key) return;
   ahead.asked = key;
-  const request: GoalRequest = { job: ++ahead.job, seed, tries, placed, near: goal.target, moved: [...moved], effort: EFFORT, exclude };
+  const request: GoalRequest = { job: ++ahead.job, seed, tries, placed, near: goal.target, moved: [...moved], effort: EFFORT, exclude, avoid: targetsOf([...scene.done, goal]) };
   ahead.worker.postMessage(request);
 }
 ahead.worker.onmessage = (event: MessageEvent<{ job: number; goal: Goal | null }>) => {
