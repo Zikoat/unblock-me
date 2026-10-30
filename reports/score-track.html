@@ -65,7 +65,7 @@
   <li>Every move takes the same width of the track. Moves used are dark, moves left are light, so the dark fill grows to the right.</li>
   <li>A line across the track marks the exact point where something is lost: finish before it and you keep the icon on it.</li>
   <li>The icons sit on the lines, on their own layer, so their width never shifts the track.</li>
-  <li>The rosette sits just before 15, the shortest solution the game has: beating it beats the game.</li>
+  <li>The rosette sits at 13, the lower bound: no solution is shorter, so finishing there is a perfect solve (and beats the game's own 15).</li>
   <li>One star every 5 moves (a third of 15). Passed icons turn gray.</li>
   <li>The track ends at 31. The last star sits outside it: it is never lost.</li>
   <li>After an undo the medal is gray and faint: it can no longer be won on this goal.</li>
@@ -75,7 +75,7 @@
 const FEWEST = 15, LOW = 13, STEP = 5, END = 31;
 // Where each thing is lost: finishing in `at` moves or fewer keeps it.
 const MARKS = [
-  { at: FEWEST - 1, kind: "medal" },
+  { at: LOW, kind: "medal" },
   { at: FEWEST, kind: "star" },
   { at: FEWEST + STEP, kind: "star" },
   { at: FEWEST + 2 * STEP, kind: "star" },
@@ -187,10 +187,10 @@ function stars(used) {
   return 5 - lost;
 }
 function verdict(used, undone) {
-  const medal = !undone && used <= FEWEST - 1;
+  const medal = !undone && used <= LOW;
   const n = stars(used);
-  if (medal) return "🏅 medal: better than the game's 15";
-  return `${n} of 5 stars` + (undone && used <= FEWEST - 1 ? " (no medal: undone)" : "");
+  if (medal) return "🏅 medal: the fewest possible, 13";
+  return `${n} of 5 stars` + (undone && used <= LOW ? " (no medal: undone)" : "");
 }
 
 // The goal in place: a slice of the board, the red block heading left 7 cells to its target.
@@ -219,7 +219,7 @@ function drawBoard(used, undone) {
 
 function drawSteps() {
   const box = document.getElementById("steps");
-  const rows = [[0, false, "start"], [9, false, ""], [14, false, "last move for 🏅"], [15, false, "medal gone"], [16, false, ""], [22, false, "your finish"], [31, false, "end of the track"], [34, false, "past the end"], [12, true, "undone once: no medal"]];
+  const rows = [[0, false, "start"], [9, false, ""], [13, false, "last move for 🏅"], [14, false, "medal gone"], [15, false, ""], [16, false, ""], [22, false, "your finish"], [31, false, "end of the track"], [34, false, "past the end"], [12, true, "undone once: no medal"]];
   for (const [used, undone, note] of rows) {
     const row = document.createElement("div");
     row.className = "step";
