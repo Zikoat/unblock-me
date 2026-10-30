@@ -1,7 +1,7 @@
 import type { Rect } from "./camera";
 
 /** A 1x1 control on the board: it never slides, a tap runs it. */
-export type Ui = "home" | "reset" | "fullscreen" | "reports" | "density" | "border";
+export type Ui = "home" | "reset" | "fullscreen" | "reports" | "density" | "border" | "upload";
 
 /** A block on the lattice, in lattice units: 2x1 slides horizontally, 1x2 vertically.
  * UI blocks and walls never slide. */
@@ -54,6 +54,7 @@ export const UI_BLOCKS: Placed[] = [
   { id: "reports", x: 2, y: 0, w: 1, h: 1, ui: "reports" },
   { id: "density", x: -1, y: 2, w: 1, h: 1, ui: "density" },
   { id: "border", x: 0, y: 2, w: 1, h: 1, ui: "border" },
+  { id: "upload", x: 1, y: 2, w: 1, h: 1, ui: "upload" },
 ];
 /** Nothing is generated here: both rows and the gap between them. */
 export const UI_AREA = { x: -1, y: 0, width: 4, height: 3 };

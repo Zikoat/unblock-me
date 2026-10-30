@@ -149,6 +149,7 @@ export function draw(
     else if (block.ui === "border") borderIcon(ctx, block, scene.border);
     else if (block.ui === "fullscreen") fullscreenIcon(ctx, block, fullscreen);
     else if (block.ui === "reports") reportsIcon(ctx, block);
+    else if (block.ui === "upload") uploadIcon(ctx, block);
     else if (block.ui === "density") densityIcon(ctx, block, density);
     else if (block.ui === "home") homeIcon(ctx, block);
     if (beat !== 1) ctx.restore();
@@ -332,6 +333,26 @@ function sliderTrack(ctx: CanvasRenderingContext2D, block: Block, at: number): v
 }
 
 /** Three rising bars on a baseline: the reports. */
+/** An arrow up out of a tray: send the play data. */
+function uploadIcon(ctx: CanvasRenderingContext2D, block: Block): void {
+  const x = block.x * UNIT, y = block.y * UNIT;
+  ctx.strokeStyle = COLORS.icon;
+  ctx.lineWidth = UNIT * 0.07;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.beginPath();
+  ctx.moveTo(x + UNIT * 0.5, y + UNIT * 0.6);
+  ctx.lineTo(x + UNIT * 0.5, y + UNIT * 0.24);
+  ctx.moveTo(x + UNIT * 0.36, y + UNIT * 0.37);
+  ctx.lineTo(x + UNIT * 0.5, y + UNIT * 0.24);
+  ctx.lineTo(x + UNIT * 0.64, y + UNIT * 0.37);
+  ctx.moveTo(x + UNIT * 0.27, y + UNIT * 0.6);
+  ctx.lineTo(x + UNIT * 0.27, y + UNIT * 0.74);
+  ctx.lineTo(x + UNIT * 0.73, y + UNIT * 0.74);
+  ctx.lineTo(x + UNIT * 0.73, y + UNIT * 0.6);
+  ctx.stroke();
+}
+
 function reportsIcon(ctx: CanvasRenderingContext2D, block: Block): void {
   const left = (block.x + 0.27) * UNIT;
   const base = (block.y + 0.72) * UNIT;
@@ -345,8 +366,6 @@ function reportsIcon(ctx: CanvasRenderingContext2D, block: Block): void {
   });
 }
 
-/** A check on the target, in the middle of the cells the red block covers there: white
- * with a red edge, so it reads on the block and on the pale target alike. */
 /** A reached goal's stars along its long edge: what it was worth (0..10), the earned ones
  * filled in gold. */
 function goalStars(ctx: CanvasRenderingContext2D, g: Goal, cells: Cells): void {
@@ -374,6 +393,8 @@ function goalStars(ctx: CanvasRenderingContext2D, g: Goal, cells: Cells): void {
   }
 }
 
+/** A check on the target, in the middle of the cells the red block covers there: white
+ * with a red edge, so it reads on the block and on the pale target alike. */
 function goalCheck(ctx: CanvasRenderingContext2D, x: number, y: number): void {
   const cx = x * UNIT;
   const cy = y * UNIT;

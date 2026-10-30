@@ -284,6 +284,8 @@ const gestures = new Gestures(scene, {
       location.href = "reports/";
     } else if (ui === "home") {
       location.href = "/";
+    } else if (ui === "upload") {
+      void sendPlayData();
     }
   },
   // The sliders keep their knob under the finger. Density shows the board at that density
@@ -486,10 +488,35 @@ function tooltip(ui: Ui): string | null {
     case "border": return "Debug: Make the viewport smaller to test frustum culling.";
     case "reset": return "Reset";
     case "reports": return "Reports";
+    case "upload": return "Debug: Send play data to the VM for analysis";
     default: return null;
   }
 }
 
+/** Everything this game keeps in the browser, sent to the VM (play-data/ in the repo) so the
+ * goals and their difficulty can be analysed. A note shows how it went. */
+async function sendPlayData(): Promise<void> {
+  const stored: Record<string, unknown> = {};
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i)!;
+    if (key.startsWith("unblock-me:")) stored[key] = JSON.parse(localStorage.getItem(key) ?? "null");
+  }
+  const data = { sentAt: new Date().toISOString(), build: builtAt, userAgent: navigator.userAgent, screen: { width: innerWidth, height: innerHeight, dpr: devicePixelRatio }, stored };
+  try {
+    const sent = await fetch("play-data", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+    note(sent.ok ? `Sent play data (${scene.done.length} goals)` : `Sending failed (${sent.status})`);
+  } catch {
+    note("Sending failed (offline?)");
+  }
+}
+/** A short note in the middle of the view for a couple of seconds. */
+function note(text: string): void {
+  tip.textContent = text;
+  tip.style.display = "block";
+  tip.style.left = `${(innerWidth - tip.offsetWidth) / 2}px`;
+  tip.style.top = `${innerHeight / 2}px`;
+  setTimeout(() => (tip.style.display = "none"), 2500);
+}
 /** Moves made since history had `begun` entries, where moving one block several times in a
  * row counts once (as in the fewest-moves count). */
 function movesSince(begun: number): number {
