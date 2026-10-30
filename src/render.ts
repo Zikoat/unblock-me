@@ -112,13 +112,6 @@ export function draw(
     ctx.restore();
   });
 
-  // The goal's glow goes under the blocks, so it never tints them.
-  const band = goalBand(scene);
-  if (band) {
-    drawBand(ctx, band, dpr);
-    ctx.setTransform(dpr * camera.scale, 0, 0, dpr * camera.scale, dpr * camera.offsetX, dpr * camera.offsetY);
-  }
-
   // The sliding block is drawn until its slide ends, even when it ends outside the view and
   // culling would leave it out.
   const blocks = visibleBlocks(scene);
@@ -184,6 +177,9 @@ export function draw(
     ctx.lineWidth = 1;
     ctx.strokeRect(border.x + 0.5, border.y + 0.5, border.width - 1, border.height - 1);
   }
+  // The goal's glow, over the blocks.
+  const band = goalBand(scene);
+  if (band) drawBand(ctx, band, dpr);
   const toUi = uiArrow(scene);
   if (toUi) drawPin(ctx, toUi, COLORS.ui, 16, dpr, true);
   const toRed = redArrow(scene);
