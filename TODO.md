@@ -12,3 +12,7 @@
 - A* cap per density (95% finds the fewest moves): a background agent is tuning it; when it reports, review, test, push and update the report's "Being tuned" line.
 - Remove the dead `RANGE`/`starsFor`/old `starsEarned` in difficulty.ts; waits on the cap agent finishing with that file.
 - Log each goal's proof and measured difficulty, and page hides; widen the measure window (goal #37: 8 in the window, player did 6); waits on you picking it.
+- Score track instead of stars (reports/score-track.html: one cell per move, gaps where a star or the medal is lost, ends at about 2x fewest); waits on your review of the design.
+- Undo a reached goal: rewind to where its moves started counting and replay it for a better score; waits on the score track.
+- Undo during a goal (or undoing the goal) loses the medal (shown faded) and is stored with the goal; waits on the score track.
+- Hovering a reached goal highlights the blocks its solution needed, and differently those moved without need; waits on you picking it.

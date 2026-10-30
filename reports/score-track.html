@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Score track</title>
+<style>
+  :root { color-scheme: light dark; --bg: #f9f9f7; --card: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --line: #e1e0d9; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0d0d0d; --card: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --line: #2c2c2a; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 820px; margin: 0 auto; padding: 24px 16px 56px; }
+  .back { color: var(--ink-2); text-decoration: none; font-size: 14px; }
+  h1 { font-size: 24px; margin: 10px 0 4px; }
+  h2 { font-size: 18px; margin: 32px 0 8px; }
+  .sub { color: var(--ink-2); margin: 0 0 20px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  .board { display: block; width: 100%; height: auto; border-radius: 8px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; margin-top: 14px; font-size: 14px; }
+  .controls input[type=range] { flex: 1 1 220px; }
+  .controls output { font-variant-numeric: tabular-nums; min-width: 9ch; font-weight: 600; }
+  .readout { margin-top: 6px; font-size: 14px; color: var(--ink-2); min-height: 1.5em; }
+  .steps { display: grid; gap: 10px; }
+  .step { display: grid; grid-template-columns: 4.5rem 1fr 9rem; gap: 12px; align-items: center; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
+  .step .n { font-variant-numeric: tabular-nums; color: var(--ink-2); font-size: 14px; }
+  .step .r { font-size: 14px; }
+  .step svg { width: 100%; height: auto; display: block; }
+  ul { padding-left: 20px; }
+  li { margin: 4px 0; max-width: 68ch; }
+  @media (max-width: 560px) { .step { grid-template-columns: 1fr; gap: 4px; } }
+</style>
+</head>
+<body><main>
+<a class="back" href="./">← All reports</a>
+<h1>Score track</h1>
+<p class="sub">A design for the goal from your upload: fewest 13 to 15, 7 cells away, solved in 22 moves.</p>
+
+<div class="card">
+  <svg class="board" id="board" viewBox="0 0 448 252" role="img" aria-label="The goal on the board with its score track"></svg>
+  <div class="controls">
+    <label for="used">Moves</label>
+    <input id="used" type="range" min="0" max="36" value="22">
+    <output id="usedOut">22</output>
+    <label><input id="undone" type="checkbox"> Undone once</label>
+  </div>
+  <div class="readout" id="readout"></div>
+</div>
+
+<h2>As the moves go up</h2>
+<div class="steps" id="steps"></div>
+
+<h2>How it reads</h2>
+<ul>
+  <li>One cell per move, all the same width. Moves used are light, moves left are dark, so the light fill grows to the right.</li>
+  <li>A gap marks the exact point where something is lost: finish before it and you keep the icon above it.</li>
+  <li>The icons sit on their own layer above the gaps, so their width never shifts the cells.</li>
+  <li>🏅 sits just before 15, the shortest solution the game has: beating it beats the game. The hatched cells (13 to 15) are where the real fewest could be.</li>
+  <li>One star every 5 moves (a third of 15). Passed icons turn gray.</li>
+  <li>The track ends at 31; past that the fill stays full (1 star).</li>
+  <li>After an undo the medal is an outline: it can no longer be won on this goal.</li>
+</ul>
+</main>
+<script>
+const FEWEST = 15, LOW = 13, STEP = 5, END = 31;
+// Where each thing is lost: finishing in `at` moves or fewer keeps it.
+const MARKS = [
+  { at: FEWEST - 1, kind: "medal" },
+  { at: FEWEST, kind: "star" },
+  { at: FEWEST + STEP, kind: "star" },
+  { at: FEWEST + 2 * STEP, kind: "star" },
+  { at: FEWEST + 3 * STEP, kind: "star" },
+];
+const C = {
+  bg: "#f3f2ee", dot: "#d3d1ca", block: "#4f6d8f", red: "#d64545", target: "rgba(214,69,69,0.14)", targetLine: "rgba(214,69,69,0.45)",
+  left: "#8e3f3c", used: "#eaa49c", hatch: "#b5605a", star: "#f2b632", starLine: "#b07d12", gray: "#b9b6ad", medal: "#c44",
+};
+const NS = "http://www.w3.org/2000/svg";
+const el = (name, attrs, parent) => {
+  const e = document.createElementNS(NS, name);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  if (parent) parent.appendChild(e);
+  return e;
+};
+
+function starPath(cx, cy, r) {
+  let d = "";
+  for (let i = 0; i < 10; i++) {
+    const a = -Math.PI / 2 + (i * Math.PI) / 5, rr = i % 2 ? r * 0.45 : r;
+    d += `${i ? "L" : "M"}${(cx + rr * Math.cos(a)).toFixed(2)},${(cy + rr * Math.sin(a)).toFixed(2)}`;
+  }
+  return d + "Z";
+}
+
+/** The track: cells of width `w` from x0, its icons above. */
+function track(g, x0, y0, w, used, undone) {
+  const h = Math.max(6, w * 1.25), gap = Math.max(1.5, w * 0.35);
+  const gaps = new Set(MARKS.map((m) => m.at));
+  // Background layer: one cell per move; a gap after each losing point.
+  let x = x0;
+  const edge = [];
+  for (let k = 1; k <= END; k++) {
+    const fill = k <= used ? C.used : C.left;
+    const r = el("rect", { x, y: y0, width: w, height: h, fill, rx: Math.min(1.5, w / 4) }, g);
+    if (k > used && k >= LOW && k <= FEWEST) el("rect", { x, y: y0, width: w, height: h, fill: "url(#hatch)" }, g);
+    edge[k] = x + w;
+    x += w + (gaps.has(k) ? gap : w * 0.12);
+  }
+  // Foreground layer: an icon centred on each gap.
+  const s = w * 1.7;
+  for (const m of MARKS) {
+    // Neighbouring marks (the medal just before the 5th star) step apart sideways.
+    const near = MARKS.find((o) => o !== m && Math.abs(o.at - m.at) === 1);
+    const cx = edge[m.at] + gap / 2 + (near ? (m.at < near.at ? -1 : 1) * s * 0.5 : 0), cy = y0 - s * 0.95;
+    const lost = used > m.at;
+    if (m.kind === "star") {
+      el("path", { d: starPath(cx, cy, s * 0.55), fill: lost ? C.gray : C.star, stroke: lost ? "#9a978f" : C.starLine, "stroke-width": Math.max(0.6, w * 0.12), "stroke-linejoin": "round" }, g);
+    } else {
+      const faded = undone || lost;
+      el("path", { d: `M${cx - s * 0.3},${cy - s * 0.75}L${cx - s * 0.05},${cy - s * 0.2}M${cx + s * 0.3},${cy - s * 0.75}L${cx + s * 0.05},${cy - s * 0.2}`, stroke: faded ? C.gray : "#3b6fd4", "stroke-width": Math.max(1, w * 0.3), "stroke-linecap": "round", fill: "none" }, g);
+      el("circle", { cx, cy: cy + s * 0.08, r: s * 0.42, fill: undone ? "none" : lost ? C.gray : C.star, stroke: faded ? C.gray : C.starLine, "stroke-width": Math.max(0.8, w * 0.18), "stroke-dasharray": undone ? `${w * 0.5} ${w * 0.35}` : "none" }, g);
+    }
+    // The gap itself, drawn as a tick so the exact point is clear.
+    el("line", { x1: edge[m.at] + gap / 2, x2: edge[m.at] + gap / 2, y1: y0 - 1, y2: y0 + h + 1, stroke: lost ? "rgba(0,0,0,0.15)" : "rgba(0,0,0,0.35)", "stroke-width": Math.max(0.6, w * 0.08) }, g);
+  }
+  if (used > END) {
+    const t = el("text", { x: x + w * 0.4, y: y0 + h * 0.85, "font-size": h * 1.05, fill: C.left, "font-family": "system-ui, sans-serif", "font-weight": 600 }, g);
+    t.textContent = `+${used - END}`;
+  }
+  return x - x0;
+}
+
+function defs(svg) {
+  const d = el("defs", {}, svg);
+  const p = el("pattern", { id: "hatch", width: 3, height: 3, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, d);
+  el("rect", { width: 1.2, height: 3, fill: C.hatch }, p);
+}
+
+function stars(used) {
+  const lost = MARKS.filter((m) => m.kind === "star" && used > m.at).length;
+  return 5 - lost;
+}
+function verdict(used, undone) {
+  const medal = !undone && used <= FEWEST - 1;
+  const n = stars(used);
+  if (medal) return "🏅 medal: better than the game's 15";
+  return `${n} of 5 stars` + (undone && used <= FEWEST - 1 ? " (no medal: undone)" : "");
+}
+
+// The goal in place: a slice of the board, the red block heading left 7 cells to its target.
+const CELL = 28;
+function drawBoard(used, undone) {
+  const svg = document.getElementById("board");
+  svg.replaceChildren();
+  defs(svg);
+  el("rect", { x: 0, y: 0, width: 448, height: 252, fill: C.bg }, svg);
+  for (let i = 0; i < 16; i++) for (let j = 0; j < 9; j++) el("circle", { cx: i * CELL + CELL / 2, cy: j * CELL + CELL / 2, r: 1.3, fill: C.dot }, svg);
+  const block = (cx, cy, w, h, fill) => el("rect", { x: cx * CELL + 2, y: cy * CELL + 2, width: w * CELL - 4, height: h * CELL - 4, rx: 6, fill }, svg);
+  // Blockers in the way and around.
+  [[8, 4, 1, 2], [10, 5, 1, 2], [11, 0, 1, 2], [12, 6, 1, 2], [7, 6, 2, 1], [3, 1, 2, 1], [13, 1, 2, 1], [15, 4, 1, 2], [4, 4, 1, 2], [10, 7, 2, 1], [1, 6, 2, 1], [6, 1, 2, 1], [2, 3, 1, 2]]
+    .forEach(([x, y, w, h]) => block(x, y, w, h, C.block));
+  // Target (2x1 at column 2, row 5) and the red block 7 cells to its right.
+  const tx = 6, ty = 5;
+  el("rect", { x: tx * CELL + 1, y: ty * CELL + 1, width: 2 * CELL - 2, height: CELL - 2, rx: 7, fill: C.target, stroke: C.targetLine, "stroke-width": 2, "stroke-dasharray": "5 4" }, svg);
+  block(tx + 7, ty - 0, 2, 1, C.red);
+  // The track, on the goal: centred over the target, just above it.
+  const g = el("g", {}, svg);
+  const w = 7;
+  const width = END * w * 1.12 + 5 * 1.8;
+  const x0 = Math.max(6, tx * CELL + CELL - width / 2);
+  el("rect", { x: x0 - 8, y: ty * CELL - 46, width: width + 16 + (used > END ? 28 : 0), height: 40, rx: 9, fill: "rgba(255,255,255,0.88)" }, g);
+  track(g, x0, ty * CELL - 18, w, used, undone);
+  document.getElementById("readout").textContent = `${used} moves: ${verdict(used, undone)}.`;
+}
+
+function drawSteps() {
+  const box = document.getElementById("steps");
+  const rows = [[0, false, "start"], [9, false, ""], [14, false, "last move for 🏅"], [15, false, "medal gone"], [16, false, ""], [22, false, "your finish"], [31, false, "end of the track"], [34, false, "past the end"], [12, true, "undone once: no medal"]];
+  for (const [used, undone, note] of rows) {
+    const row = document.createElement("div");
+    row.className = "step";
+    row.innerHTML = `<div class="n">${used} moves</div><div class="t"></div><div class="r">${verdict(used, undone)}${note ? `<br><span style="color:var(--ink-2)">${note}</span>` : ""}</div>`;
+    const svg = el("svg", { viewBox: "0 0 330 40" });
+    svg.style.background = C.bg;
+    svg.style.borderRadius = "6px";
+    defs(svg);
+    track(el("g", {}, svg), 8, 24, 8.4, used, undone);
+    row.querySelector(".t").appendChild(svg);
+    box.appendChild(row);
+  }
+}
+
+const used = document.getElementById("used"), undone = document.getElementById("undone"), out = document.getElementById("usedOut");
+const update = () => { out.textContent = used.value; drawBoard(Number(used.value), undone.checked); };
+used.addEventListener("input", update);
+undone.addEventListener("change", update);
+update();
+drawSteps();
+</script>
+</body>
+</html>
