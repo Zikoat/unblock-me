@@ -28,7 +28,7 @@ const UNIT = 60;
 const COLORS = {
   background: [243, 242, 238], dot: [211, 209, 202], border: [185, 182, 173],
   block: [79, 109, 143], moved: [63, 154, 122], dragging: [224, 130, 61],
-  goal: [214, 69, 69], circle: [58, 57, 54], reset: [29, 29, 31], wall: [95, 93, 87],
+  goal: [214, 69, 69], circle: [58, 57, 54], reset: [29, 29, 31], wall: [95, 93, 87], star: [242, 182, 50],
 };
 let failures = 0;
 const check = (ok, what) => {
@@ -78,33 +78,28 @@ const browser = await chromium.launch();
     await touch("touchEnd", []);
   }
   const tap = (p) => gesture([p], [[p[0] + 2, p[1] + 2]], { steps: 1 });
-  const fresh = async () => { await page.goto(url); await page.evaluate(() => localStorage.clear()); await page.goto(url); await frame(page); };
+  const fresh = async () => { await page.goto(url); await page.evaluate(() => unblock.forget()); await page.goto(url); await frame(page); };
   const place = async (blocks, goal = null) => { await page.evaluate(([b, g]) => unblock.place(b, g), [blocks, goal]); await frame(page); };
   const H = (id, x, y) => ({ id, x, y, w: 2, h: 1 });
   const V = (id, x, y) => ({ id, x, y, w: 1, h: 2 });
   const Wall = (x, y) => ({ id: `wall${x},${y}`, x, y, w: 1, h: 1, wall: true });
   const UI = [
-    { id: "home", x: -1, y: -1, w: 1, h: 1, ui: "home" },
-    { id: "undo", x: 0, y: -1, w: 1, h: 1, ui: "undo" },
-    { id: "tapmode", x: 1, y: -1, w: 1, h: 1, ui: "tapmode" },
-    { id: "ease", x: 2, y: -1, w: 1, h: 1, ui: "ease" },
-    { id: "density", x: -2, y: 0, w: 1, h: 1, ui: "density" },
-    { id: "border", x: -1, y: 0, w: 1, h: 1, ui: "border" },
+    { id: "home", x: -1, y: 0, w: 1, h: 1, ui: "home" },
     { id: "reset", x: 0, y: 0, w: 1, h: 1, ui: "reset" },
     { id: "fullscreen", x: 1, y: 0, w: 1, h: 1, ui: "fullscreen" },
     { id: "reports", x: 2, y: 0, w: 1, h: 1, ui: "reports" },
+    { id: "density", x: -1, y: 2, w: 1, h: 1, ui: "density" },
+    { id: "border", x: 0, y: 2, w: 1, h: 1, ui: "border" },
   ];
 
   // Random layout with the UI blocks in the middle.
   await fresh();
   const text = await page.evaluate(() => document.body.innerText.trim());
   check(/^\d+ fps · \d+[smhd] ago · 7 tries$/.test(text), `only text is the debug counter: fps, build age, density ("${text}")`);
-  for (const [x, what] of [[-1.85, "density"], [-0.85, "border toggle"], [0.15, "reset"], [1.15, "fullscreen"], [2.15, "reports"]]) {
-    await expectColor(page, cell(x, 0.15), "reset", `the ${what} block is black, in the lower UI row`);
+  for (const [x, y, what] of [[-0.85, 0.15, "home"], [0.15, 0.15, "reset"], [1.15, 0.15, "fullscreen"], [2.15, 0.15, "reports"], [-0.85, 2.15, "density"], [0.15, 2.15, "border toggle"]]) {
+    await expectColor(page, cell(x, y), "reset", `the ${what} block is black`);
   }
-  for (const [x, what] of [[-0.85, "home"], [0.15, "undo"], [1.15, "tap mode"], [2.15, "ease"]]) {
-    await expectColor(page, cell(x, -0.85), "reset", `the ${what} block is black, in the upper UI row`);
-  }
+  check((await colorAt(page, ...cell(0.5, 1.5))) !== "reset", "with an empty row between the game's row and the debug row");
   const iconPixels = await page.evaluate(() => {
     const c = document.querySelector("canvas"), d = c.width / c.clientWidth;
     const data = c.getContext("2d").getImageData(170 * d, 370 * d, 60 * d, 60 * d).data;
@@ -134,8 +129,8 @@ const browser = await chromium.launch();
   await page.reload();
   await frame(page);
   check((await page.evaluate(() => unblock.seed())) === seedBefore && (await block(page, movable.id))?.moved, "the seed and the move survive a reload");
-  // Turn the border off, pan, and leave another page's key on this origin, then reset.
-  await tap(cell(-0.5, 0.5));
+  // Turn the border on, pan, and leave another page's key on this origin, then reset.
+  await tap(cell(0.5, 2.5));
   await gesture([cell(0.5, 0.5)], [cell(1.5, 1.2)]);
   await page.evaluate(() => localStorage.setItem("someone-else", "keep me"));
   const resetReload = page.waitForEvent("load", { timeout: 5000 }).then(() => true, () => false);
@@ -150,17 +145,15 @@ const browser = await chromium.launch();
   check(await page.evaluate(() => unblock.scene.camera.offsetX === 170 && unblock.scene.camera.offsetY === 370 && unblock.scene.camera.scale === 1), "and the view centred");
   await page.evaluate(() => unblock.goalReady());
   const stored = await page.evaluate(() => Object.fromEntries(Object.keys(localStorage).sort().map((k) => [k, localStorage.getItem(k)])));
-  const { "unblock-me:v5:goal": storedGoal, ...rest } = stored;
+  const { "unblock-me:v6:goal": storedGoal, "unblock-me:camera": storedCamera, ...rest } = stored;
+  check(!storedCamera || JSON.stringify(JSON.parse(storedCamera)) === JSON.stringify({ scale: 1, offsetX: 170, offsetY: 370 }), `and the stored view, if any, is the centred one (${storedCamera})`);
   check(JSON.stringify(rest) === JSON.stringify({
     "someone-else": "keep me",
     "unblock-me:border": "false",
-    "unblock-me:ease": '"Ease out cubic"',
-    "unblock-me:speed": String(0.25 * 16 ** 0.65), // the knob at 65%
-    "unblock-me:tap-mode": '"topright"',
     "unblock-me:tries": "7",
-    "unblock-me:v5:history": "[]",
-    "unblock-me:v5:moved": "[]",
-    "unblock-me:v5:seed": String(seedAfter),
+    "unblock-me:v6:history": "[]",
+    "unblock-me:v6:moved": "[]",
+    "unblock-me:v6:seed": String(seedAfter),
   }), `storage holds only fresh defaults, and other pages' keys are left alone (${JSON.stringify(rest)})`);
   check(JSON.parse(storedGoal ?? "null")?.seed === seedAfter, "and a new goal for the new seed");
   await expectColor(page, cell(0.15, 0.15), "reset", "the reset block is still in the middle");
@@ -169,6 +162,17 @@ const browser = await chromium.launch();
   await page.reload();
   await frame(page);
   check((await page.evaluate(() => unblock.seed())) === seedAfter && (await blockIds(page)) === afterReset, "the new layout survives a reload");
+
+  // The view is kept across a reload.
+  await page.evaluate(() => { unblock.scene.camera = { scale: 1.3, offsetX: 110, offsetY: 292 }; unblock.redraw(); });
+  await page.waitForTimeout(400); // the view is stored once it rests
+  const panned = await page.evaluate(() => ({ ...unblock.scene.camera }));
+  await page.reload();
+  await frame(page);
+  const restored = await page.evaluate(() => ({ ...unblock.scene.camera }));
+  check(JSON.stringify(restored) === JSON.stringify(panned) && panned.offsetX !== 170, `reloading keeps the view where it was (${restored.offsetX.toFixed(0)},${restored.offsetY.toFixed(0)})`);
+  await page.evaluate(() => { unblock.scene.camera = { scale: 1, offsetX: 170, offsetY: 370 }; unblock.redraw(); });
+  await page.waitForTimeout(400);
 
   // Dragging a UI block pans instead.
   const cam = await page.evaluate(() => ({ ...unblock.scene.camera }));
@@ -183,20 +187,20 @@ const browser = await chromium.launch();
   check(await page.evaluate(() => unblock.scene.border === false), "the border is off by default");
   check((await colorAt(page, ...borderLine)) !== "border", "so no border line is drawn");
   // The middle of the switch: the light track when on, dark when off.
-  await expectColor(page, cell(-0.5, 0.5), "reset", "and the switch in the toggle block is off (dark track)");
+  await expectColor(page, cell(0.5, 2.5), "reset", "and the switch in the toggle block is off (dark track)");
   const withoutBorder = (await page.evaluate(() => unblock.visibleBlocks())).length;
-  await tap(cell(-0.5, 0.5));
+  await tap(cell(0.5, 2.5));
   await frame(page);
   const withBorder = (await page.evaluate(() => unblock.visibleBlocks())).length;
   check(await page.evaluate(() => unblock.scene.border === true), "tapping the border toggle turns the border on");
   await expectColor(page, borderLine, "border", "and draws the border line");
   check(withBorder < withoutBorder, `fewer blocks are drawn with the border (${withoutBorder} -> ${withBorder})`);
-  await expectColor(page, cell(-0.5, 0.5), "background", "and the switch in the toggle block is on (light track)");
+  await expectColor(page, cell(0.5, 2.5), "background", "and the switch in the toggle block is on (light track)");
   await page.screenshot({ path: shots + "phone-2b-border-on.png" });
   await page.reload();
   await frame(page);
   check(await page.evaluate(() => unblock.scene.border === true), "the border setting survives a reload");
-  await tap(cell(-0.5, 0.5));
+  await tap(cell(0.5, 2.5));
   await frame(page);
   check((await colorAt(page, ...borderLine)) !== "border", "tapping it again turns the border off");
 
@@ -213,7 +217,7 @@ const browser = await chromium.launch();
   // Track: x from 0.24 to 0.76 of the block, at y 0.7; 7 tries puts the knob at 6/29.
   await fresh();
   const sparse = (await page.evaluate(() => unblock.visibleBlocks())).length;
-  const track = { left: cell(-2 + 0.24, 0)[0], width: 0.52 * UNIT, y: cell(0, 0.7)[1] };
+  const track = { left: cell(-1 + 0.24, 0)[0], width: 0.52 * UNIT, y: cell(0, 2.7)[1] };
   const knob = [track.left + track.width * (6 / 29), track.y];
   let underFinger = [];
   await gesture([knob], [[knob[0] + 10, knob[1]]], {
@@ -249,7 +253,7 @@ const browser = await chromium.launch();
   const W = (x, y) => ({ id: `w${x},${y}`, x, y, w: 1, h: 1, wall: true });
   const pinwheel = [H("a", 0, 0), V("b", 2, 0), H("c", 1, 2), V("d", 0, 1), W(-1, 0), W(2, -1), W(3, 2), W(0, 3)];
   await page.goto(url);
-  await page.evaluate(() => localStorage.clear());
+  await page.evaluate(() => unblock.forget());
   await page.goto(`${url}?board=${encodeURIComponent(JSON.stringify(pinwheel))}`);
   await frame(page);
   check((await page.evaluate(() => unblock.visibleBlocks().map((b) => b.id).sort().join())) === pinwheel.map((b) => b.id).sort().join(), "a ?board= link shows exactly its blocks");
@@ -297,64 +301,161 @@ const browser = await chromium.launch();
   await gesture([cell(0.5, 3)], [cell(0.5, -3)]);
   check((await block(page, "b")).y === 1, "the UI blocks block other blocks");
 
-  // Quick push: a tap slides a block to the end of its room. Row 2, walls at x -2 and 3.
-  await place([...UI, Wall(-2, 2), H("a", -1, 2), Wall(3, 2)]);
-  await tap(cell(0, 2.5));
-  check((await block(page, "a")).x === 1, "a tap slides a free block right (the default mode) to the wall");
+  // Quick push: a tap slides a block to the end of its room. Row 4, walls at x -2 and 3.
+  await place([...UI, Wall(-2, 4), H("a", -1, 4), Wall(3, 4)]);
+  check(await page.evaluate(() => document.querySelector("#undo").disabled), "the undo button is dimmed with nothing to undo");
+  await tap(cell(0, 4.5));
+  check((await block(page, "a")).x === 1, "a tap slides a free block right to the wall");
   await page.waitForTimeout(450); // the slide is animated
-  await expectColor(page, cell(2, 2.5), "moved", "and it is drawn there");
+  await expectColor(page, cell(2, 4.5), "moved", "and it is drawn there");
   check(await page.evaluate(() => unblock.scene.circle === null), "a tap on a block does not move the circle");
-  await tap(cell(2, 2.5));
+  await tap(cell(2, 4.5));
   check((await block(page, "a")).x === -1, "against the wall, a tap sends it all the way back");
   await page.waitForTimeout(450);
   // The slide is animated: just after the tap the block is drawn between its old and new cells.
   await page.evaluate(() => (unblock.frames = []));
-  await tap(cell(0, 2.5)); // right again, animated
-  await page.waitForTimeout(60);
-  const midway = await colorAt(page, ...cell(0.5, 2.5)); // a cell it passes through
-  await page.waitForTimeout(500);
-  check(midway === "moved" && (await colorAt(page, ...cell(0.5, 2.5))) === "background", `a tapped block glides over the cells between (${midway} on the way, gone after)`);
+  // Every frame of the slide, the block is drawn where the recorder says it is (row 4).
+  const glide = page.evaluate(() => new Promise((resolve) => {
+    const c = document.querySelector("canvas"), d = c.width / c.clientWidth;
+    const seen = [];
+    let ticks = 0;
+    const look = () => {
+      const f = unblock.frames?.at(-1);
+      if (f && f.x > -1 && f.x < 1 && !seen.some(([x]) => x === f.x)) {
+        const px = c.getContext("2d").getImageData(Math.round((170 + (f.x + 1) * 60) * d), Math.round((370 + 4.5 * 60) * d), 1, 1).data;
+        seen.push([f.x, px[1] > 140 && px[0] < 100]); // the moved block's green
+      }
+      if (++ticks < 40) requestAnimationFrame(look); else resolve(seen);
+    };
+    requestAnimationFrame(look);
+  }));
+  await tap(cell(0, 4.5)); // right again, animated
+  const glided = await glide;
+  check(glided.length >= 2 && glided.every(([, drawn]) => drawn), `a tapped block glides through the cells between (${glided.map(([x, d]) => `x ${x.toFixed(2)} ${d ? "drawn" : "missing"}`).join(", ")})`);
+  await page.waitForTimeout(300);
   const slideXs = await page.evaluate(() => { const f = unblock.frames.map((f) => f.x); unblock.frames = null; return f; });
   check(slideXs[0] === -1 && slideXs.every((x, i) => i === 0 || x >= slideXs[i - 1]) && slideXs.at(-1) <= 1,
     `the slide starts drawing at its start cell and only moves forward (${slideXs.map((x) => x.toFixed(2)).join(" ")})`);
-  await tap(cell(0.5, -0.5)); // undo that extra push
+  // Undo: the round button in the corner takes moves back one at a time.
+  await page.tap("#undo");
   await page.waitForTimeout(450);
-
-  // Undo, with the undo block (top row, middle).
-  await tap(cell(0.5, -0.5));
-  check((await block(page, "a")).x === 1, "the undo block takes back the last move");
-  await tap(cell(0.5, -0.5));
-  check((await block(page, "a")).x === -1 && !(await block(page, "a")).moved, "and the one before, back to the start");
-  // The tap mode block: switch to the nearer end.
-  await place([...UI, Wall(-3, 2), H("a", -1, 2), Wall(5, 2)]); // 1 cell of room left, 4 right
-  await expectColor(page, cell(1.5, -0.3), "background", "the tap mode switch is on (up/right) by default");
-  await tap(cell(1.5, -0.5));
-  check(await page.evaluate(() => unblock.scene.tapMode === "nearest"), "tapping the tap mode block switches to the nearer end");
-  await expectColor(page, cell(1.5, -0.3), "reset", "and its switch shows off");
-  await tap(cell(0, 2.5));
-  check((await block(page, "a")).x === -2, "in nearer-end mode a free block goes to the closer wall (left, 1 cell)");
+  check((await block(page, "a")).x === -1, "the undo button takes back the last move");
+  await page.tap("#undo");
+  await page.waitForTimeout(450);
+  check((await block(page, "a")).x === 1, "and the one before");
+  await page.tap("#undo");
+  await page.waitForTimeout(450);
+  check((await block(page, "a")).x === -1 && !(await block(page, "a")).moved, "and the first, back to the start");
+  check(await page.evaluate(() => document.querySelector("#undo").disabled), "and then it is dimmed again");
   await tap(cell(-1.5, -3));
   await expectColor(page, cell(-1.5, -3), "circle", "a tap on the background puts the circle there");
 
-  // The ease block opens a list of eases, each a name and a graph; picking one is stored.
-  await fresh();
-  await tap(cell(2.5, -0.5));
-  const menu = await page.evaluate(() => {
-    const m = document.querySelector("#eases");
-    return { shown: getComputedStyle(m).display === "block", rows: [...m.querySelectorAll("button")].map((b) => [b.textContent, !!b.querySelector("svg polyline"), b.getAttribute("aria-pressed")]) };
+  // An undo that happens entirely out of view shows a small green arrow towards it while it runs.
+  await place([...UI, Wall(-1, 4), H("a", 0, 4), Wall(4, 4)]);
+  await tap(cell(1, 4.5)); // a: 0 -> 2
+  await page.waitForTimeout(450);
+  await page.evaluate(() => { unblock.scene.camera = { ...unblock.scene.camera, offsetX: 170, offsetY: 370 - 1500 }; unblock.redraw(); });
+  await frame(page);
+  const changeArrow = await page.evaluate(() => {
+    const c = unblock.scene.camera, s = unblock.scene;
+    // The slide covers x 0..4, y 4..5.
+    const l = 0 * 60 * c.scale + c.offsetX, r = 4 * 60 * c.scale + c.offsetX, t = 4 * 60 * c.scale + c.offsetY, b = 5 * 60 * c.scale + c.offsetY;
+    const cx = s.width / 2, cy = s.height / 2, dx = (l + r) / 2 - cx, dy = (t + b) / 2 - cy;
+    const k = Math.min(Math.abs((s.width / 2 - 26) / dx || Infinity), Math.abs((s.height / 2 - 26) / dy || Infinity));
+    return [cx + dx * k, cy + dy * k + 7];
   });
-  check(menu.shown && menu.rows.length >= 8 && menu.rows.every(([name, graph]) => name && graph), `the ease block opens a list of ${menu.rows.length} eases, each a name and a graph`);
-  check(menu.rows.find(([, , on]) => on === "true")?.[0] === "Ease out cubic", "ease out cubic is picked by default");
-  await page.screenshot({ path: shots + "phone-5b-eases.png" });
-  await page.waitForTimeout(400); // the list ignores clicks right after it opens
-  await page.click("#eases button:nth-child(1)");
-  check(await page.evaluate(() => getComputedStyle(document.querySelector("#eases")).display === "none" && localStorage.getItem("unblock-me:ease") === '"Linear"'), "picking Linear closes the list and stores it");
+  check((await colorAt(page, ...changeArrow)) !== "moved", "no green arrow before the undo");
+  await page.tap("#undo");
+  await page.waitForTimeout(40);
+  await expectColor(page, changeArrow, "moved", `while an off-screen undo runs, a green arrow at the edge points to it (${changeArrow.map((v) => v.toFixed(0)).join(",")})`);
+  await page.waitForTimeout(450);
+  check((await colorAt(page, ...changeArrow)) !== "moved", "and it goes when the slide ends");
 
-  // Its slider sets the speed: dragging the knob from the middle (1x) to the right end is 4x.
-  const easeKnob = [cell(2 + 0.24, 0)[0] + 0.52 * UNIT * 0.5, cell(0, -1 + 0.7)[1]];
-  await gesture([easeKnob], [[easeKnob[0] + 40, easeKnob[1]]]);
-  check(await page.evaluate(() => localStorage.getItem("unblock-me:speed") === "4"), `dragging the ease block's knob right sets 4x speed (${await page.evaluate(() => localStorage.getItem("unblock-me:speed"))})`);
-  check(await page.evaluate(() => getComputedStyle(document.querySelector("#eases")).display === "none"), "and does not open the list");
+  // A block pushed out of view is drawn while it slides there, then culled.
+  await place([...UI, Wall(-1, 4), H("a", 0, 4)]);
+  await page.evaluate(() => { unblock.scene.border = true; unblock.redraw(); });
+  await frame(page);
+  await page.evaluate(() => (unblock.frames = []));
+  // Each frame, while the block is drawn past the border (x 3.2 here) but still on the canvas,
+  // check that it really is drawn there.
+  const watch = page.evaluate(() => new Promise((resolve) => {
+    const c = document.querySelector("canvas"), d = c.width / c.clientWidth;
+    const seen = [];
+    const look = () => {
+      const f = unblock.frames?.at(-1);
+      // Screen x 375 (lattice 3.42) is past the border (x 360) and still on the canvas.
+      if (f && f.x > 1.5 && f.x < 3.4 && !seen.some(([x]) => x === f.x)) {
+        const px = c.getContext("2d").getImageData(Math.round(375 * d), Math.round((370 + 4.5 * 60) * d), 1, 1).data;
+        seen.push([f.x, px[1] > 140 && px[0] < 100]); // green: the moved block's colour
+      }
+      if (++ticks < 60 && seen.length < 3) requestAnimationFrame(look); else resolve(seen);
+    };
+    let ticks = 0;
+    requestAnimationFrame(look);
+  }));
+  await tap(cell(1, 4.5)); // open on the right: 8 cells, out past the border
+  const seen = await watch;
+  check(seen.length > 0 && seen.every(([, drawn]) => drawn), `a block pushed out of view is drawn on its way there (${seen.map(([x, d]) => `x ${x.toFixed(2)}: ${d ? "drawn" : "missing"}`).join(", ")})`);
+  await page.waitForTimeout(500);
+  check(!(await block(page, "a")), "and culled once it has arrived outside the border");
+  await page.evaluate(() => { unblock.frames = null; unblock.scene.border = false; });
+
+  // When no UI block is in view, an arrow at the view's edge points the way to them.
+  await fresh();
+  const pointer = async () => page.evaluate(() => {
+    const c = unblock.scene.camera, s = unblock.scene;
+    // The middle of the UI area (x -1..3, y 0..3), on screen.
+    const ux = 1 * 60 * c.scale + c.offsetX, uy = 1.5 * 60 * c.scale + c.offsetY;
+    const dx = ux - s.width / 2, dy = uy - s.height / 2;
+    const k = Math.min(Math.abs((s.width / 2 - 26) / dx || Infinity), Math.abs((s.height / 2 - 26) / dy || Infinity));
+    return [s.width / 2 + dx * k, s.height / 2 + dy * k + 10];
+  });
+  check((await colorAt(page, ...(await pointer()))) !== "reset", "no edge arrow while the UI blocks are on screen");
+  await page.evaluate(() => { unblock.scene.camera = { ...unblock.scene.camera, offsetX: -900, offsetY: -1200 }; unblock.redraw(); });
+  await frame(page);
+  const arrowAt = await pointer();
+  await expectColor(page, arrowAt, "reset", "with them off screen, a dark arrow sits at the edge on their side");
+  check(arrowAt[0] < 40 || arrowAt[1] < 40, `(at the top or left edge: ${arrowAt.map((v) => v.toFixed(0)).join(",")})`);
+  await page.screenshot({ path: shots + "phone-5b-indicator.png" });
+  // Tapping the arrow glides the view back to the UI blocks, at the same zoom.
+  await tap(arrowAt);
+  await page.waitForTimeout(500);
+  const home2 = await page.evaluate(() => unblock.scene.camera);
+  check(Math.abs(home2.offsetX - 170) < 1 && Math.abs(home2.offsetY - 370) < 1, `tapping the arrow brings the view back to the UI blocks (offset ${home2.offsetX.toFixed(0)},${home2.offsetY.toFixed(0)})`);
+  check(await page.evaluate(() => unblock.scene.circle === null && unblock.scene.history.length === 0), "and the tap does nothing to the board");
+  await page.evaluate(() => { unblock.scene.camera = { ...unblock.scene.camera, offsetX: -900, offsetY: -1200 }; unblock.redraw(); });
+  await frame(page);
+  // With the smaller border on, "in view" means inside it, and the arrow sits at its edge.
+  await page.evaluate(() => { unblock.scene.border = true; unblock.redraw(); });
+  await frame(page);
+  const borderArrow = await page.evaluate(() => {
+    const c = unblock.scene.camera, s = unblock.scene;
+    const v = { x: s.width * 0.1, y: s.height * 0.1, w: s.width * 0.8, h: s.height * 0.8 };
+    const ux = 60 * c.scale + c.offsetX, uy = 90 * c.scale + c.offsetY;
+    const cx = v.x + v.w / 2, cy = v.y + v.h / 2, dx = ux - cx, dy = uy - cy;
+    const k = Math.min(Math.abs((v.w / 2 - 26) / dx || Infinity), Math.abs((v.h / 2 - 26) / dy || Infinity));
+    return [cx + dx * k, cy + dy * k + 10];
+  });
+  await expectColor(page, borderArrow, "reset", "with the border on, the arrow sits inside the border's edge");
+  check(borderArrow[0] > 40 || borderArrow[1] > 80, `(inside the border, not at the screen's edge: ${borderArrow.map((v) => v.toFixed(0)).join(",")})`);
+  await page.screenshot({ path: shots + "phone-5c-indicator-border.png" });
+  // The undo button stays inside the border too.
+  const undoBox = await page.evaluate(() => { const r = document.querySelector("#undo").getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom]; });
+  check(undoBox[0] >= 40 && undoBox[2] <= 360 && undoBox[1] >= 80 && undoBox[3] <= 720, `with the border on, the undo button sits inside it (${undoBox.map((v) => v.toFixed(0)).join(",")})`);
+  // UI blocks on screen but just right of the border count as out of view: the arrow shows.
+  await page.evaluate(() => { unblock.scene.camera = { scale: 1, offsetX: 430, offsetY: 370 }; unblock.redraw(); });
+  await frame(page);
+  // The UI area (x -1..3) now starts at screen x 370: right of the border (x 40..360).
+  const rightArrow = await page.evaluate(() => {
+    const c = unblock.scene.camera, s = unblock.scene;
+    const v = { x: s.width * 0.1, y: s.height * 0.1, w: s.width * 0.8, h: s.height * 0.8 };
+    const ux = 60 * c.scale + c.offsetX, uy = 90 * c.scale + c.offsetY;
+    const cx = v.x + v.w / 2, cy = v.y + v.h / 2, dx = ux - cx, dy = uy - cy;
+    const k = Math.min(Math.abs((v.w / 2 - 26) / dx || Infinity), Math.abs((v.h / 2 - 26) / dy || Infinity));
+    return [cx + dx * k, cy + dy * k + 10];
+  });
+  await expectColor(page, rightArrow, "reset", `UI blocks on screen but outside the border still get the arrow, at the border's right edge (${rightArrow.map((v) => v.toFixed(0)).join(",")})`);
+  await page.evaluate(() => { unblock.scene.border = false; });
 
   // The goal: a red block and a dashed red target, made by the worker; solving fills it in.
   await fresh();
@@ -365,28 +466,52 @@ const browser = await chromium.launch();
   if (red) await expectColor(page, cell(red.x + 0.25, red.y + 0.5), "goal", "the goal block is red");
   await page.screenshot({ path: shots + "phone-6-goal.png" });
   // Solve one on an exact board: tap the red block to push it onto its target.
-  // Row 2, walls at x -4 and 3: r (x -3..-2) can go right to x 1, where the target is.
-  await place([...UI, Wall(-4, 2), H("r", -3, 2), Wall(3, 2)], { id: "r", target: { x: 1, y: 2 }, solution: [] });
-  // The outline is dashed: some points down its left edge are red.
+  // Row 4, walls at x -4 and 3: r (x -3..-2) can go right to x 1, where the target is.
+  await place([...UI, Wall(-4, 4), H("r", -3, 4), Wall(3, 4)], { id: "r", target: { x: 1, y: 4 }, solution: [] });
+  // The target is a little larger than the red block, with a soft, solid outline.
   const edge = [];
-  for (let y = 2.1; y < 2.9; y += 0.1) edge.push(await colorAt(page, cell(1, 0)[0] + 3, cell(0, y)[1]));
-  check(edge.filter((c) => c === "goal").length >= 3 && edge.includes("background"), `the target has a dashed red outline (${edge.join(" ")})`);
+  for (let y = 4.1; y < 4.9; y += 0.1) edge.push(await rgbAt(page, cell(1, 0)[0] - 3, cell(0, y)[1])); // 3 px outside the cells
+  check(edge.every(([r, g]) => r - g > 25) && edge.every(([r, g]) => r - g < 100), `the target has a soft, solid red outline just outside the block's cells (${edge.map(([r, g, b]) => `${r},${g},${b}`).join(" ")})`);
   await page.evaluate(() => (unblock.frames = []));
-  await tap(cell(-2, 2.5));
+  await tap(cell(-2, 4.5));
   check((await block(page, "r")).x === 1, "a tap pushes the red block onto its target");
-  // Mid-slide, where the red block is drawn right now there is no check yet.
+  // Mid-slide it does not count as reached yet.
   const drawnAt = await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => r(unblock.frames.at(-1)?.x))));
-  const midSlide = await colorAt(page, cell(drawnAt + 1, 2.5)[0] - 2.5, cell(0, 2.5)[1] + 6);
-  check(drawnAt !== undefined && drawnAt < 1 && midSlide === "goal", `no check while it is still sliding (drawn at x ${drawnAt?.toFixed(2)}: ${midSlide})`);
+  const checkSpot = [cell(2, 4.5)[0] - 0.3 * 0.16 * 60, cell(0, 4.5)[1] + 0.7 * 0.16 * 60]; // the check's corner
+  check(drawnAt !== undefined && drawnAt < 1 && (await page.evaluate(() => unblock.scene.reached)) === false, `not reached while it is still sliding (drawn at x ${drawnAt?.toFixed(2)})`);
   await page.evaluate(() => (unblock.frames = null));
-  await page.waitForTimeout(450);
-  // The check's corner point, a little left of and below the block's middle.
-  await expectColor(page, [cell(2, 2.5)[0] - 2.5, cell(2, 2.5)[1] + 6], "background", "and a white check shows it is solved");
+  // On landing: reached, stars fly out of it, and a check shows on the target.
+  const starsSeen = await page.evaluate(() => new Promise((resolve) => {
+    const c = document.querySelector("canvas");
+    let best = 0, frames = 0;
+    const look = () => {
+      const data = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
+      let n = 0;
+      for (let i = 0; i < data.length; i += 16) if (Math.abs(data[i] - 242) < 20 && Math.abs(data[i + 1] - 182) < 30 && data[i + 2] < 110) n++;
+      best = Math.max(best, n);
+      if (++frames < 40) requestAnimationFrame(look); else resolve(best);
+    };
+    look();
+  }));
+  check(starsSeen > 20, `stars fly out when it lands (${starsSeen} star pixels at most)`);
+  check(await page.evaluate(() => unblock.scene.reached), "the goal counts as reached");
+  await expectColor(page, checkSpot, "background", "a white check sits on the target, over the red block");
   await page.screenshot({ path: shots + "phone-7-solved.png" });
+  // The check stays on the target after the red block leaves, and no stars come again.
+  await tap(cell(2, 4.5)); // against the wall now, so it slides all the way back left
+  await page.waitForTimeout(500);
+  check((await block(page, "r")).x === -3, "the red block can leave the target again");
+  await expectColor(page, checkSpot, "background", "and the check stays on the target");
+  await page.screenshot({ path: shots + "phone-7b-left.png" });
+  await tap(cell(-2, 4.5));
+  await page.waitForTimeout(150);
+  const again = await colorAt(page, ...cell(0, 3.5));
+  check(again !== "star", `landing on it a second time sends no stars (${again})`);
+  await page.waitForTimeout(400);
 
   // The home block goes to the homepage (here the test server's root).
   const home = page.waitForEvent("load", { timeout: 5000 }).then(() => true, () => false);
-  await tap(cell(-0.5, -0.5));
+  await tap(cell(-0.5, 0.5));
   check(await home && new URL(page.url()).pathname === "/", `the home block opens the homepage (${page.url()})`);
 
   // Pinch zooms and pans together; limits hold.
@@ -425,15 +550,17 @@ const browser = await chromium.launch();
   await expectColor(page, at(4.2, 0.5), "dragging", "mouse drag colours the block");
   await page.mouse.up();
   check((await block(page, "a")).x === 3, "mouse drop snaps one cell on");
-  // Hovering a UI block explains it.
-  await page.evaluate(() => unblock.place([{ id: "tapmode", x: 1, y: -1, w: 1, h: 1, ui: "tapmode" }]));
+  // Hovering a UI block explains it, where it needs explaining.
+  await page.evaluate(() => unblock.place([{ id: "border", x: 0, y: 2, w: 1, h: 1, ui: "border" }, { id: "home", x: -1, y: 0, w: 1, h: 1, ui: "home" }]));
   await frame(page);
-  await page.mouse.move(...at(1.5, -0.5));
+  await page.mouse.move(...at(0.5, 2.5));
   const tipText = await page.evaluate(() => getComputedStyle(document.querySelector("#tip")).display === "block" && document.querySelector("#tip").textContent);
-  check(typeof tipText === "string" && tipText.includes("up (vertical blocks) or right"), `hovering the tap mode block shows what it does ("${tipText}")`);
+  check(tipText === "Debug: Make the viewport smaller to test frustum culling.", `hovering the border toggle explains it ("${tipText}")`);
   await page.screenshot({ path: shots + "desktop-tooltip.png" });
-  await page.mouse.move(...at(4, 3));
-  check(await page.evaluate(() => getComputedStyle(document.querySelector("#tip")).display === "none"), "and the tooltip goes away off the block");
+  await page.mouse.move(...at(-0.5, 0.5));
+  check(await page.evaluate(() => getComputedStyle(document.querySelector("#tip")).display === "none"), "hovering the home block shows nothing");
+  const undoTitle = await page.getAttribute("#undo", "title");
+  check(undoTitle === "Undo", `the undo button's tooltip is "Undo" (${undoTitle})`);
   await page.mouse.move(640, 400);
   await page.mouse.wheel(0, -300);
   await frame(page);

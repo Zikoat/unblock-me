@@ -4,7 +4,7 @@ import { UNIT, type Block, type Ui } from "./layout";
 import { blockAt, slideRange, type Move } from "./rules";
 
 /** UI blocks that are also sliders: a drag on them adjusts instead of panning. */
-const SLIDERS = new Set<Ui>(["density", "ease"]);
+const SLIDERS = new Set<Ui>(["density"]);
 
 /** A press that moves less than this many screen pixels is a tap. */
 export const TAP_SLOP = 10;
@@ -26,9 +26,8 @@ type Mode =
  * one finger pans the background or slides a block along its long axis until it hits
  * another block, two fingers pinch-zoom and pan.
  * UI blocks and walls never move: dragging one pans, tapping a UI block calls `onUi` with
- * its kind. The density and ease blocks are also sliders: dragging on one calls `onAdjust`
- * with how far the finger has moved sideways since the press (screen px), and once more
- * with `done`.
+ * its kind. The density block is also a slider: dragging on it calls `onAdjust` with how
+ * far the finger has moved sideways since the press (screen px), and once more with `done`.
  * `onChange` runs when a block was moved, to store it.
  */
 export class Gestures {

@@ -161,12 +161,12 @@ describe("walls", () => {
 });
 
 describe("density slider", () => {
-  const density = (): Placed => ({ id: "density", x: -2, y: 0, w: 1, h: 1, ui: "density" });
+  const density = (): Placed => ({ id: "density", x: -1, y: 2, w: 1, h: 1, ui: "density" });
 
   test("dragging sideways on it reports how far the finger went instead of panning, then done", () => {
     const { scene, g, events } = board(density());
     const before = scene.camera;
-    const at = cell(-1.5, 0.5);
+    const at = cell(-0.5, 2.5);
     g.down(1, at);
     g.move(1, { x: at.x + 13, y: at.y });
     g.move(1, { x: at.x + 37, y: at.y + 20 });
@@ -179,17 +179,9 @@ describe("density slider", () => {
 
   test("a tap on it is just a tap on a UI block", () => {
     const { g, events } = board(density());
-    tap(g, cell(-1.5, 0.5));
+    tap(g, cell(-0.5, 2.5));
     expect(events.ui).toEqual(["density"]);
     expect(events.adjust).toEqual([]);
-  });
-
-  test("the ease block is a slider too, and says which one is dragged", () => {
-    const { g, events } = board(density(), { id: "ease", x: 2, y: -1, w: 1, h: 1, ui: "ease" });
-    drag(g, cell(2.5, -0.5), cell(3, -0.5), 2);
-    drag(g, cell(-1.5, 0.5), cell(-1, 0.5), 2);
-    expect(new Set(events.adjusted)).toEqual(new Set(["ease", "density"]));
-    expect(events.adjusted[0]).toBe("ease");
   });
 });
 
@@ -206,39 +198,28 @@ describe("quick push: tapping a block", () => {
     expect(events.changes).toBe(2);
   });
 
-  test("nearest mode: a free block goes to the end with less room", () => {
-    const { scene, g, at } = row(H(4, 0, "a")); // 4 cells of room left, 2 right
-    scene.tapMode = "nearest";
-    tap(g, cell(5, 0.5));
+  test("a free block always goes up (vertical) or right (horizontal), even with more room the other way", () => {
+    const { g, at } = row(H(5, 0, "a")); // 5 left, 1 right
+    tap(g, cell(6, 0.5));
     expect(at("a").x).toBe(6);
-    const left = row(H(1, 0, "b")); // 1 left, 5 right
-    left.scene.tapMode = "nearest";
-    tap(left.g, cell(2, 0.5));
-    expect(left.at("b").x).toBe(0);
-  });
-
-  test("nearest mode: on a tie it goes up or right", () => {
-    const { scene, g, at } = row(H(3, 0, "a")); // 3 cells of room each way
-    scene.tapMode = "nearest";
-    tap(g, cell(4, 0.5));
-    expect(at("a").x).toBe(6);
-    const column = board(W(0, -4), W(0, 5), V(0, 0, "v")); // rows -3..4: 3 above, 3 below
-    column.scene.tapMode = "nearest";
-    tap(column.g, cell(0.5, 1));
+    const again = row(H(1, 0, "b")); // 1 left, 5 right
+    tap(again.g, cell(2, 0.5));
+    expect(again.at("b").x).toBe(6);
+    const column = board(W(0, -4), W(0, 5), V(0, 2, "v")); // 5 above, 1 below
+    tap(column.g, cell(0.5, 3));
     expect(column.at("v").y).toBe(-3);
   });
 
-  test("up/right mode (the default): a free block always goes up or right", () => {
-    const { scene, g, at } = row(H(1, 0, "a")); // 1 left, 5 right
-    expect(scene.tapMode).toBe("topright");
+  test("against the end it would go to, it goes all the way the other way", () => {
+    const { g, at } = row(H(1, 0, "a"));
     tap(g, cell(2, 0.5));
     expect(at("a").x).toBe(6);
     // ...and from there, against the wall, it goes the other way.
     tap(g, cell(7, 0.5));
     expect(at("a").x).toBe(0);
-    const column = board(W(0, -4), W(0, 5), V(0, 2, "v")); // 5 above, 1 below
-    tap(column.g, cell(0.5, 3));
-    expect(column.at("v").y).toBe(-3);
+    const column = board(W(0, -4), W(0, 5), V(0, -3, "v")); // against the top wall
+    tap(column.g, cell(0.5, -2));
+    expect(column.at("v").y).toBe(3);
   });
 
   test("an open end with nothing in reach counts as far, and the push there stops after 8 cells", () => {
@@ -299,32 +280,31 @@ describe("taps on the background", () => {
 });
 
 describe("UI blocks", () => {
-  // Top row: home (-1,-1), undo (0,-1), tap mode (1,-1), ease (2,-1).
-  // Bottom row: density (-2,0), border (-1,0), reset (0,0), fullscreen (1,0), reports (2,0).
+  // The game's row: home (-1,0), reset (0,0), fullscreen (1,0), reports (2,0); an empty row;
+  // the debug row: density (-1,2), border (0,2).
   const ui = () => UI_BLOCKS.map((b) => ({ ...b }));
   const spots = [
-    ["home", -0.5, -0.5], ["undo", 0.5, -0.5], ["tapmode", 1.5, -0.5], ["ease", 2.5, -0.5],
-    ["border", -0.5, 0.5], ["reset", 0.5, 0.5], ["fullscreen", 1.5, 0.5], ["reports", 2.5, 0.5],
+    ["home", -0.5, 0.5], ["reset", 0.5, 0.5], ["fullscreen", 1.5, 0.5], ["reports", 2.5, 0.5], ["border", 0.5, 2.5],
   ] as const;
 
-  test("they are 1x1, in two rows in the middle", () => {
+  test("they are 1x1: a row for the game, a gap, and a row of debug blocks", () => {
     expect(ui().map((b) => [b.id, b.x, b.y, b.w, b.h])).toEqual([
-      ["home", -1, -1, 1, 1], ["undo", 0, -1, 1, 1], ["tapmode", 1, -1, 1, 1], ["ease", 2, -1, 1, 1],
-      ["density", -2, 0, 1, 1], ["border", -1, 0, 1, 1], ["reset", 0, 0, 1, 1], ["fullscreen", 1, 0, 1, 1], ["reports", 2, 0, 1, 1],
+      ["home", -1, 0, 1, 1], ["reset", 0, 0, 1, 1], ["fullscreen", 1, 0, 1, 1], ["reports", 2, 0, 1, 1],
+      ["density", -1, 2, 1, 1], ["border", 0, 2, 1, 1],
     ]);
   });
 
   test("a tap on one runs it and does nothing else", () => {
-    const { scene, g, events } = board(...ui(), H(3, 2, "a"));
+    const { scene, g, events } = board(...ui(), H(3, 4, "a"));
     for (const [, x, y] of spots) tap(g, cell(x, y));
     expect(events.ui).toEqual(spots.map(([id]) => id));
     expect(events.changes).toBe(0);
     expect(scene.circle).toBeNull();
   });
 
-  test("dragging one pans the board instead of moving it (the sliders aside)", () => {
+  test("dragging one pans the board instead of moving it (the density slider aside)", () => {
     const { scene, g, at, events } = board(...ui());
-    for (const [id, x, y] of spots.filter(([id]) => id !== "ease")) {
+    for (const [id, x, y] of spots) {
       const before = scene.camera;
       drag(g, cell(x, y), cell(x + 2, y + 1));
       expect(scene.camera).toEqual({ ...before, offsetX: before.offsetX + 2 * UNIT, offsetY: before.offsetY + UNIT });
@@ -336,14 +316,15 @@ describe("UI blocks", () => {
   });
 
   test("they block other blocks", () => {
-    // a in row 0 to the right of the row, b below the reset block, c above the home block.
-    const { g, at } = board(...ui(), H(4, 0, "a"), V(0, 2, "b"), V(-1, -4, "c"));
+    // a in row 0 right of the game row; b in column 1 below it (through the gap row);
+    // c above the home block.
+    const { g, at } = board(...ui(), H(4, 0, "a"), V(1, 3, "b"), V(-1, -4, "c"));
     drag(g, cell(5, 0.5), cell(-5, 0.5));
     expect(at("a").x).toBe(3);
-    drag(g, cell(0.5, 3), cell(0.5, -5));
+    drag(g, cell(1.5, 4), cell(1.5, -5));
     expect(at("b").y).toBe(1);
     drag(g, cell(-0.5, -3), cell(-0.5, 5));
-    expect(at("c").y).toBe(-3);
+    expect(at("c").y).toBe(-2);
   });
 
   test("with the border off, blocks are culled to the screen edge instead", () => {
@@ -356,25 +337,26 @@ describe("UI blocks", () => {
     expect(visibleBlocks(scene).map((b) => b.id)).toContain("edge");
   });
 
-  test("restart forgets moves, history, the goal, the circle and the camera; keeps settings", () => {
-    const { scene, g, at } = board(...ui(), H(2, 2, "a"));
+  test("restart forgets moves, history, the goal and having reached it, the circle and the camera; keeps settings", () => {
+    const { scene, g, at } = board(...ui(), H(2, 4, "a"));
     scene.border = false;
-    scene.tapMode = "nearest";
-    scene.goal = { id: "a", target: { x: 5, y: 2 }, solution: [] };
-    drag(g, cell(3, 2.5), cell(5, 2.5));
-    tap(g, cell(-3, 4));
-    drag(g, cell(-3, 4), cell(-1, 5)); // pan
+    scene.goal = { id: "a", target: { x: 5, y: 4 }, solution: [] };
+    scene.reached = true;
+    drag(g, cell(3, 4.5), cell(5, 4.5));
+    tap(g, cell(-3, 6));
+    drag(g, cell(-3, 6), cell(-1, 7)); // pan
     expect(at("a")).toMatchObject({ moved: true });
     expect(scene.circle).not.toBeNull();
     restart(scene, fixedLayout([...ui(), V(5, 5, "new")]));
     expect(scene.moved.size).toBe(0);
     expect(scene.history).toEqual([]);
     expect(scene.goal).toBeNull();
+    expect(scene.reached).toBe(false);
     expect(scene.circle).toBeNull();
-    expect([scene.border, scene.tapMode]).toEqual([false, "nearest"]);
+    expect(scene.border).toBe(false);
     // Centred on the middle of the reset block.
     expect(toScreen(scene.camera, { x: UNIT / 2, y: UNIT / 2 })).toEqual({ x: 600, y: 600 });
-    expect(visibleBlocks(scene).map((b) => b.id).sort()).toEqual(["border", "density", "ease", "fullscreen", "home", "new", "reports", "reset", "tapmode", "undo"]);
+    expect(visibleBlocks(scene).map((b) => b.id).sort()).toEqual(["border", "density", "fullscreen", "home", "new", "reports", "reset"]);
   });
 });
 

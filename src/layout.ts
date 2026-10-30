@@ -1,7 +1,7 @@
 import type { Rect } from "./camera";
 
 /** A 1x1 control on the board: it never slides, a tap runs it. */
-export type Ui = "density" | "border" | "reset" | "fullscreen" | "reports" | "home" | "undo" | "tapmode" | "ease";
+export type Ui = "home" | "reset" | "fullscreen" | "reports" | "density" | "border";
 
 /** A block on the lattice, in lattice units: 2x1 slides horizontally, 1x2 vertically.
  * UI blocks and walls never slide. */
@@ -45,20 +45,18 @@ export function fixedLayout(placed: Placed[]): Layout {
   };
 }
 
-/** The UI blocks in the middle of the random layout: two rows, left to right. */
+/** The UI blocks in the middle of the random layout: the game's own row, then an empty
+ * row, then a row of debug blocks. */
 export const UI_BLOCKS: Placed[] = [
-  { id: "home", x: -1, y: -1, w: 1, h: 1, ui: "home" },
-  { id: "undo", x: 0, y: -1, w: 1, h: 1, ui: "undo" },
-  { id: "tapmode", x: 1, y: -1, w: 1, h: 1, ui: "tapmode" },
-  { id: "ease", x: 2, y: -1, w: 1, h: 1, ui: "ease" },
-  { id: "density", x: -2, y: 0, w: 1, h: 1, ui: "density" },
-  { id: "border", x: -1, y: 0, w: 1, h: 1, ui: "border" },
+  { id: "home", x: -1, y: 0, w: 1, h: 1, ui: "home" },
   { id: "reset", x: 0, y: 0, w: 1, h: 1, ui: "reset" },
   { id: "fullscreen", x: 1, y: 0, w: 1, h: 1, ui: "fullscreen" },
   { id: "reports", x: 2, y: 0, w: 1, h: 1, ui: "reports" },
+  { id: "density", x: -1, y: 2, w: 1, h: 1, ui: "density" },
+  { id: "border", x: 0, y: 2, w: 1, h: 1, ui: "border" },
 ];
-// Nothing is generated in the rectangle around them.
-const UI_AREA = { x: -2, y: -1, width: 5, height: 2 };
+/** Nothing is generated here: both rows and the gap between them. */
+export const UI_AREA = { x: -1, y: 0, width: 4, height: 3 };
 
 /** The lattice is cut into chunks of CHUNK x CHUNK cells. Each chunk tries `tries` random
  * blocks and keeps those that fit, so blocks stay inside their chunk and never overlap.

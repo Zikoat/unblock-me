@@ -8,21 +8,26 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='2' y='2' width='12' height='12' rx='2' fill='%234f6d8f'/%3E%3C/svg%3E">
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #f3f2ee; }
-  #fps { position: fixed; top: 6px; left: 8px; font: 11px/1 ui-monospace, monospace; color: #8a877e; pointer-events: none; }
+  /* Things on the screen live in #view, which main.ts keeps sized to the current view (the
+     smaller border when it is on), so they always sit inside it. */
+  #view { position: fixed; pointer-events: none; }
+  #view > * { pointer-events: auto; }
+  #fps { position: absolute; top: 6px; left: 8px; font: 11px/1 ui-monospace, monospace; color: #8a877e; pointer-events: none !important; }
   #tip { position: fixed; display: none; max-width: 260px; padding: 7px 10px; border-radius: 8px; background: #1d1d1f; color: #f3f2ee; font: 13px/1.4 system-ui, sans-serif; pointer-events: none; box-shadow: 0 4px 14px rgba(0,0,0,.18); z-index: 2; }
-  #eases { position: fixed; display: none; z-index: 3; background: #1d1d1f; border-radius: 12px; padding: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.25); max-height: 70vh; overflow-y: auto; }
-  #eases button { -webkit-tap-highlight-color: transparent; outline: none; display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px 10px 6px 6px; border: 0; border-radius: 8px; background: none; color: #f3f2ee; font: 14px system-ui, sans-serif; text-align: left; cursor: pointer; }
-  #eases button:hover, #eases button:focus-visible { background: #2c2c2e; }
-  #eases button[aria-pressed="true"] { background: #3a3a3d; }
-  #eases svg { flex: none; }
+  #undo { position: absolute; right: 16px; bottom: 16px; width: 52px; height: 52px; border: 0; border-radius: 50%; background: #1d1d1f; color: #f3f2ee; display: grid; place-items: center; box-shadow: 0 3px 10px rgba(0,0,0,.2); cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+  #undo:disabled { opacity: .3; cursor: default; }
   canvas { display: block; width: 100vw; height: 100dvh; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 </style>
 </head>
 <body>
 <canvas></canvas>
+<div id="view">
 <div id="fps"></div>
 <div id="tip" role="tooltip"></div>
-<div id="eases" role="menu"></div>
+<button id="undo" title="Undo" aria-label="Undo" disabled>
+  <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M8 9.5h7.5a4.5 4.5 0 0 1 0 9H11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><path d="M9.5 5.5 5 9.5l4.5 4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+</button>
+</div>
 <script type="module" src="app.js"></script>
 </body>
 </html>

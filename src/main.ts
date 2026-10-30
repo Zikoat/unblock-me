@@ -5,23 +5,20 @@ import { viewCentre } from "./goal";
 import type { GoalRequest } from "./goal-worker";
 import { Gestures } from "./gestures";
 import { fixedLayout, MAX_TRIES, MIN_TRIES, randomLayout, TRIES, UNIT, type Placed, type Ui } from "./layout";
-import { DEFAULT_EASE, EASES, easeNamed, positionOf, slideDuration, speedAt } from "./eases";
-import { draw } from "./render";
+import { draw, uiArrow, type Sparkle } from "./render";
+import { ease, slideDuration } from "./slide";
 import { blockAt, blocksIn, slideRange, type Move } from "./rules";
-import { latticeRect, newScene, relayout, resize, restart, undo, visibleBlocks, type TapMode } from "./scene";
+import { borderOnScreen, goalSolved, latticeRect, newScene, relayout, resize, restart, undo, visibleBlocks, whereIs } from "./scene";
 
-// v5: two rows of UI blocks (generation changed) and goals; v4 one row, v3 one 2x2 reset
-// block, v2 no seed, v1 free positions.
-const SEED_KEY = "unblock-me:v5:seed";
-const MOVED_KEY = "unblock-me:v5:moved";
-const HISTORY_KEY = "unblock-me:v5:history";
-const GOAL_KEY = "unblock-me:v5:goal";
+// v6: UI blocks in a game row and a debug row (generation changed); v5 two rows of UI
+// blocks, v4 one row, v3 one 2x2 reset block, v2 no seed, v1 free positions.
+const SEED_KEY = "unblock-me:v6:seed";
+const MOVED_KEY = "unblock-me:v6:moved";
+const HISTORY_KEY = "unblock-me:v6:history";
+const GOAL_KEY = "unblock-me:v6:goal";
 const BORDER_KEY = "unblock-me:border";
 const TRIES_KEY = "unblock-me:tries";
-const TAP_MODE_KEY = "unblock-me:tap-mode";
-const EASE_KEY = "unblock-me:ease";
-const SPEED_KEY = "unblock-me:speed";
-const CAMERA_KEY = "unblock-me:camera"; // carried over a live reload only
+const CAMERA_KEY = "unblock-me:camera"; // where the view is, kept across reloads
 /** How many cells the goal's red block is pushed. */
 const EFFORT = 12;
 /** The density slider's track, as a share of its block (see densityIcon). */
@@ -32,11 +29,41 @@ declare const __BUILD_ID__: string;
 // ?board=<JSON list of placed blocks> opens exactly that board (the reports link to their
 // structures this way). Nothing is stored while it is open.
 const shared = new URLSearchParams(location.search).get("board");
+// Set by a reset: from then on this page stores nothing.
+let forgetting = false;
 
 const canvas = document.querySelector("canvas")!;
 const fps = document.querySelector<HTMLElement>("#fps")!;
 const tip = document.querySelector<HTMLElement>("#tip")!;
-const easeMenu = document.querySelector<HTMLElement>("#eases")!;
+const undoButton = document.querySelector<HTMLButtonElement>("#undo")!;
+const viewBox = document.querySelector<HTMLElement>("#view")!;
+
+/** Keep the on-screen controls inside the view: the smaller border when it is on. */
+function placeView(): void {
+  const v = borderOnScreen(scene);
+  Object.assign(viewBox.style, { left: `${v.x}px`, top: `${v.y}px`, width: `${v.width}px`, height: `${v.height}px` });
+}
+
+// Tapping the arrow to the UI blocks glides the view back to them, at the same zoom.
+let flight: { from: { scale: number; offsetX: number; offsetY: number }; start: number | null } | null = null;
+function flyHome(): void {
+  flight = { from: { ...scene.camera }, start: null };
+}
+function flying(now: number): void {
+  if (!flight) return;
+  flight.start ??= now;
+  const t = Math.min(1, (now - flight.start) / 350);
+  // Keep the zoom, and put the reset block in the middle.
+  const { scale } = flight.from;
+  const to = { offsetX: scene.width / 2 - (UNIT / 2) * scale, offsetY: scene.height / 2 - (UNIT / 2) * scale };
+  const e = ease(t);
+  scene.camera = {
+    scale,
+    offsetX: flight.from.offsetX + (to.offsetX - flight.from.offsetX) * e,
+    offsetY: flight.from.offsetY + (to.offsetY - flight.from.offsetY) * e,
+  };
+  if (t >= 1) flight = null;
+}
 
 function load<T>(key: string, fallback: T): T {
   try {
@@ -47,37 +74,31 @@ function load<T>(key: string, fallback: T): T {
 }
 
 function save(): void {
-  if (shared) return;
+  if (shared || forgetting) return;
   try {
     localStorage.setItem(SEED_KEY, JSON.stringify(seed));
     localStorage.setItem(BORDER_KEY, JSON.stringify(scene.border));
     localStorage.setItem(TRIES_KEY, JSON.stringify(tries));
-    localStorage.setItem(TAP_MODE_KEY, JSON.stringify(scene.tapMode));
-    localStorage.setItem(EASE_KEY, JSON.stringify(ease.name));
-    localStorage.setItem(SPEED_KEY, JSON.stringify(speed));
     localStorage.setItem(MOVED_KEY, JSON.stringify([...scene.moved].map(([id, p]) => [id, p.x, p.y])));
     localStorage.setItem(HISTORY_KEY, JSON.stringify(scene.history));
     // A goal belongs to one seed and density.
-    localStorage.setItem(GOAL_KEY, JSON.stringify(scene.goal && { seed, tries, goal: scene.goal }));
+    localStorage.setItem(GOAL_KEY, JSON.stringify(scene.goal && { seed, tries, goal: scene.goal, reached: scene.reached }));
   } catch {
     // Private mode or full storage: changes just don't survive a reload.
   }
 }
 
 const seed = load<number>(SEED_KEY, Math.floor(Math.random() * 2 ** 32));
-let ease = easeNamed(load<string>(EASE_KEY, DEFAULT_EASE));
-/** How fast slides play: 1 is normal, see speedAt. The default, about 1.5x, felt best. */
-let speed = load<number>(SPEED_KEY, speedAt(0.65));
 let tries = load<number>(TRIES_KEY, TRIES);
 const moved = load<[string, number, number][]>(MOVED_KEY, []);
-const storedGoal = load<{ seed: number; tries: number; goal: Goal } | null>(GOAL_KEY, null);
+const storedGoal = load<{ seed: number; tries: number; goal: Goal; reached?: boolean } | null>(GOAL_KEY, null);
 const scene = newScene(innerWidth, innerHeight, {
   layout: randomLayout(seed, { tries }),
   moved: new Map(moved.map(([id, x, y]) => [id, { x, y }])),
   history: load<Move[]>(HISTORY_KEY, []),
   border: load<boolean>(BORDER_KEY, false),
-  tapMode: load<TapMode>(TAP_MODE_KEY, "topright"),
   goal: storedGoal?.seed === seed && storedGoal.tries === tries ? storedGoal.goal : null,
+  reached: storedGoal?.seed === seed && storedGoal.tries === tries ? (storedGoal.reached ?? false) : false,
 });
 restoreCamera();
 // A fresh start (first visit or after a reset) keeps its seed from the first load on.
@@ -122,23 +143,58 @@ function slide(ui: Ui, from: number, dx: number): number {
 let animation: { move: Move; start: number | null; duration: number } | null = null;
 function animate(move: Move): void {
   const cells = Math.abs(move.to.x - move.from.x) + Math.abs(move.to.y - move.from.y);
-  animation = { move, start: null, duration: slideDuration(cells) / speed };
+  animation = { move, start: null, duration: slideDuration(cells) };
 }
-function sliding(now: number): { id: string; x: number; y: number } | null {
+function sliding(now: number): { id: string; x: number; y: number; from: Point; to: Point } | null {
   if (!animation) return null;
   animation.start ??= now;
   const t = Math.min(1, Math.max(0, (now - animation.start) / animation.duration));
   if (t >= 1) {
     animation = null;
+    reachGoal(now);
     return null;
   }
   const { move } = animation;
-  const e = ease.f(t);
-  return { id: move.id, x: move.from.x + (move.to.x - move.from.x) * e, y: move.from.y + (move.to.y - move.from.y) * e };
+  const e = ease(t);
+  return { id: move.id, x: move.from.x + (move.to.x - move.from.x) * e, y: move.from.y + (move.to.y - move.from.y) * e, from: move.from, to: move.to };
 }
 
+// The first time the red block lands on its target, stars fly out of it; from then on the
+// target keeps a check.
+let sparkles: Sparkle[] = [];
+function reachGoal(now: number): void {
+  const goal = scene.goal;
+  if (!goal || scene.reached || !goalSolved(scene) || animation?.move.id === goal.id) return;
+  scene.reached = true;
+  const red = scene.layout.byId(goal.id)!;
+  const at = whereIs(scene, goal.id)!;
+  const cx = (at.x + red.w / 2) * UNIT;
+  const cy = (at.y + red.h / 2) * UNIT;
+  sparkles = Array.from({ length: 16 }, (_, i) => {
+    const angle = (i / 16) * Math.PI * 2 + Math.random() * 0.3;
+    const reach = UNIT * (0.9 + Math.random() * 0.9);
+    return {
+      x: cx, y: cy, dx: Math.cos(angle) * reach, dy: Math.sin(angle) * reach,
+      born: now + Math.random() * 80, life: 650 + Math.random() * 250, size: UNIT * (0.09 + Math.random() * 0.08), spin: (Math.random() - 0.5) * 6,
+    };
+  });
+  save();
+}
+
+function takeBack(): void {
+  const move = undo(scene);
+  if (!move) return;
+  animate({ id: move.id, from: move.to, to: move.from });
+  save();
+  redraw();
+}
+undoButton.addEventListener("click", takeBack);
+
 const gestures = new Gestures(scene, {
-  onChange: save,
+  onChange: () => {
+    save();
+    reachGoal(performance.now()); // a drag lands at once; a tap's slide reaches it at its end
+  },
   onPush: animate,
   onUi: (ui) => {
     if (ui === "reset") {
@@ -152,22 +208,10 @@ const gestures = new Gestures(scene, {
       location.href = "reports/";
     } else if (ui === "home") {
       location.href = "/";
-    } else if (ui === "undo") {
-      const move = undo(scene);
-      if (move) {
-        animate({ id: move.id, from: move.to, to: move.from });
-        save();
-      }
-    } else if (ui === "ease") {
-      openEaseMenu();
-    } else if (ui === "tapmode") {
-      scene.tapMode = scene.tapMode === "nearest" ? "topright" : "nearest";
-      save();
     }
   },
   // The sliders keep their knob under the finger. Density shows the board at that density
-  // right away (same seed, no goal), and the goal is made once the finger lifts. Ease sets
-  // how fast slides play.
+  // right away (same seed, no goal), and the goal is made once the finger lifts.
   onAdjust: (ui, dx, done) => {
     if (ui === "density") {
       const at = slide(ui, (tries - MIN_TRIES) / (MAX_TRIES - MIN_TRIES), dx);
@@ -177,8 +221,6 @@ const gestures = new Gestures(scene, {
         relayout(scene, randomLayout(seed, { tries }));
       }
       if (done && !scene.goal) requestGoal();
-    } else if (ui === "ease") {
-      speed = speedAt(slide(ui, positionOf(speed), dx));
     }
     if (done) {
       slider = null;
@@ -187,61 +229,18 @@ const gestures = new Gestures(scene, {
   },
 });
 
-/** A small graph of an ease: time across, progress up. */
-function easeGraph(f: (t: number) => number): SVGSVGElement {
-  const ns = "http://www.w3.org/2000/svg";
-  const svg = document.createElementNS(ns, "svg");
-  svg.setAttribute("width", "56");
-  svg.setAttribute("height", "40");
-  svg.setAttribute("viewBox", "0 0 56 40");
-  const points: string[] = [];
-  for (let i = 0; i <= 40; i++) points.push(`${(4 + (i / 40) * 48).toFixed(1)},${(34 - f(i / 40) * 26).toFixed(1)}`);
-  const axes = document.createElementNS(ns, "path");
-  axes.setAttribute("d", "M4 4V34H52");
-  axes.setAttribute("stroke", "#5a5a5e");
-  axes.setAttribute("fill", "none");
-  const line = document.createElementNS(ns, "polyline");
-  line.setAttribute("points", points.join(" "));
-  line.setAttribute("stroke", "#f3f2ee");
-  line.setAttribute("stroke-width", "2");
-  line.setAttribute("fill", "none");
-  line.setAttribute("stroke-linejoin", "round");
-  svg.append(axes, line);
-  return svg;
-}
-
-/** The list of eases: a name and a graph each. Picking one closes it; try it by tapping
- * blocks. */
-function openEaseMenu(): void {
-  easeMenu.replaceChildren(...EASES.map((e) => {
-    const row = document.createElement("button");
-    row.setAttribute("role", "menuitemradio");
-    row.setAttribute("aria-pressed", String(e.name === ease.name));
-    const name = document.createElement("span");
-    name.textContent = e.name;
-    row.append(easeGraph(e.f), name);
-    row.addEventListener("click", () => {
-      // The click a touch sends after lifting can land on the list that just opened under it.
-      if (performance.now() - openedAt < 350) return;
-      ease = e;
-      save();
-      easeMenu.style.display = "none";
-    });
-    return row;
-  }));
-  easeMenu.style.display = "block";
-  openedAt = performance.now();
-  const w = easeMenu.offsetWidth;
-  const h = easeMenu.offsetHeight;
-  easeMenu.style.left = `${Math.max(8, Math.min(innerWidth - w - 8, lastTap.x - w / 2))}px`;
-  easeMenu.style.top = `${Math.max(8, Math.min(innerHeight - h - 8, lastTap.y + 20))}px`;
-}
-let lastTap = { x: 0, y: 0 };
-let openedAt = 0;
-
 /** Delete everything Unblock Me stored and reload: a new seed, default settings, centred.
  * Only our own keys go, since other pages on this origin keep theirs in the same storage. */
 function forgetEverything(): void {
+  forget();
+  location.reload();
+}
+
+/** Delete everything Unblock Me stored, and store nothing more from this page (leaving it
+ * would otherwise save the view again). */
+function forget(): void {
+  forgetting = true;
+  clearTimeout(cameraTimer);
   for (const storage of [localStorage, sessionStorage]) {
     try {
       for (const key of Object.keys(storage)) if (key.startsWith("unblock-me:")) storage.removeItem(key);
@@ -249,7 +248,6 @@ function forgetEverything(): void {
       // No storage: there is nothing to forget.
     }
   }
-  location.reload();
 }
 
 function toggleFullscreen(): void {
@@ -269,6 +267,8 @@ Object.assign(window, {
     onScreen: () => blocksIn(scene.layout, latticeRect(scene, { x: 0, y: 0, width: scene.width, height: scene.height }), scene),
     slideRange: (id: string) => slideRange(scene.layout, visibleBlocks(scene).find((b) => b.id === id)!, scene),
     redraw: () => redraw(),
+    /** Forget everything stored, like the reset block but without reloading (for tests). */
+    forget: () => forget(),
     /** Frames drawn while recording: when, and where the sliding block was drawn. */
     frames: null as { t: number; x: number; y: number }[] | null,
     /** Resolves once a goal requested by the app has arrived. */
@@ -299,7 +299,7 @@ async function reloadOnNewBuild(): Promise<void> {
   try {
     const id = (await (await fetch("build.txt", { cache: "no-store" })).text()).trim();
     if (id && id !== __BUILD_ID__) {
-      sessionStorage.setItem(CAMERA_KEY, JSON.stringify(scene.camera));
+      saveCamera();
       location.reload();
     }
   } catch {
@@ -309,18 +309,35 @@ async function reloadOnNewBuild(): Promise<void> {
 setInterval(reloadOnNewBuild, 1000);
 document.addEventListener("visibilitychange", reloadOnNewBuild);
 
+/** Back where the view was when the page was last open (a reset clears it: centred). */
 function restoreCamera(): void {
-  try {
-    const saved = sessionStorage.getItem(CAMERA_KEY);
-    sessionStorage.removeItem(CAMERA_KEY);
-    if (saved) {
-      scene.camera = JSON.parse(saved);
-      resize(scene, scene.width, scene.height);
-    }
-  } catch {
-    // No session storage: start centred.
+  if (shared) return;
+  const saved = load<typeof scene.camera | null>(CAMERA_KEY, null);
+  if (saved) {
+    scene.camera = saved;
+    resize(scene, scene.width, scene.height);
   }
 }
+
+function saveCamera(): void {
+  if (shared || forgetting) return;
+  try {
+    localStorage.setItem(CAMERA_KEY, JSON.stringify(scene.camera));
+  } catch {
+    // No storage: the view starts centred next time.
+  }
+}
+// The view changes every frame while panning; store it once it rests.
+let cameraTimer: Timer | undefined;
+let savedCamera = "";
+function cameraMoved(): void {
+  const now = JSON.stringify(scene.camera);
+  if (now === savedCamera) return;
+  savedCamera = now;
+  clearTimeout(cameraTimer);
+  cameraTimer = setTimeout(saveCamera, 300);
+}
+addEventListener("pagehide", saveCamera);
 
 /** "12s ago", "4m ago", "3h ago", "2d ago". */
 function ago(ms: number): string {
@@ -348,16 +365,22 @@ function redraw(): void {
   queued = true;
   requestAnimationFrame((now) => {
     queued = false;
+    flying(now);
+    placeView();
+    cameraMoved();
     const moving = sliding(now);
     draw(canvas, scene, {
       fullscreen: document.fullscreenElement !== null,
       density: slider?.ui === "density" ? slider.at : (tries - MIN_TRIES) / (MAX_TRIES - MIN_TRIES),
-      ease: { f: ease.f, speed: slider?.ui === "ease" ? slider.at : positionOf(speed) },
       sliding: moving,
+      sparkles,
+      now,
     });
+    sparkles = sparkles.filter((s) => now < s.born + s.life);
+    undoButton.disabled = scene.history.length === 0;
     const debug = (window as unknown as { unblock: { frames: { t: number; x: number; y: number }[] | null } }).unblock;
     if (debug.frames && moving) debug.frames.push({ t: now, x: moving.x, y: moving.y });
-    if (animation) redraw();
+    if (animation || sparkles.length || flight) redraw();
     frames.push(now);
     showFps(now);
   });
@@ -365,60 +388,68 @@ function redraw(): void {
 
 const point = (e: PointerEvent | WheelEvent) => ({ x: e.offsetX, y: e.offsetY });
 
-/** What each UI block does, shown when the mouse rests on it. */
-function tooltip(ui: Ui): string {
+/** What a UI block does, shown when the mouse rests on it; some need no words. */
+function tooltip(ui: Ui): string | null {
   switch (ui) {
-    case "tapmode":
-      return scene.tapMode === "topright"
-        ? "Tapping a block slides it all the way up (vertical blocks) or right (horizontal ones). " +
-          "A block already against that end goes the other way. Tap to switch to: towards the nearer end."
-        : "Tapping a block slides it all the way to the nearer end of its room (up or right on a tie). " +
-          "A block already against one end goes the other way. Tap to switch to: always up or right.";
-    case "undo": return "Undo the last move.";
-    case "home": return "Back to the homepage.";
-    case "density": return "Density: drag sideways for a sparser or denser board.";
-    case "border": return "Show only blocks inside a smaller frame, to check that hidden blocks are skipped.";
-    case "reset": return "Start over: a new board, and everything forgotten.";
-    case "fullscreen": return "Fullscreen on or off.";
-    case "reports": return "Reports about the board.";
-    case "ease": return "How a tapped block slides. Tap to pick an easing curve; drag sideways to make it slower or faster.";
+    case "border": return "Debug: Make the viewport smaller to test frustum culling.";
+    case "reset": return "Reset";
+    case "reports": return "Reports";
+    default: return null;
   }
 }
 
 function showTip(e: PointerEvent): void {
   const world = { x: (e.offsetX - scene.camera.offsetX) / scene.camera.scale / UNIT, y: (e.offsetY - scene.camera.offsetY) / scene.camera.scale / UNIT };
   const ui = e.pointerType === "mouse" && e.buttons === 0 ? blockAt(visibleBlocks(scene), world)?.ui : null;
-  if (!ui) {
+  const text = ui ? tooltip(ui) : null;
+  if (!text) {
     tip.style.display = "none";
     return;
   }
-  tip.textContent = tooltip(ui);
+  tip.textContent = text;
   tip.style.display = "block";
   tip.style.left = `${Math.min(innerWidth - tip.offsetWidth - 8, e.clientX + 14)}px`;
   tip.style.top = `${Math.min(innerHeight - tip.offsetHeight - 8, e.clientY + 16)}px`;
 }
 canvas.addEventListener("pointerleave", () => (tip.style.display = "none"));
 
+// A press on the arrow to the UI blocks is the arrow's, not the board's.
+let onArrow: number | null = null;
+const hitsArrow = (e: PointerEvent) => {
+  const a = uiArrow(scene);
+  return !!a && Math.hypot(e.offsetX - a.x, e.offsetY - a.y) <= 24;
+};
+
 canvas.addEventListener("pointerdown", (e) => {
   if (e.pointerType === "mouse" && e.button !== 0) return;
   canvas.setPointerCapture(e.pointerId);
+  if (onArrow === null && hitsArrow(e)) {
+    onArrow = e.pointerId;
+    return;
+  }
   tip.style.display = "none";
-  easeMenu.style.display = "none";
   animation = null; // a new touch shows every block where it really is
   gestures.down(e.pointerId, point(e));
   redraw();
 });
 canvas.addEventListener("pointermove", (e) => {
   showTip(e);
+  if (e.pointerId === onArrow) return;
   gestures.move(e.pointerId, point(e));
   redraw();
 });
 canvas.addEventListener("pointerup", (e) => {
-  lastTap = { x: e.clientX, y: e.clientY };
+  if (e.pointerId === onArrow) {
+    onArrow = null;
+    if (hitsArrow(e)) flyHome();
+    redraw();
+    return;
+  }
   gestures.up(e.pointerId, point(e));
   redraw();
 });
 canvas.addEventListener("pointercancel", (e) => {
+  if (e.pointerId === onArrow) onArrow = null;
   gestures.cancel(e.pointerId);
   redraw();
 });
