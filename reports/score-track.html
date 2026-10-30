@@ -52,7 +52,7 @@
 <p class="sub">A design for the goal from your upload: fewest 13 to 15, 7 cells away, solved in 22 moves.</p>
 
 <div class="card">
-  <svg class="board" id="board" viewBox="0 0 448 252" role="img" aria-label="The goal on the board with its score track"></svg>
+  <svg class="board" id="board" viewBox="140 98 294 112" role="img" aria-label="The goal on the board with its score track"></svg>
   <div class="controls">
     <label for="used">Moves</label>
     <input id="used" type="range" min="0" max="40" value="22">
@@ -182,8 +182,9 @@ let clips = 0;
  * passed) and "hollow" (outlines until the goal, then filled one at a time). `finish` is how
  * far the finish animation is: the stars filled so far (with `pop` for the newest).
  */
-function track(g, x0, y0, used, { undone = false, scale = 1, style = "now", finish = null, collapse = 0 } = {}) {
-  const width = LOOK.width * scale, h = LOOK.height * scale, w = width / END;
+function track(g, x0, y0, used, { undone = false, scale = 1, size = null, style = "now", finish = null, collapse = 0 } = {}) {
+  // `size` (width and height) overrides the look's, e.g. to fit inside the goal's target.
+  const width = size ? size.width : LOOK.width * scale, h = size ? size.height : LOOK.height * scale, w = width / END;
   const at = (m) => x0 + m * w;
   const clip = `track${++clips}`;
   el("rect", { x: x0, y: y0, width, height: h, rx: Math.min(h / 2, h * LOOK.radius) }, el("clipPath", { id: clip }, g));
@@ -193,7 +194,8 @@ function track(g, x0, y0, used, { undone = false, scale = 1, style = "now", fini
   el("rect", { x: x0, y: y0, width, height: h, fill: C.left }, bar);
   el("rect", { x: x0, y: y0, width: MEDAL * w, height: h, fill: C.zone }, bar);
   el("rect", { x: x0, y: y0, width: done * w, height: h, fill: C.used, "fill-opacity": 0.78 }, bar); // the zone shows through
-  const cy = y0 + h / 2, s = h * 0.7 * LOOK.icons, ms = h * 0.52 * LOOK.icons;
+  // Icons as big as the look says, but never wider than the gap between two stars.
+  const cy = y0 + h / 2, s = Math.min(h * 0.7 * LOOK.icons, STEP * w * 0.95), ms = s * 0.74;
   for (const m of MARKS) if (m.kind === "star") el("line", { x1: at(m.at), x2: at(m.at), y1: y0, y2: y0 + h, stroke: C.line, "stroke-width": Math.max(1, w * 0.14) }, bar);
   // The stars still earned when finishing now, left to right: those not passed along the
   // track, then the last one (on the right end, never lost).
@@ -235,7 +237,7 @@ function track(g, x0, y0, used, { undone = false, scale = 1, style = "now", fini
   }
   if (undone) undoIcon(g, at(MEDAL), y0 + h + ms * 0.75, ms);
   // The move count, white with a shadow, on the left of the track.
-  const count = el("text", { x: x0 + h * 0.35, y: cy, "dominant-baseline": "central", "font-size": h * LOOK.number, "font-weight": 700, "font-family": "system-ui, sans-serif", fill: "#ffffff", filter: "url(#shadow)", opacity: 1 - collapse }, g);
+  const count = el("text", { x: x0 + h * 0.35, y: cy, "dominant-baseline": "central", "font-size": Math.min(h * LOOK.number, (MEDAL * w - h * 0.5) / (0.62 * String(used).length)), "font-weight": 700, "font-family": "system-ui, sans-serif", fill: "#ffffff", filter: "url(#shadow)", opacity: 1 - collapse }, g);
   count.textContent = used;
   return { width: width + s * 0.65, height: h, kept };
 }
@@ -279,9 +281,10 @@ function drawBoard(used, undone) {
   const tx = 6, ty = 5;
   el("rect", { x: tx * CELL + 1, y: ty * CELL + 1, width: 2 * CELL - 2, height: CELL - 2, rx: 7, fill: C.target, stroke: C.targetLine, "stroke-width": 2, "stroke-dasharray": "5 4" }, svg);
   block(tx + 7, ty, 2, 1, C.red);
-  // The track, centred over the target, just above it.
-  const scale = 0.85;
-  track(el("g", {}, svg), tx * CELL + CELL - (LOOK.width * scale) / 2, ty * CELL - LOOK.height * scale - 4, used, { undone, scale });
+  // The track, inside the target.
+  // (The last star sits on the track's right end: leave it room inside the target.)
+  const pad = 5;
+  track(el("g", {}, svg), tx * CELL + pad, ty * CELL + pad, used, { undone, size: { width: 2 * CELL - 2 * pad - 6, height: CELL - 2 * pad } });
   document.getElementById("readout").textContent = `${used} moves: ${verdict(used, undone)}.`;
 }
 
