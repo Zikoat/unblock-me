@@ -29,9 +29,9 @@ describe("difficulty", () => {
 
 describe("stars", () => {
   test("a goal's worth follows the usual range at its density", () => {
-    expect(starsFor(52, 7)).toBe(0);
-    expect(starsFor(69, 7)).toBe(10);
-    expect(starsFor(60.5, 7)).toBe(5);
+    expect(starsFor(17.7, 7)).toBe(0);
+    expect(starsFor(65, 7)).toBe(10);
+    expect(starsFor(41.4, 7)).toBe(5);
     expect(starsFor(120, 30)).toBe(10);
     expect(starsFor(0, 1)).toBe(0);
     // Between measured densities it blends the two.

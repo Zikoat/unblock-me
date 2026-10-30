@@ -124,16 +124,19 @@ export function makeGoalHard(layout: Layout, near: Point, options: GoalOptions =
   return makeGoalTournament(layout, near, { ...LEVELS_OF_EFFORT[Math.max(0, Math.min(level, LEVELS_OF_EFFORT.length - 1))], ...options });
 }
 
+/** How a goal's difficulty is weighed against its distance: difficulty / distance^alpha.
+ * 0 ranks by difficulty alone (nearly always the furthest cell: each nearer cell's proof
+ * is a prefix of the further one's); 1 by difficulty per cell. */
+export const tradeoff = { alpha: 0.67 }; // distances 3-12, three quarters of the difficulty (test/experiments/effort-sweep.ts)
+export const balance = (g: { difficulty: Difficulty; distance: number }) => g.difficulty.score / Math.pow(g.distance, tradeoff.alpha);
+
 /** The push search's targets, ranked by the difficulty measure. */
 export function makeGoalTournament(layout: Layout, near: Point, options: TournamentOptions = {}): Ranked | null {
   const { moved = new Map(), avoid = [], rough = 3_000, exact = 50_000, finalists = 4, stride = 1, tuning = { prune: true, lookahead: true, goalBudget: 50_000 } } = options;
   const board = new Board(layout, moved);
   const all = pushes(board, layout, near, { ...options, perCell: options.perCell ?? 6 }, tuning);
-  // Every cell of every push is a candidate, measured roughly, the furthest cells first:
-  // a proof no longer than the best lower bound so far cannot have more moves, so it is
-  // skipped (it could still have more branching; that is given up for the time).
+  // Every cell of every push is a candidate, measured roughly.
   const candidates: Ranked[] = [];
-  let most = 0;
   for (const p of all) {
     const red = board.block(p.id);
     for (let k = p.steps.length - 1; k >= 0; k--) {
@@ -141,16 +144,15 @@ export function makeGoalTournament(layout: Layout, near: Point, options: Tournam
       const step = p.steps[k]!;
       if (avoid.some((a) => intersects({ ...step.at, w: red.w, h: red.h }, a))) continue;
       const solution = simplifyFast(board, p.raw.slice(0, step.moves));
-      if (solution.length <= most) continue;
       const goal = { id: p.id, target: step.at, solution };
       const d = measure(board, goal, { limit: rough });
-      most = Math.max(most, d.atLeast);
       candidates.push({ ...goal, difficulty: d, distance: k + 1 });
     }
   }
-  // Rank by the rough score (a lower bound counts as the moves), the proof's length as a
-  // tie-break (shorter is likelier to be the real fewest).
-  const rank = (a: Ranked, b: Ranked) => b.difficulty.score - a.difficulty.score || a.solution.length - b.solution.length || b.distance - a.distance;
+  // Rank by difficulty for the distance (a lower bound counts as the moves): a near goal
+  // that is nearly as hard beats a far one. Then the proof's length (shorter is likelier to
+  // be the real fewest).
+  const rank = (a: Ranked, b: Ranked) => balance(b) - balance(a) || a.solution.length - b.solution.length || a.distance - b.distance;
   candidates.sort(rank);
   const top = candidates.slice(0, finalists);
   for (const c of top) {

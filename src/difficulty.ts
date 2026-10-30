@@ -157,14 +157,14 @@ export function shortest(win: Window, r: number, want: number, limit: number): D
  * each of goals made ahead (makeGoalHard level 2), from test/experiments/difficulty-range.ts.
  * Re-measure when the measure or the goal search changes. */
 const RANGE: [tries: number, low: number, high: number][] = [
-  [1, 9.0, 22.6],
-  [4, 37.5, 56.2],
-  [7, 52.0, 69.0],
-  [10, 58.3, 99.7],
-  [15, 67.5, 110.9],
-  [20, 73.8, 109.4],
-  [25, 75.0, 108.5],
-  [30, 75.3, 114.6],
+  [1, 2.3, 21.8],
+  [4, 10.5, 52.4],
+  [7, 17.7, 65.0],
+  [10, 30.8, 99.7],
+  [15, 26.1, 110.9],
+  [20, 24.8, 109.4],
+  [25, 22.7, 108.4],
+  [30, 21.0, 114.6],
 ];
 
 /** How many stars (0..10) a goal is worth: its difficulty within the usual range for its
