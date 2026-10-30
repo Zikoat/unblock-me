@@ -111,7 +111,8 @@ export function draw(
     for (const o of others) area(o.cells, clip);
     ctx.clip(clip, "evenodd");
   };
-  targets.forEach(({ goal: g, cells }, i) => {
+  const drawTarget = (i: number) => {
+    const { goal: g, cells } = targets[i]!;
     const own = new Path2D();
     area(cells, own);
     ctx.save();
@@ -125,7 +126,10 @@ export function draw(
     ctx.lineWidth = 2;
     ctx.stroke(own);
     ctx.restore();
-  });
+  };
+  // Reached targets go under the blocks (their red blocks sit on them); the current one goes
+  // over them, so it shows even where blocks stand on it.
+  targets.forEach((t, i) => t.goal !== goal && drawTarget(i));
 
   // The sliding block is drawn until its slide ends, even when it ends outside the view and
   // culling would leave it out.
@@ -221,6 +225,8 @@ export function draw(
       }
     }
   }
+
+  targets.forEach((t, i) => t.goal === goal && drawTarget(i));
 
   // A reached target keeps a check, above whatever block is on it.
   for (const { goal: g, cells } of targets) {
