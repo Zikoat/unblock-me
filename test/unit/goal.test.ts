@@ -96,6 +96,14 @@ describe("the next goal", () => {
     expect(makeGoal(layout, { x: 0, y: 0 }, { effort: 3, exclude: new Set(["r"]) })!.id).toBe("s");
   });
 
+  test("nor is a block on an earlier red block's track", () => {
+    // s shares r's row; v crosses it but runs on its own column; t has its own row.
+    const layout = fixedLayout([H("r", 0, 0), H("s", 3, 0), V("v", 2, 1), H("t", 0, 4)]);
+    const picked = makeGoal(layout, { x: 2, y: 1 }, { effort: 3, exclude: new Set(["r"]) })!.id;
+    expect(["v", "t"]).toContain(picked);
+    expect(makeGoal(layout, { x: 2, y: 1 }, { effort: 3, exclude: new Set(["r", "v", "t"]) })).toBeNull();
+  });
+
   test("it starts from the board as it is, moved blocks included", () => {
     // r has been moved onto x 4; a goal made near there finds it at x 4.
     const layout = fixedLayout([H("r", 0, 0), W(-1, 0)]);
