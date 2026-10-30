@@ -666,6 +666,16 @@ const browser = await chromium.launch();
   await expectColor(page, at(4.2, 0.5), "dragging", "mouse drag colours the block");
   await page.mouse.up();
   check((await block(page, "a")).x === 3, "mouse drop snaps one cell on");
+  // Hovering a block hints where a click would send it: a faint trail fading that way.
+  await page.evaluate(() => unblock.place([{ id: "h", x: 0, y: 4, w: 2, h: 1 }]));
+  await page.mouse.move(...at(0.5, 4.5));
+  await frame(page);
+  const trailNear = await rgbAt(page, ...at(2.3, 4.5)), trailFar = await rgbAt(page, ...at(9, 4.5));
+  check(trailNear[2] - trailNear[0] > 5 && Math.abs(trailFar[2] - trailFar[0]) < Math.abs(trailNear[2] - trailNear[0]), `hovering a block shows a faint trail where a click sends it (${trailNear.join(",")} next to it, ${trailFar.join(",")} far along)`);
+  await page.screenshot({ path: shots + "desktop-hover-trail.png" });
+  await page.mouse.move(...at(0.5, 7.5));
+  await frame(page);
+  check((await colorAt(page, ...at(2.3, 4.5))) === "background", "and it goes when the mouse leaves the block");
   // Hovering a UI block explains it, where it needs explaining.
   await page.evaluate(() => unblock.place([{ id: "border", x: 0, y: 2, w: 1, h: 1, ui: "border" }, { id: "home", x: -1, y: 0, w: 1, h: 1, ui: "home" }]));
   await frame(page);

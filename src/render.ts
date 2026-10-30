@@ -4,7 +4,7 @@ import { worldRect } from "./camera";
 import { intersects, UI_AREA, UNIT, type Block } from "./layout";
 import { starsEarned, starsFor } from "./difficulty";
 import type { Goal } from "./goal";
-import { borderOnScreen, latticeRect, visibleBlocks, whereIs, type Scene } from "./scene";
+import { borderOnScreen, latticeRect, quickPush, visibleBlocks, whereIs, type Scene } from "./scene";
 
 export const COLORS = {
   background: "#f3f2ee",
@@ -119,6 +119,25 @@ export function draw(
     const home = scene.layout.byId(sliding.id);
     if (home) blocks.push({ ...home, moved: scene.moved.has(sliding.id) });
   }
+  // Where a click would send the block under the mouse: a faint trail fading towards it.
+  const hovered = scene.hover && !sliding && !scene.dragging ? blocks.find((b) => b.id === scene.hover) : null;
+  const to = hovered && quickPush(scene, hovered);
+  if (hovered && to) {
+    const horizontal = hovered.w > hovered.h;
+    const forward = horizontal ? to.x > hovered.x : to.y > hovered.y;
+    const near = horizontal ? (forward ? hovered.x + hovered.w : hovered.x) : forward ? hovered.y + hovered.h : hovered.y;
+    const far = horizontal ? (forward ? to.x + hovered.w : to.x) : forward ? to.y + hovered.h : to.y;
+    const [a, b] = [Math.min(near, far) * UNIT, Math.max(near, far) * UNIT];
+    const g = horizontal ? ctx.createLinearGradient(near * UNIT, 0, far * UNIT, 0) : ctx.createLinearGradient(0, near * UNIT, 0, far * UNIT);
+    g.addColorStop(0, hovered.id === goal?.id ? "rgba(214, 69, 69, 0.22)" : "rgba(79, 109, 143, 0.22)");
+    g.addColorStop(1, "rgba(79, 109, 143, 0)");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    if (horizontal) ctx.roundRect(a, hovered.y * UNIT + GAP, b - a, hovered.h * UNIT - 2 * GAP, 8);
+    else ctx.roundRect(hovered.x * UNIT + GAP, a, hovered.w * UNIT - 2 * GAP, b - a, 8);
+    ctx.fill();
+  }
+
   // A throbbing block grows over its neighbours, so it goes on top.
   if (throb) blocks.sort((a, b) => Number(a.id === throb.id) - Number(b.id === throb.id));
   for (const shown of blocks) {

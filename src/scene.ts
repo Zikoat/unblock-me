@@ -26,6 +26,8 @@ export type Scene = {
   goal: Goal | null;
   /** Goals already reached, oldest first: their targets keep a check. */
   done: Goal[];
+  /** The block under a resting mouse, whose tap destination is hinted. */
+  hover?: string | null;
   /** Where the last tap landed, in world coordinates. */
   circle: Point | null;
   /** A stuck block the finger is on: it cannot move either way, so the drag pans instead. */

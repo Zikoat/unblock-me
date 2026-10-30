@@ -613,7 +613,17 @@ function showTip(e: PointerEvent): void {
   tip.style.left = `${Math.min(innerWidth - tip.offsetWidth - 8, e.clientX + 14)}px`;
   tip.style.top = `${Math.min(innerHeight - tip.offsetHeight - 8, e.clientY + 16)}px`;
 }
-canvas.addEventListener("pointerleave", () => (tip.style.display = "none"));
+canvas.addEventListener("pointerleave", () => {
+  tip.style.display = "none";
+  scene.hover = null;
+  redraw();
+});
+/** A resting mouse over a sliding block hints where a click would send it. */
+function hoverAt(e: PointerEvent): void {
+  const world = { x: (e.offsetX - scene.camera.offsetX) / scene.camera.scale / UNIT, y: (e.offsetY - scene.camera.offsetY) / scene.camera.scale / UNIT };
+  const b = e.pointerType === "mouse" && e.buttons === 0 ? blockAt(visibleBlocks(scene), world) : null;
+  scene.hover = b && !b.ui && !b.wall ? b.id : null;
+}
 
 // A press on the arrow to the UI blocks is the arrow's, not the board's.
 let onArrow: number | null = null;
@@ -655,6 +665,7 @@ canvas.addEventListener("pointerdown", (e) => {
 });
 canvas.addEventListener("pointermove", (e) => {
   showTip(e);
+  hoverAt(e);
   if (e.pointerId === onArrow) return;
   gestures.move(e.pointerId, point(e));
   redraw();
