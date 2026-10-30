@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { difficulty } from "../../src/difficulty";
+import { difficulty, starsEarned, starsFor } from "../../src/difficulty";
 import { fixedLayout, type Placed } from "../../src/layout";
 
 const H = (id: string, x: number, y: number): Placed => ({ id, x, y, w: 2, h: 1 });
@@ -24,5 +24,23 @@ describe("difficulty", () => {
     const d = difficulty(layout, new Map(), { id: "r", target: { x: 4, y: 0 }, solution });
     expect(d.moves).toBe(2);
     expect(d.score).toBeGreaterThan(0);
+  });
+});
+
+describe("stars", () => {
+  test("a goal's worth follows the usual range at its density", () => {
+    expect(starsFor(12.8, 7)).toBe(0);
+    expect(starsFor(31.4, 7)).toBe(10);
+    expect(starsFor(22, 7)).toBe(5);
+    expect(starsFor(100, 30)).toBe(10);
+    expect(starsFor(0, 1)).toBe(0);
+    // Between measured densities it blends the two.
+    expect(starsFor(30, 12)).toBeGreaterThan(starsFor(30, 15));
+  });
+
+  test("all stars in the fewest moves, fewer with more moves", () => {
+    expect(starsEarned(8, 4, 4)).toBe(8);
+    expect(starsEarned(8, 4, 8)).toBe(4);
+    expect(starsEarned(8, 4, 2)).toBe(8);
   });
 });

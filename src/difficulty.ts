@@ -174,3 +174,32 @@ export function difficulty(layout: Layout, moved: ReadonlyMap<string, Point>, go
   }
   return { moves: null, atLeast: Infinity, searched: expanded, branching: 0, score: 0 };
 }
+
+/** The usual difficulty at each density (tries): the 5th and 95th percentile over 30 boards
+ * each, from test/experiments/difficulty-range.ts. Re-measure when the measure changes. */
+const RANGE: [tries: number, low: number, high: number][] = [
+  [1, 3.7, 9.0],
+  [4, 3.8, 15.5],
+  [7, 12.8, 31.4],
+  [10, 18.1, 43.3],
+  [15, 18.1, 46.4],
+  [20, 30.2, 64.2],
+  [25, 33.2, 63.9],
+  [30, 39.8, 67.9],
+];
+
+/** How many stars (0..10) a goal is worth: its difficulty within the usual range for its
+ * density, the 5th percentile at 0 and the 95th at 10. */
+export function starsFor(score: number, tries: number): number {
+  const i = Math.max(0, RANGE.findIndex(([t]) => t >= tries) - 1);
+  const [t0, lo0, hi0] = RANGE[i]!;
+  const [t1, lo1, hi1] = RANGE[Math.min(i + 1, RANGE.length - 1)]!;
+  const k = t1 === t0 ? 0 : Math.min(1, Math.max(0, (tries - t0) / (t1 - t0)));
+  const lo = lo0 + (lo1 - lo0) * k, hi = hi0 + (hi1 - hi0) * k;
+  return Math.min(10, Math.max(0, Math.round((10 * (score - lo)) / (hi - lo))));
+}
+
+/** The stars earned: all of them in the fewest moves, fewer the more moves it took. */
+export function starsEarned(worth: number, fewest: number, used: number): number {
+  return Math.round(worth * Math.min(1, fewest / Math.max(used, 1)));
+}

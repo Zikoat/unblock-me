@@ -1,6 +1,6 @@
 // The app: wires the canvas, the gestures, storage, goals and live reload together.
 import type { Point, Rect } from "./camera";
-import type { Difficulty } from "./difficulty";
+import { starsEarned, starsFor, type Difficulty } from "./difficulty";
 import type { Goal } from "./goal";
 import { viewCentre } from "./goal";
 import type { GoalRequest } from "./goal-worker";
@@ -143,6 +143,10 @@ function measured({ of, difficulty }: { of: { id: string; target: Point }; diffi
 function showGoal(goal: Goal | null): void {
   job++; // anything still on its way is stale
   scene.goal = goal;
+  if (goal) {
+    goal.tries = tries;
+    goal.begun = scene.history.length;
+  }
   // The new red block throbs once; its clock starts at the first frame drawn.
   if (scene.goal) throb = { id: scene.goal.id, born: -1 };
   save();
@@ -234,6 +238,7 @@ function reachGoal(now: number): void {
   const goal = scene.goal;
   if (!goal || !goalSolved(scene) || animation?.move.id === goal.id) return;
   // Done: its target keeps a check, and the next goal starts from a block close to it.
+  goal.used = Math.max(1, scene.history.length - (goal.begun ?? 0));
   scene.done.push(goal);
   scene.goal = null;
   requestGoal(goal.target);
@@ -498,10 +503,14 @@ function goalTip(at: Point): string | null {
       `Distance: ${from ? `${Math.abs(g.target.x - from.x) + Math.abs(g.target.y - from.y)} cells` : "unknown"}`,
     ];
     const d = g.difficulty;
+    const used = g.used ?? Math.max(0, scene.history.length - (g.begun ?? 0));
+    lines.push(`${g.used === undefined ? "Moves so far" : "Moves used"}: ${used}`);
     if (!d) lines.unshift("Fewest moves: measuring…");
     else {
       lines.unshift(`Fewest moves: ${d.moves ?? `at least ${d.atLeast} (solved in ${g.solution.length})`}`);
       lines.push(`Difficulty: ${d.score.toFixed(1)}${d.moves === null ? "+" : ""} (about ${Math.round(d.branching)} choices a move)`);
+      const worth = starsFor(d.score, g.tries ?? tries);
+      lines.push(g.used === undefined ? `Worth ${worth} of 10 stars` : `Stars: ${starsEarned(worth, d.moves ?? d.atLeast, g.used)} of ${worth} (worth ${worth} of 10)`);
     }
     return lines.join("\n");
   }

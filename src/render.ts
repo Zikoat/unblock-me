@@ -2,6 +2,7 @@
 // camera transform, so it all zooms and pans together.
 import { worldRect } from "./camera";
 import { intersects, UI_AREA, UNIT, type Block } from "./layout";
+import { starsEarned, starsFor } from "./difficulty";
 import type { Goal } from "./goal";
 import { borderOnScreen, latticeRect, visibleBlocks, whereIs, type Scene } from "./scene";
 
@@ -110,6 +111,7 @@ export function draw(
     ctx.stroke(own);
     ctx.restore();
   });
+
   // The goal's glow goes under the blocks, so it never tints them.
   const band = goalBand(scene);
   if (band) {
@@ -160,7 +162,11 @@ export function draw(
   }
 
   // A reached target keeps a check, above whatever block is on it.
-  for (const { goal: g, cells } of targets) if (g !== goal) goalCheck(ctx, cells.x + cells.w / 2, cells.y + cells.h / 2);
+  for (const { goal: g, cells } of targets) {
+    if (g === goal) continue;
+    goalCheck(ctx, cells.x + cells.w / 2, cells.y + cells.h / 2);
+    goalStars(ctx, g, cells);
+  }
   for (const s of sparkles) sparkle(ctx, s, now);
 
   if (scene.circle) {
@@ -345,6 +351,33 @@ function reportsIcon(ctx: CanvasRenderingContext2D, block: Block): void {
 
 /** A check on the target, in the middle of the cells the red block covers there: white
  * with a red edge, so it reads on the block and on the pale target alike. */
+/** A reached goal's stars along its long edge: what it was worth (0..10), the earned ones
+ * filled in gold. */
+function goalStars(ctx: CanvasRenderingContext2D, g: Goal, cells: Cells): void {
+  const d = g.difficulty;
+  if (!d || g.used === undefined) return;
+  const worth = starsFor(d.score, g.tries ?? 7);
+  const earned = starsEarned(worth, d.moves ?? d.atLeast, g.used);
+  const horizontal = cells.w > cells.h;
+  const step = 10.5, r = 4.2;
+  const long = (horizontal ? cells.w : cells.h) * UNIT;
+  const first = (long - step * (worth - 1)) / 2;
+  for (let i = 0; i < worth; i++) {
+    const along = first + i * step;
+    const x = cells.x * UNIT + (horizontal ? along : cells.w * UNIT - 11);
+    const y = cells.y * UNIT + (horizontal ? cells.h * UNIT - 11 : along);
+    ctx.beginPath();
+    for (let k = 0; k < 10; k++) {
+      const a = -Math.PI / 2 + (k * Math.PI) / 5;
+      const rr = k % 2 ? r * 0.45 : r;
+      ctx.lineTo(x + rr * Math.cos(a), y + rr * Math.sin(a));
+    }
+    ctx.closePath();
+    ctx.fillStyle = i < earned ? COLORS.star : "rgba(255, 255, 255, 0.35)";
+    ctx.fill();
+  }
+}
+
 function goalCheck(ctx: CanvasRenderingContext2D, x: number, y: number): void {
   const cx = x * UNIT;
   const cy = y * UNIT;
