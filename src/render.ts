@@ -16,6 +16,10 @@ export const COLORS = {
   goal: "#d64545",
   target: "rgba(214, 69, 69, 0.14)",
   targetLine: "rgba(214, 69, 69, 0.45)",
+  // Reached goals: a darker, duller red, so the one in play stands out.
+  done: "#8e3f3c",
+  doneTarget: "rgba(120, 66, 60, 0.10)",
+  doneLine: "rgba(120, 66, 60, 0.32)",
   circle: "#3a3936",
   star: "#f2b632",
   ui: "#1d1d1f",
@@ -82,12 +86,12 @@ export function draw(
   const targets = [...scene.done, ...(goal ? [goal] : [])]
     .map((g) => ({ goal: g, cells: targetCells(scene, g) }))
     .filter((t): t is { goal: Goal; cells: Cells } => !!t.cells && intersects(t.cells, inView));
-  for (const { cells } of targets) {
+  for (const { goal: g, cells } of targets) {
     ctx.beginPath();
     ctx.roundRect(cells.x * UNIT - TARGET_MARGIN, cells.y * UNIT - TARGET_MARGIN, cells.w * UNIT + 2 * TARGET_MARGIN, cells.h * UNIT + 2 * TARGET_MARGIN, 12);
-    ctx.fillStyle = COLORS.target;
+    ctx.fillStyle = g === goal ? COLORS.target : COLORS.doneTarget;
     ctx.fill();
-    ctx.strokeStyle = COLORS.targetLine;
+    ctx.strokeStyle = g === goal ? COLORS.targetLine : COLORS.doneLine;
     ctx.lineWidth = 2;
     ctx.stroke();
   }
@@ -109,13 +113,15 @@ export function draw(
   if (throb) blocks.sort((a, b) => Number(a.id === throb.id) - Number(b.id === throb.id));
   for (const shown of blocks) {
     const block = shown.id === sliding?.id ? { ...shown, x: sliding.x, y: sliding.y } : shown;
-    // Red blocks stay red after their goal is reached.
-    const isGoal = block.id === goal?.id || scene.done.some((g) => g.id === block.id);
+    // Red blocks stay red after their goal is reached, a darker red.
+    const isGoal = block.id === goal?.id;
+    const wasGoal = !isGoal && scene.done.some((g) => g.id === block.id);
     ctx.fillStyle = block.ui ? COLORS.ui
       : block.wall ? COLORS.wall
       : block.id === scene.dragging?.id ? COLORS.dragging
       : block.id === scene.stuckId ? COLORS.stuck
       : isGoal ? COLORS.goal
+      : wasGoal ? COLORS.done
       : block.moved ? COLORS.moved
       : COLORS.block;
     const beat = throb?.id === block.id ? throbScale((now - throb.born) / THROB_MS) : 1;
@@ -334,7 +340,7 @@ function goalCheck(ctx: CanvasRenderingContext2D, x: number, y: number): void {
   ctx.moveTo(cx - s, cy);
   ctx.lineTo(cx - s * 0.3, cy + s * 0.7);
   ctx.lineTo(cx + s, cy - s * 0.6);
-  ctx.strokeStyle = COLORS.goal;
+  ctx.strokeStyle = COLORS.done;
   ctx.lineWidth = UNIT * 0.13;
   ctx.stroke();
   ctx.strokeStyle = COLORS.icon;

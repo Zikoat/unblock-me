@@ -29,6 +29,7 @@ const COLORS = {
   background: [243, 242, 238], dot: [211, 209, 202], border: [185, 182, 173],
   block: [79, 109, 143], moved: [63, 154, 122], dragging: [224, 130, 61],
   goal: [214, 69, 69], circle: [58, 57, 54], reset: [29, 29, 31], wall: [95, 93, 87], star: [242, 182, 50], stuck: [141, 151, 163],
+  done: [142, 63, 60],
 };
 let failures = 0;
 const check = (ok, what) => {
@@ -522,7 +523,7 @@ const browser = await chromium.launch();
   check(next?.id === "n", `the next goal's red block is the block next to the reached target (${next?.id}, target ${JSON.stringify(next?.target)})`);
   await page.waitForTimeout(100);
   await expectColor(page, cell(0.5, 6.5), "goal", "and it is red now");
-  await expectColor(page, cell(1.25, 4.5), "goal", "and the reached red block stays red");
+  await expectColor(page, cell(1.25, 4.5), "done", "and the reached red block stays red, a darker red");
   await expectColor(page, checkSpot, "background", "a white check sits on the target, over the red block");
   await page.screenshot({ path: shots + "phone-7-solved.png" });
   // The check stays on the target after the red block leaves, and no stars come again.
