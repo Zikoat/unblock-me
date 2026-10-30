@@ -136,6 +136,18 @@ export function makeGoal(layout: Layout, near: Point, { effort = 12, perCell = 4
   return goal;
 }
 
+/** The fewest moves the game knows for a goal: exact when its measure finished, else the
+ * shortest solution it has (the search stopped early, so a shorter one may exist). */
+export function bestKnown(goal: Goal): number | null {
+  return goal.difficulty ? goal.difficulty.moves ?? goal.solution.length : null;
+}
+
+/** A medal: the player solved it in fewer moves than the game knew, better than all stars. */
+export function medal(goal: Goal): boolean {
+  const best = bestKnown(goal);
+  return best !== null && goal.used !== undefined && goal.used < best;
+}
+
 /** Is the red block on its target? */
 export function solved(goal: Goal, blocks: Block[]): boolean {
   const red = blocks.find((b) => b.id === goal.id);

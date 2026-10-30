@@ -3,7 +3,7 @@
 import { worldRect } from "./camera";
 import { intersects, UI_AREA, UNIT, type Block } from "./layout";
 import { starsEarned, starsFor } from "./difficulty";
-import type { Goal } from "./goal";
+import { bestKnown, medal, type Goal } from "./goal";
 import { borderOnScreen, latticeRect, quickPush, visibleBlocks, whereIs, type Scene } from "./scene";
 
 export const COLORS = {
@@ -175,7 +175,7 @@ export function draw(
     const beat = throb?.id === block.id ? throbScale((now - throb.born) / THROB_MS) : 1;
     // A stuck block shakes along its axis, a few px each way, dying down.
     const st = shake?.id === block.id ? (now - shake.born) / SHAKE_MS : 1;
-    const jolt = st >= 0 && st < 1 ? Math.sin(st * Math.PI * 6) * 4 * (1 - st) : 0;
+    const jolt = st >= 0 && st < 1 ? Math.sin(st * Math.PI * 4) * 4 * (1 - st) : 0; // two wiggles
     if (beat !== 1 || jolt) {
       ctx.save();
       if (jolt) ctx.translate(block.w > block.h ? jolt : 0, block.w > block.h ? 0 : jolt);
@@ -478,7 +478,7 @@ function goalStars(ctx: CanvasRenderingContext2D, g: Goal, cells: Cells): void {
   const d = g.difficulty;
   if (!d || g.used === undefined) return;
   const worth = starsFor(d.score, g.tries ?? 7);
-  const earned = starsEarned(worth, d.moves ?? d.atLeast, g.used);
+  const earned = starsEarned(worth, bestKnown(g)!, g.used);
   const horizontal = cells.w > cells.h;
   const step = 10.5, r = 4.2;
   const long = (horizontal ? cells.w : cells.h) * UNIT;
@@ -497,6 +497,35 @@ function goalStars(ctx: CanvasRenderingContext2D, g: Goal, cells: Cells): void {
     ctx.fillStyle = i < earned ? COLORS.star : "rgba(255, 255, 255, 0.35)";
     ctx.fill();
   }
+  if (medal(g)) goalMedal(ctx, (cells.x + 0.27) * UNIT, (cells.y + 0.4) * UNIT);
+}
+
+/** A gold medal on a red and white ribbon: solved in fewer moves than the game knew. */
+function goalMedal(ctx: CanvasRenderingContext2D, x: number, y: number): void {
+  const r = UNIT * 0.12;
+  ctx.fillStyle = COLORS.icon;
+  ctx.beginPath();
+  ctx.moveTo(x - r * 0.9, y - r * 2.1);
+  ctx.lineTo(x - r * 0.1, y - r * 2.1);
+  ctx.lineTo(x + r * 0.35, y - r * 0.6);
+  ctx.lineTo(x - r * 0.45, y - r * 0.6);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = "#c44";
+  ctx.beginPath();
+  ctx.moveTo(x + r * 0.9, y - r * 2.1);
+  ctx.lineTo(x + r * 0.1, y - r * 2.1);
+  ctx.lineTo(x - r * 0.35, y - r * 0.6);
+  ctx.lineTo(x + r * 0.45, y - r * 0.6);
+  ctx.closePath();
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fillStyle = COLORS.star;
+  ctx.fill();
+  ctx.strokeStyle = "#b07d12";
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
 }
 
 /** A check on the target, in the middle of the cells the red block covers there: white

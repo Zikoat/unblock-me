@@ -1,8 +1,7 @@
 // The app: wires the canvas, the gestures, storage, goals and live reload together.
 import type { Point, Rect } from "./camera";
 import { starsEarned, starsFor, type Difficulty } from "./difficulty";
-import type { Goal } from "./goal";
-import { viewCentre } from "./goal";
+import { bestKnown, medal, viewCentre, type Goal } from "./goal";
 import type { GoalRequest } from "./goal-worker";
 import { Gestures } from "./gestures";
 import { fixedLayout, MAX_TRIES, MIN_TRIES, randomLayout, TRIES, UNIT, type Placed, type Ui } from "./layout";
@@ -677,7 +676,8 @@ function goalTip(at: Point): string | null {
       lines.unshift(`Fewest moves: ${fewest}`);
       lines.push(`Difficulty: ${d.score.toFixed(1)}${d.moves === null ? "+" : ""}`);
       const worth = starsFor(d.score, g.tries ?? tries);
-      lines.push(g.used === undefined ? `Worth ${worth} of 10 stars` : `Stars: ${starsEarned(worth, d.moves ?? d.atLeast, g.used)} of ${worth} (worth ${worth} of 10)`);
+      lines.push(g.used === undefined ? `Worth ${worth} of 10 stars` : `Stars: ${starsEarned(worth, bestKnown(g)!, g.used)} of ${worth} (worth ${worth} of 10)`);
+      if (medal(g)) lines.push(`Medal: ${g.used} moves, fewer than the game's best (${bestKnown(g)})`);
     }
     return lines.join("\n");
   }
