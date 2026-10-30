@@ -145,17 +145,26 @@ export function smallestFrozen(
 }
 
 export type Move = { id: string; from: { x: number; y: number }; to: { x: number; y: number } };
+type Cell = { x: number; y: number };
+type Moved = Map<string, Cell>;
 
 /**
- * Moves that free `target`: legal slides, one block at a time, after which the target can
- * slide at least one cell. Works back from the target: to step into a cell, the block in it
- * has to slide out of the way, which may need others out of its way first, and a block
- * moved out of the way must not end up in a cell that is needed. Tries short plans first
- * (at most `maxMoves`) and each block's nearest positions first; null if none is found.
+ * Empty `cell` with legal slides, starting from the board `moved` describes, without
+ * moving any block in `keep`. Works back from the cell: the block in it has to slide out of
+ * the way, which may need others out of its way first, and a block moved out of the way must
+ * not end up in a cell that is needed. Tries short plans first (at most `maxMoves`) and each
+ * block's nearest positions first. On success the moves are applied to `moved` and
+ * returned; on failure `moved` is left as it was and the result is null.
  */
-export function planToFree(layout: Layout, target: Block, { maxMoves = 12, reach = 8, budget = 200_000 } = {}): Move[] | null {
-  const moved = new Map<string, { x: number; y: number }>();
+export function clearCell(
+  layout: Layout,
+  moved: Moved,
+  cell: Cell,
+  keep: ReadonlySet<string>,
+  { maxMoves = 12, reach = 8, budget = 200_000 } = {},
+): Move[] | null {
   const changes: Changes = { moved, tapped: new Set() };
+  const original = new Map(moved);
   const plan: Move[] = [];
   let nodes = 0;
   const key = (x: number, y: number) => `${x},${y}`;
@@ -164,6 +173,10 @@ export function planToFree(layout: Layout, target: Block, { maxMoves = 12, reach
     const out: string[] = [];
     for (let x = b.x; x < b.x + b.w; x++) for (let y = b.y; y < b.y + b.h; y++) out.push(key(x, y));
     return out;
+  };
+  const restore = (to: Moved) => {
+    moved.clear();
+    for (const [id, p] of to) moved.set(id, p);
   };
 
   /** Slide `block` so it covers none of `forbidden`, clearing its path first. */
@@ -179,9 +192,9 @@ export function planToFree(layout: Layout, target: Block, { maxMoves = 12, reach
         const p = pos + dir * d;
         if (cellsOf(at(p)).some((c) => forbidden.has(c))) continue;
         // The cells the block sweeps into on its way, nearest first.
-        const path: { x: number; y: number }[] = [];
+        const path: Cell[] = [];
         for (let i = 0; i < d; i++) path.push(lane(dir > 0 ? pos + size + i : pos - 1 - i));
-        const keep = { plan: plan.length, moved: new Map(moved) };
+        const before = { plan: plan.length, moved: new Map(moved) };
         const inner = new Set([...forbidden, ...path.map((c) => key(c.x, c.y))]);
         let clear = true;
         busy.add(block.id);
@@ -194,42 +207,48 @@ export function planToFree(layout: Layout, target: Block, { maxMoves = 12, reach
         }
         busy.delete(block.id);
         if (clear && plan.length < limit) {
-          const from = { x: block.x, y: block.y };
-          const to = lane(p);
-          moved.set(block.id, to);
-          plan.push({ id: block.id, from, to });
+          moved.set(block.id, lane(p));
+          plan.push({ id: block.id, from: { x: block.x, y: block.y }, to: lane(p) });
           return true;
         }
-        plan.length = keep.plan;
-        moved.clear();
-        for (const [id, p] of keep.moved) moved.set(id, p);
+        plan.length = before.plan;
+        restore(before.moved);
       }
     }
     return false;
   }
 
-  const horizontal = target.w > target.h;
-  for (let limit = 0; limit <= maxMoves; limit++) {
-    for (const dir of [1, -1]) {
-      // The cell the target steps into when it moves one cell this way.
-      const cell = horizontal
-        ? { x: dir > 0 ? target.x + target.w : target.x - 1, y: target.y }
-        : { x: target.x, y: dir > 0 ? target.y + target.h : target.y - 1 };
-      const other = occupant(cell.x, cell.y);
-      if (!other) return [];
-      plan.length = 0;
-      moved.clear();
-      if (vacate(other, new Set([key(cell.x, cell.y)]), new Set([target.id]), limit)) return [...plan];
-    }
-    if (nodes > budget) break;
+  const other = occupant(cell.x, cell.y);
+  if (!other) return [];
+  for (let limit = 1; limit <= maxMoves && nodes <= budget; limit++) {
+    plan.length = 0;
+    restore(original);
+    if (vacate(other, new Set([key(cell.x, cell.y)]), new Set(keep), limit)) return [...plan];
   }
+  restore(original);
   return null;
+}
+
+/** Moves that free `target` on an untouched board: legal slides after which it can slide at
+ * least one cell either way. Null if none is found within `maxMoves`. */
+export function planToFree(layout: Layout, target: Block, options: { maxMoves?: number; reach?: number; budget?: number } = {}): Move[] | null {
+  const horizontal = target.w > target.h;
+  const ends = [1, -1].map((dir) => (horizontal
+    ? { x: dir > 0 ? target.x + target.w : target.x - 1, y: target.y }
+    : { x: target.x, y: dir > 0 ? target.y + target.h : target.y - 1 }));
+  let best: Move[] | null = null;
+  for (const cell of ends) {
+    const plan = clearCell(layout, new Map(), cell, new Set([target.id]), { ...options, maxMoves: Math.min(options.maxMoves ?? 12, best ? best.length - 1 : Infinity) });
+    if (plan && (!best || plan.length < best.length)) best = plan;
+    if (best?.length === 0) break;
+  }
+  return best;
 }
 
 /** Play `moves` with the game's rules: each must be a legal slide when it is made. Returns
  * the changes, or null at the first illegal move. */
-export function replay(layout: Layout, moves: Move[]): Changes | null {
-  const moved = new Map<string, { x: number; y: number }>();
+export function replay(layout: Layout, moves: Move[], start: ReadonlyMap<string, Cell> = new Map()): Changes | null {
+  const moved = new Map(start);
   const changes: Changes = { moved, tapped: new Set() };
   for (const m of moves) {
     const block = blocksIn(layout, { x: m.from.x, y: m.from.y, width: 1, height: 1 }, changes).find((b) => b.id === m.id);
