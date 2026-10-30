@@ -97,6 +97,28 @@ describe("sliding", () => {
     expect(at("a").x).toBe(-2);
   });
 
+  test("dragging a block stuck at both ends pans the board instead, and marks it while held", () => {
+    const { scene, g, at } = board(H(0, 0, "a"), V(-1, 0, "left"), V(2, -1, "right"));
+    const before = scene.camera;
+    g.down(1, cell(1, 0.5));
+    g.move(1, cell(2, 1.5));
+    expect(scene.stuckId).toBe("a");
+    expect(scene.dragging).toBeNull();
+    g.move(1, cell(3, 2.5));
+    g.up(1, cell(3, 2.5));
+    expect(scene.camera).toEqual({ ...before, offsetX: before.offsetX + 2 * UNIT, offsetY: before.offsetY + 2 * UNIT });
+    expect(scene.stuckId).toBeNull();
+    expect(at("a")).toMatchObject({ x: 0, moved: false });
+    expect(scene.history).toEqual([]);
+  });
+
+  test("a block with room only one way is still dragged, not panned", () => {
+    const { scene, g, at } = board(H(0, 0, "a"), V(-1, 0, "left"));
+    drag(g, cell(1, 0.5), cell(3, 0.5));
+    expect(at("a").x).toBe(2);
+    expect(scene.stuckId).toBeNull();
+  });
+
   test("a boxed-in block does not move at all", () => {
     const { g, at, scene } = board(H(0, 0, "a"), V(-1, 0, "left"), V(2, -1, "right"));
     expect(slideRange(scene.layout, at("a"), scene)).toEqual({ lo: 0, hi: 0 });

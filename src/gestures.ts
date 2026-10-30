@@ -24,7 +24,7 @@ type Mode =
  * Turns pointer events (screen coordinates) into scene changes: a tap on the background
  * moves the circle and a tap on a block pushes it to the end of its room (see quickPush),
  * one finger pans the background or slides a block along its long axis until it hits
- * another block, two fingers pinch-zoom and pan.
+ * another block (a block that cannot move either way pans), two fingers pinch-zoom and pan.
  * UI blocks and walls never move: dragging one pans, tapping a UI block calls `onUi` with
  * its kind. The density block is also a slider: dragging on it calls `onAdjust` with how
  * far the finger has moved sideways since the press (screen px), and once more with `done`.
@@ -84,7 +84,13 @@ export class Gestures {
         this.mode = { kind: "panning", id, last: mode.start };
       } else {
         const { lo, hi } = slideRange(this.scene.layout, mode.block, this.scene);
-        this.mode = { kind: "dragging", id, block: mode.block, grab: this.lattice(mode.start), lo, hi };
+        if (lo === hi) {
+          // Stuck against blocks at both ends: there is nothing to slide, so pan instead.
+          this.scene.stuckId = mode.block.id;
+          this.mode = { kind: "panning", id, last: mode.start };
+        } else {
+          this.mode = { kind: "dragging", id, block: mode.block, grab: this.lattice(mode.start), lo, hi };
+        }
       }
     }
     this.apply(id, at);
@@ -149,6 +155,7 @@ export class Gestures {
 
   private startPinch(): void {
     // A block being dragged is dropped where it is; the second finger moves the map.
+    this.scene.stuckId = null;
     this.drop();
     this.finishAdjust();
     const ids = [...this.pointers.keys()] as [number, number];
@@ -179,6 +186,7 @@ export class Gestures {
     const mode = this.mode;
     const involved = "ids" in mode ? mode.ids.includes(id) : "id" in mode && mode.id === id;
     if (!involved) return;
+    this.scene.stuckId = null;
     this.drop();
     this.finishAdjust();
     // Lifting one finger of a pinch keeps panning with the other, never a tap.

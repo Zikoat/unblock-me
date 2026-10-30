@@ -28,7 +28,7 @@ const UNIT = 60;
 const COLORS = {
   background: [243, 242, 238], dot: [211, 209, 202], border: [185, 182, 173],
   block: [79, 109, 143], moved: [63, 154, 122], dragging: [224, 130, 61],
-  goal: [214, 69, 69], circle: [58, 57, 54], reset: [29, 29, 31], wall: [95, 93, 87], star: [242, 182, 50],
+  goal: [214, 69, 69], circle: [58, 57, 54], reset: [29, 29, 31], wall: [95, 93, 87], star: [242, 182, 50], stuck: [141, 151, 163],
 };
 let failures = 0;
 const check = (ok, what) => {
@@ -292,10 +292,19 @@ const browser = await chromium.launch();
   await gesture([cell(0.5, -1)], [cell(2, 1.3)]); // 2.3 down, 1.5 right
   check((await block(page, "v")).y === 0 && (await block(page, "v")).x === 0, "a vertical block slides only vertically and snaps (2.3 cells -> 2)");
 
+  // A block stuck at both ends: dragging it pans the board, and it shows grey while held.
   await place([H("a", -1, 0), V("l", -2, -1), V("r", 1, 0)]);
-  await gesture([cell(0, 0.5)], [cell(2, 0.5)]);
-  await gesture([cell(0, 0.5)], [cell(-2, 0.5)]);
-  check(!(await block(page, "a")).moved, "a boxed-in block does not move either way");
+  let held = null;
+  await gesture([cell(0, 0.5)], [cell(1, 1.5)], {
+    during: async ([[x, y]]) => { await frame(page); held = await colorAt(page, x, y); },
+  });
+  const pannedBy = await page.evaluate(() => unblock.scene.camera);
+  check(held === "stuck", `a block stuck at both ends turns grey while dragged (${held})`);
+  check(pannedBy.offsetX === 230 && pannedBy.offsetY === 430, `and the drag pans the board instead (${pannedBy.offsetX},${pannedBy.offsetY})`);
+  check(!(await block(page, "a")).moved, "and the block does not move");
+  await page.waitForTimeout(100);
+  check((await colorAt(page, ...[200 + 60, 400 + 60 + 0.5 * 60 - 30])) !== "stuck", "it is back to its colour after letting go");
+  await page.evaluate(() => { unblock.scene.camera = { scale: 1, offsetX: 170, offsetY: 370 }; unblock.redraw(); });
 
   await place([...UI, H("a", 2, 1), V("b", 0, 2)]);
   await gesture([cell(0.5, 3)], [cell(0.5, -3)]);

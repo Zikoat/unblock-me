@@ -28,6 +28,8 @@ export type Scene = {
   reached: boolean;
   /** Where the last tap landed, in world coordinates. */
   circle: Point | null;
+  /** A stuck block the finger is on: it cannot move either way, so the drag pans instead. */
+  stuckId: string | null;
   /** The block being dragged and where it is right now, in (fractional) lattice units. */
   dragging: { id: string; x: number; y: number } | null;
   /** Cull to the smaller border (and draw it), or to the screen edge. */
@@ -46,7 +48,7 @@ export function newScene(
     reached = false,
   }: { layout?: Layout; moved?: Map<string, Point>; history?: Move[]; border?: boolean; goal?: Goal | null; reached?: boolean } = {},
 ): Scene {
-  const scene: Scene = { camera: centred(width, height), width, height, layout, moved, history, goal, reached, circle: null, dragging: null, border };
+  const scene: Scene = { camera: centred(width, height), width, height, layout, moved, history, goal, reached, circle: null, dragging: null, stuckId: null, border };
   return resize(scene, width, height);
 }
 

@@ -11,6 +11,7 @@ export const COLORS = {
   block: "#4f6d8f",
   moved: "#3f9a7a",
   dragging: "#e0823d",
+  stuck: "#8d97a3",
   goal: "#d64545",
   target: "rgba(214, 69, 69, 0.14)",
   targetLine: "rgba(214, 69, 69, 0.45)",
@@ -93,6 +94,7 @@ export function draw(
     ctx.fillStyle = block.ui ? COLORS.ui
       : block.wall ? COLORS.wall
       : block.id === scene.dragging?.id ? COLORS.dragging
+      : block.id === scene.stuckId ? COLORS.stuck
       : isGoal ? COLORS.goal
       : block.moved ? COLORS.moved
       : COLORS.block;
