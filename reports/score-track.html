@@ -89,6 +89,7 @@
     <label for="finish">Finish at</label>
     <input id="finish" type="range" min="10" max="38" value="18">
     <output id="finishOut">18</output>
+    <label><input id="demoUndone" type="checkbox"> Undone once</label>
     <button id="play" class="play">▶ Play</button>
   </div>
 </div>
@@ -233,7 +234,8 @@ function track(g, x0, y0, used, { undone = false, scale = 1, size = null, style 
   // The row: the medal (if won) at the start, where it sits on the track, then the stars not
   // won and the stars won; the five stars together still say how hard the goal was.
   const starsAll = [...MARKS.filter((m) => m.kind === "star").map((m) => m.at), Infinity];
-  const row = [...kept.filter((c) => c.kind === "medal").map((c) => c.m), ...starsAll.filter((m) => used > m), ...starsAll.filter((m) => used <= m)];
+  const medalShown = kept.some((c) => c.kind === "medal") || (style === "hollow" && medalP !== null);
+  const row = [...(medalShown ? [MEDAL] : []), ...starsAll.filter((m) => used > m), ...starsAll.filter((m) => used <= m)];
   const gather = (icon) => {
     const i = row.indexOf(icon.m);
     return i < 0 ? icon.x : icon.x + (x0 + width / 2 + (i - (row.length - 1) / 2) * gap - icon.x) * ease;
@@ -249,7 +251,7 @@ function track(g, x0, y0, used, { undone = false, scale = 1, size = null, style 
   };
   // The medal is shown only once won (it is often out of reach): in the static track when
   // finishing here would win it, in the finish animations once the goal is reached.
-  const medalWon = !undone && used <= MEDAL && (style === "now" || finish !== null);
+  const medalWon = (!undone && used <= MEDAL && (style === "now" || finish !== null)) || (style === "hollow" && medalP !== null);
   const all = [...[...MARKS].reverse().filter((m) => m.kind === "star" || medalWon).map((m) => ({ x: at(m.at), kind: m.kind, m: m.at })), { x: endX, kind: "star", m: Infinity }];
   for (const icon of all) {
     const lost = used > icon.m || (icon.kind === "medal" && undone);
@@ -260,7 +262,14 @@ function track(g, x0, y0, used, { undone = false, scale = 1, size = null, style 
       const pop = filled && k === Math.floor(finish) - 1 ? popScale(Math.min(1, (finish % 1) * (STAR_MS / POP_MS))) : 1;
       if (filled) drawIcon(icon.x, icon.kind, { pop, m: icon.m });
       // The medal is not shown until its entrance, after every star.
-      else if (icon.kind === "medal" && medalP !== null) {
+      else if (icon.kind === "medal" && medalP !== null && undone) {
+        // Would have been won but for an undo: it only fades in, gray and faint, the undo
+        // arrow under it.
+        drawIcon(icon.x, icon.kind, { gray: true, opacity: 0.4 * Math.min(1, medalP * 2), m: icon.m });
+        const mx = collapse ? gather({ x: icon.x, m: icon.m }) : icon.x;
+        const arrow = el("g", { opacity: Math.min(1, medalP * 2) }, g);
+        undoIcon(arrow, mx, y0 + h + ms * 0.75, ms);
+      } else if (icon.kind === "medal" && medalP !== null) {
         // Falls in from 3.5×, speeding up like a weight (scale on t²), spinning and fading in;
         // hits the track hard: squashed to 0.75 at once, a stiff bounce back that dies out,
         // and the ring and sparkles burst out on the hit.
@@ -278,7 +287,9 @@ function track(g, x0, y0, used, { undone = false, scale = 1, size = null, style 
       } else if (icon.kind === "star") drawIcon(icon.x, icon.kind, { outline: true, gray: lost, opacity: lost ? 0.25 : 1, m: icon.m });
     }
   }
-  if (undone && !upright) undoIcon(g, at(MEDAL), y0 + h + ms * 0.75, ms);
+  // After an undo the arrow sits under where the medal would be (in the finish, it comes
+  // with the medal instead, or fades with the track).
+  if (undone && !upright && !(style === "hollow" && medalP !== null)) undoIcon(el("g", { opacity: 1 - collapse }, g), at(MEDAL), y0 + h + ms * 0.75, ms);
   // The move count, white with a shadow, on the left of the track.
   const count = el("text", { x: x0 + h * 0.35, y: cy, "dominant-baseline": "central", "font-size": Math.min(h * LOOK.number, (MEDAL * w - h * 0.5) / (0.62 * String(used).length)), "font-weight": 700, "font-family": "system-ui, sans-serif", fill: "#ffffff", filter: "url(#shadow)", opacity: 1 - collapse, ...(upright ? { transform: `rotate(90 ${x0 + h * 0.35} ${cy})` } : {}) }, g);
   count.textContent = used;
@@ -391,7 +402,7 @@ function drawGoals() {
 // the time since Play. Moves tick up to the finish; then each star kept fills (with a pop),
 // a pause, and the track fades while the stars gather in a row.
 const MOVE_MS = 110, STAR_MS = 420, POP_MS = 300, MEDAL_WAIT_MS = 700, MEDAL_MS = 1000, MEDAL_FALL = 0.35, HOLD_MS = 600, GATHER_MS = 900;
-let demo = { t: null, until: 18, playing: false, startAt: 0 };
+let demo = { t: null, until: 18, playing: false, startAt: 0, undone: false };
 
 /** When each part of the finish happens, for finishing in `n` moves. */
 function timeline(n) {
@@ -402,7 +413,7 @@ function timeline(n) {
   // The medal waits a moment after the last star, then makes its entrance.
   const starsEnd = movesEnd + stars.length * STAR_MS + POP_MS;
   const medalAt = n <= MEDAL ? starsEnd + MEDAL_WAIT_MS : null;
-  if (medalAt !== null) fills.push({ name: "medal", at: medalAt, length: MEDAL_MS });
+  if (medalAt !== null) fills.push({ name: demo.undone ? "medal (undone)" : "medal", at: medalAt, length: MEDAL_MS });
   const gather = (medalAt !== null ? medalAt + MEDAL_MS : starsEnd) + HOLD_MS;
   return { movesEnd, fills, medalAt, gather, end: gather + GATHER_MS, total: gather + GATHER_MS + 300 };
 }
@@ -434,18 +445,18 @@ function drawDemoAt(t) {
   const { used, finish, collapse, medal: medalP, lines, shake } = demoState(t, tl);
   let kept = [];
   const trace = [];
-  const svg = trackSvg((g, x, y) => { const r = track(g, x, y, used, { style: "hollow", finish, scale: 1.2, collapse, trace, medalP, lines }); kept = r.kept; return r; }, { pad: 14 });
+  const svg = trackSvg((g, x, y) => { const r = track(g, x, y, used, { style: "hollow", finish, scale: 1.2, collapse, trace, medalP, lines, undone: demo.undone }); kept = r.kept; return r; }, { pad: 14 });
   svg.style.overflow = "visible"; // the medal's entrance and sparkles may reach past it
   if (shake) svg.lastChild.setAttribute("transform", `translate(${(shake * 4).toFixed(2)} ${(Math.abs(shake) * 2.5).toFixed(2)})`);
   document.getElementById("demoHollow").replaceChildren(svg);
   let got = 0, medal = false;
   if (finish !== null) {
     const counted = kept.filter((k) => k.kind === "star").slice(0, Math.floor(finish));
-    if (medalP !== null) counted.push({ kind: "medal" });
+    if (medalP !== null && !demo.undone) counted.push({ kind: "medal" });
     got = counted.filter((k) => k.kind === "star").length;
     medal = counted.some((k) => k.kind === "medal");
   }
-  document.getElementById("scoreHollow").textContent = finish === null ? `${used} moves` : `${used} moves: ${"★".repeat(got)}${"☆".repeat(5 - got)}${medal ? " + medal" : ""}`;
+  document.getElementById("scoreHollow").textContent = finish === null ? `${used} moves` : `${used} moves: ${"★".repeat(got)}${"☆".repeat(5 - got)}${medal ? " + medal" : ""}${demo.undone && medalP !== null ? " (no medal: undone)" : ""}`;
   drawTimeline(tl, t ?? tl.total, used, collapse, trace);
   drawCurves(tl, t ?? tl.total);
 }
@@ -459,13 +470,13 @@ const elementName = (e) => e.kind === "medal" ? "Medal" : e.m === Infinity ? "St
 /** Each element's x, scale and opacity over the whole animation, sampled every 20 ms. */
 let curveCache = { key: null, samples: null };
 function samples(tl) {
-  const key = `${demo.until}|${LOOK.width}|${LOOK.height}|${LOOK.icons}`;
+  const key = `${demo.until}|${demo.undone}|${LOOK.width}|${LOOK.height}|${LOOK.icons}`;
   if (curveCache.key === key) return curveCache.samples;
   const out = [];
   for (let t = 0; t <= tl.total; t += 20) {
     const { used, finish, collapse, medal: medalP, lines } = demoState(t, tl);
     const trace = [];
-    track(el("g", {}), 0, 0, used, { style: "hollow", finish, scale: 1.2, collapse, trace, medalP, lines });
+    track(el("g", {}), 0, 0, used, { style: "hollow", finish, scale: 1.2, collapse, trace, medalP, lines, undone: demo.undone });
     out.push({ t, trace, track: 1 - collapse, lines });
   }
   curveCache = { key, samples: out };
@@ -528,7 +539,7 @@ function drawTimeline(tl, t, used, collapse, trace) {
   document.getElementById("scrubOut").textContent = `${Math.round(t)} ms`;
   const rows = [
     { name: `Moves 0 → ${demo.until}`, from: 0, to: tl.movesEnd, note: `${MOVE_MS} ms a move` },
-    ...tl.fills.map((f) => ({ name: `${f.name} ${f.name === "medal" ? "lands" : "fills"}`, from: f.at, to: f.at + f.length, note: f.name === "medal" ? "falls from 3.5× (speeding up), spinning, fading in; hits hard: squash to 0.75, stiff bounce, track shakes; ring and 12 sparkles burst out on the hit" : "damped spring: scale 1 → about 1.25 → just under 1 → 1" })),
+    ...tl.fills.map((f) => ({ name: `${f.name} ${f.name.startsWith("medal") ? (demo.undone ? "fades in" : "lands") : "fills"}`, from: f.at, to: f.at + f.length, note: f.name === "medal (undone)" ? "gray, opacity 0 → 0.4, undo arrow under it" : f.name === "medal" ? "falls from 3.5× (speeding up), spinning, fading in; hits hard: squash to 0.75, stiff bounce, track shakes; ring and 12 sparkles burst out on the hit" : "damped spring: scale 1 → about 1.25 → just under 1 → 1" })),
     ...(tl.medalAt !== null ? [{ name: "Wait for the medal", from: tl.fills.at(-2).at + POP_MS, to: tl.medalAt, note: "" }] : []),
     { name: "Pause; star lines fade", from: tl.gather - HOLD_MS, to: tl.gather, note: "line opacity 1 → 0" },
     { name: "Track and number fade", from: tl.gather, to: tl.end, note: "opacity 1 → 0" },
@@ -546,7 +557,7 @@ function drawTimeline(tl, t, used, collapse, trace) {
   rows.forEach((r, i) => {
     const y = i * rh + 4;
     el("text", { x: 0, y: y + 12, "font-size": 11, fill: ink }, svg).textContent = r.name;
-    el("rect", { x: x(r.from), y: y + 2, width: Math.max(2, x(r.to) - x(r.from)), height: rh - 8, rx: 3, fill: r.name.startsWith("Moves") ? C.used : r.name.includes("fill") || r.name.includes("lands") ? C.star : r.name.startsWith("Pause") || r.name.startsWith("Wait") ? "#b9bcc1" : "#3b6fd4", "fill-opacity": 0.85 }, svg).append(Object.assign(el("title", {}), { textContent: `${r.name}: ${Math.round(r.from)}–${Math.round(r.to)} ms${r.note ? ` (${r.note})` : ""}` }));
+    el("rect", { x: x(r.from), y: y + 2, width: Math.max(2, x(r.to) - x(r.from)), height: rh - 8, rx: 3, fill: r.name.startsWith("Moves") ? C.used : r.name.includes("fill") || r.name.includes("lands") || r.name.includes("fades in") ? C.star : r.name.startsWith("Pause") || r.name.startsWith("Wait") ? "#b9bcc1" : "#3b6fd4", "fill-opacity": 0.85 }, svg).append(Object.assign(el("title", {}), { textContent: `${r.name}: ${Math.round(r.from)}–${Math.round(r.to)} ms${r.note ? ` (${r.note})` : ""}` }));
   });
   el("line", { x1: x(t), x2: x(t), y1: 0, y2: H - 18, stroke: "#d64545", "stroke-width": 2 }, svg);
   svg.onclick = (e) => {
@@ -603,13 +614,17 @@ used.addEventListener("input", update);
 undone.addEventListener("change", update);
 const finish = document.getElementById("finish");
 finish.addEventListener("input", () => {
-  demo = { t: null, until: Number(finish.value), playing: false, startAt: 0 };
+  demo = { t: null, until: Number(finish.value), playing: false, startAt: 0, undone: demo.undone };
   document.getElementById("finishOut").textContent = finish.value;
   drawDemos();
 });
 document.getElementById("play").addEventListener("click", () => {
-  demo = { t: 0, until: Number(finish.value), playing: true, startAt: performance.now() };
+  demo = { t: 0, until: Number(finish.value), playing: true, startAt: performance.now(), undone: demo.undone };
   requestAnimationFrame(playFrame);
+});
+document.getElementById("demoUndone").addEventListener("change", (e) => {
+  demo = { ...demo, undone: e.target.checked };
+  drawDemos();
 });
 document.getElementById("scrub").addEventListener("input", (e) => {
   demo = { ...demo, t: Number(e.target.value), playing: false };
