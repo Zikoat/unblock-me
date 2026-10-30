@@ -64,7 +64,7 @@
   <li>Every move takes the same width of the track. Moves used are dark, moves left are light, so the dark fill grows to the right.</li>
   <li>A line across the track marks the exact point where something is lost: finish before it and you keep the icon on it.</li>
   <li>The icons sit on the lines, on their own layer, so their width never shifts the track.</li>
-  <li>🏅 sits just before 15, the shortest solution the game has, at the start of the gray stripes: beating it beats the game.</li>
+  <li>The rosette sits just before 15, the shortest solution the game has, at the start of the gray stripes: beating it beats the game.</li>
   <li>One star every 5 moves (a third of 15). Passed icons turn gray.</li>
   <li>The track ends at 31. The last star sits outside it: it is never lost.</li>
   <li>After an undo the medal is gray and faint: it can no longer be won on this goal.</li>
@@ -82,7 +82,7 @@ const MARKS = [
 ];
 const C = {
   bg: "#e6e9ec", dot: "#d3d1ca", block: "#4f6d8f", red: "#d64545", target: "rgba(214,69,69,0.14)", targetLine: "rgba(214,69,69,0.45)",
-  left: "#eaa49c", used: "#8e3f3c", hatch: "rgba(90, 88, 84, 0.55)", cut: "#ffffff", star: "#f2b632", starLine: "#b07d12", gray: "#b9b6ad", medal: "#c44",
+  left: "#eaa49c", used: "#8e3f3c", hatch: "rgba(90, 88, 84, 0.55)", cut: "#ffffff", star: "#fdd835", starLine: "#f4b400", gray: "#b9b6ad", medal: "#c44",
 };
 const NS = "http://www.w3.org/2000/svg";
 const el = (name, attrs, parent) => {
@@ -115,14 +115,14 @@ const MEDALS = {
     el("circle", { cx, cy, r, fill: "#f6bf3a", stroke: "#b07d12", "stroke-width": r * 0.14 }, g);
     el("path", { d: starPath(cx, cy, r * 0.55), fill: "#e39a1e" }, g);
   } },
-  rosette: { name: "Rosette", draw: (g, cx, cy, s) => {
-    const r = s / 2;
-    el("path", { d: `M${cx - r * 0.5},${cy}L${cx - r * 0.9},${cy + r * 1.9}L${cx - r * 0.45},${cy + r * 1.6}L${cx - r * 0.1},${cy + r * 1.95}L${cx},${cy}Z`, fill: "#c44" }, g);
-    el("path", { d: `M${cx + r * 0.5},${cy}L${cx + r * 0.9},${cy + r * 1.9}L${cx + r * 0.45},${cy + r * 1.6}L${cx + r * 0.1},${cy + r * 1.95}L${cx},${cy}Z`, fill: "#a33" }, g);
+  rosette: { name: "Rosette", draw: (g, cx, cy0, s) => {
+    const r = s / 2, cy = cy0 - r * 0.335; // the rosette with its tails, centred on cy0
+    el("path", { d: `M${cx - r * 0.5},${cy}L${cx - r * 0.9},${cy + r * 1.9}L${cx - r * 0.45},${cy + r * 1.6}L${cx - r * 0.1},${cy + r * 1.95}L${cx},${cy}Z`, fill: "#2f5bb3" }, g);
+    el("path", { d: `M${cx + r * 0.5},${cy}L${cx + r * 0.9},${cy + r * 1.9}L${cx + r * 0.45},${cy + r * 1.6}L${cx + r * 0.1},${cy + r * 1.95}L${cx},${cy}Z`, fill: "#264a94" }, g);
     let d = "";
     for (let i = 0; i < 24; i++) { const a = (i * Math.PI) / 12, rr = i % 2 ? r * 1.05 : r * 1.28; d += `${i ? "L" : "M"}${cx + rr * Math.cos(a)},${cy + rr * Math.sin(a)}`; }
-    el("path", { d: d + "Z", fill: "#d64545" }, g);
-    el("circle", { cx, cy, r: r * 0.78, fill: "#f6bf3a", stroke: "#b07d12", "stroke-width": r * 0.12 }, g);
+    el("path", { d: d + "Z", fill: "#3b6fd4" }, g);
+    el("circle", { cx, cy, r: r * 0.78, fill: C.star, stroke: C.starLine, "stroke-width": r * 0.12 }, g);
   } },
   coin: { name: "Plain coin", draw: (g, cx, cy, s) => {
     const r = s / 2;
@@ -131,10 +131,10 @@ const MEDALS = {
   } },
 };
 const STARS = {
-  drawn: { name: "Drawn ⭐", draw: (g, cx, cy, s) => el("path", { d: starPath(cx, cy, s * 0.6), fill: C.star, stroke: C.starLine, "stroke-width": s * 0.05, "stroke-linejoin": "round" }, g) },
+  drawn: { name: "Drawn ⭐", draw: (g, cx, cy, s) => el("path", { d: starPath(cx, cy + s * 0.057, s * 0.6), fill: C.star, stroke: C.starLine, "stroke-width": s * 0.05, "stroke-linejoin": "round" }, g) },
   emoji: { name: "Emoji ⭐", draw: (g, cx, cy, s) => image(g, EMOJI.star, cx, cy, s * 1.5) },
 };
-const pick = { medal: "emoji", star: "emoji" };
+const pick = { medal: "rosette", star: "drawn" };
 
 /** An icon in one state: kept (colour), lost (gray) or undone (gray and faint). */
 function icon(g, set, key, cx, cy, s, state) {
@@ -160,11 +160,11 @@ function track(g, x0, y0, w, used, undone) {
   for (const m of [...MARKS].reverse()) {
     const cx = x0 + m.at * w, lost = used > m.at;
     el("line", { x1: cx, x2: cx, y1: y0, y2: y0 + h, stroke: C.cut, "stroke-width": Math.max(1, w * 0.14) }, bar);
-    if (m.kind === "star") icon(g, STARS, pick.star, cx, cy, r * 2.4, lost ? "lost" : "kept");
-    else icon(g, MEDALS, pick.medal, cx, cy, r * 2.4, undone ? "undone" : lost ? "lost" : "kept");
+    if (m.kind === "star") icon(g, STARS, pick.star, cx, cy, r * 2.8, lost ? "lost" : "kept");
+    else icon(g, MEDALS, pick.medal, cx, cy, r * 2.08, undone ? "undone" : lost ? "lost" : "kept");
   }
   // The last star, outside the track: it is never lost.
-  icon(g, STARS, pick.star, x0 + width + r * 2, cy, r * 2.4, "kept");
+  icon(g, STARS, pick.star, x0 + width + r * 2, cy, r * 2.8, "kept");
   return width;
 }
 
