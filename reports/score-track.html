@@ -261,10 +261,11 @@ function track(g, x0, y0, used, { undone = false, scale = 1, size = null, style 
       if (filled) drawIcon(icon.x, icon.kind, { pop, m: icon.m });
       // The medal is not shown until its entrance, after every star.
       else if (icon.kind === "medal" && medalP !== null) {
-        // Drops in from 3.5× with a quarter spin, fading in, overshoots a little and settles;
-        // a gold ring bursts out as it lands.
-        const p = medalP, land = Math.min(1, p / 0.6), settle = Math.max(0, (p - 0.6) / 0.4);
-        const scale = 1 + 2.5 * (1 - land) ** 3 - 0.18 * Math.sin(Math.PI * settle) * (1 - settle);
+        // Falls in from 3.5×, speeding up like a weight (scale on t²), spinning and fading in;
+        // hits the track hard: squashed to 0.75 at once, a stiff bounce back that dies out,
+        // and the ring and sparkles burst out on the hit.
+        const p = medalP, land = Math.min(1, p / MEDAL_FALL), settle = Math.max(0, (p - MEDAL_FALL) / (1 - MEDAL_FALL));
+        const scale = land < 1 ? 3.5 - 2.5 * land ** 2 : 1 - 0.25 * Math.exp(-5 * settle) * Math.cos(3 * Math.PI * settle);
         const mx = collapse ? gather({ x: icon.x, m: icon.m }) : icon.x;
         if (land >= 1) el("circle", { cx: mx, cy, r: ms * (0.6 + 1.8 * settle), fill: "none", stroke: C.star, "stroke-width": ms * 0.25 * (1 - settle), opacity: 1 - settle }, g);
         // Sparkles fly out as it lands: 12 four-point stars, slowing, twinkling, fading.
@@ -273,7 +274,7 @@ function track(g, x0, y0, used, { undone = false, scale = 1, size = null, style 
           const sx = mx + Math.cos(a) * dist, sy = cy + Math.sin(a) * dist, r = ms * (0.4 + 0.2 * (i % 2)) * (1 - settle * 0.8) * (0.75 + 0.25 * Math.sin(settle * 18 + i));
           el("path", { d: `M${sx},${sy - r}Q${sx},${sy} ${sx + r},${sy}Q${sx},${sy} ${sx},${sy + r}Q${sx},${sy} ${sx - r},${sy}Q${sx},${sy} ${sx},${sy - r}Z`, fill: i % 3 ? C.star : "#ffffff", opacity: Math.min(1, (1 - settle) * 1.6) }, g);
         }
-        drawIcon(icon.x, icon.kind, { pop: scale, opacity: Math.min(1, land * 2), spin: -90 * (1 - land) ** 2, m: icon.m });
+        drawIcon(icon.x, icon.kind, { pop: scale, ...(land < 1 ? { opacity: Math.min(1, land * 2.5) } : {}), spin: -70 * (1 - land), m: icon.m });
       } else if (icon.kind === "star") drawIcon(icon.x, icon.kind, { outline: true, gray: lost, opacity: lost ? 0.25 : 1, m: icon.m });
     }
   }
@@ -389,7 +390,7 @@ function drawGoals() {
 // The finish demo, as a function of time: no animation library, every frame is drawn from
 // the time since Play. Moves tick up to the finish; then each star kept fills (with a pop),
 // a pause, and the track fades while the stars gather in a row.
-const MOVE_MS = 110, STAR_MS = 420, POP_MS = 300, MEDAL_WAIT_MS = 700, MEDAL_MS = 900, HOLD_MS = 600, GATHER_MS = 900;
+const MOVE_MS = 110, STAR_MS = 420, POP_MS = 300, MEDAL_WAIT_MS = 700, MEDAL_MS = 1000, MEDAL_FALL = 0.35, HOLD_MS = 600, GATHER_MS = 900;
 let demo = { t: null, until: 18, playing: false, startAt: 0 };
 
 /** When each part of the finish happens, for finishing in `n` moves. */
@@ -409,9 +410,14 @@ function timeline(n) {
 /** What the demo shows at time t (null: before Play). */
 function demoState(t, tl) {
   const n = demo.until;
-  let used = n, finish = null, collapse = 0, medal = null, lines = 1;
+  let used = n, finish = null, collapse = 0, medal = null, lines = 1, shake = 0;
   if (t !== null) {
-    if (tl.medalAt !== null && t >= tl.medalAt) medal = Math.min(1, (t - tl.medalAt) / MEDAL_MS);
+    if (tl.medalAt !== null && t >= tl.medalAt) {
+      medal = Math.min(1, (t - tl.medalAt) / MEDAL_MS);
+      // The hit shakes the track: a short jolt sideways and down, dying out in 220 ms.
+      const k = (t - tl.medalAt - MEDAL_FALL * MEDAL_MS) / 220;
+      if (k >= 0 && k < 1) shake = Math.sin(k * Math.PI * 5) * (1 - k) ** 2;
+    }
     used = Math.min(n, Math.floor(t / MOVE_MS));
     const after = t - tl.movesEnd;
     if (after >= 0) {
@@ -420,16 +426,17 @@ function demoState(t, tl) {
       lines = 1 - Math.max(0, Math.min(1, (t - tl.gather + HOLD_MS) / HOLD_MS)); // fade in the pause
     }
   }
-  return { used, finish, collapse, medal, lines };
+  return { used, finish, collapse, medal, lines, shake };
 }
 
 function drawDemoAt(t) {
   const n = demo.until, tl = timeline(n);
-  const { used, finish, collapse, medal: medalP, lines } = demoState(t, tl);
+  const { used, finish, collapse, medal: medalP, lines, shake } = demoState(t, tl);
   let kept = [];
   const trace = [];
   const svg = trackSvg((g, x, y) => { const r = track(g, x, y, used, { style: "hollow", finish, scale: 1.2, collapse, trace, medalP, lines }); kept = r.kept; return r; }, { pad: 14 });
   svg.style.overflow = "visible"; // the medal's entrance and sparkles may reach past it
+  if (shake) svg.lastChild.setAttribute("transform", `translate(${(shake * 4).toFixed(2)} ${(Math.abs(shake) * 2.5).toFixed(2)})`);
   document.getElementById("demoHollow").replaceChildren(svg);
   let got = 0, medal = false;
   if (finish !== null) {
@@ -473,7 +480,7 @@ function drawCurves(tl, t) {
   const color = (n) => ELEMENT_COLORS[names.indexOf(n) % ELEMENT_COLORS.length];
   const panels = [
     { title: "x (along the track)", get: (e) => e.x, min: 0, max: Math.max(...data.flatMap((d) => d.trace.map((e) => e.x))) },
-    { title: "Scale", get: (e) => e.scale, min: 0.4, max: 1.8 },
+    { title: "Scale", get: (e) => e.scale, min: 0.4, max: 3.6 },
     { title: "Opacity", get: (e) => e.opacity, min: 0, max: 1.05 },
   ];
   const ph = 90, gap = 22, legendH = 22, H = panels.length * (ph + gap) + legendH;
@@ -521,7 +528,7 @@ function drawTimeline(tl, t, used, collapse, trace) {
   document.getElementById("scrubOut").textContent = `${Math.round(t)} ms`;
   const rows = [
     { name: `Moves 0 → ${demo.until}`, from: 0, to: tl.movesEnd, note: `${MOVE_MS} ms a move` },
-    ...tl.fills.map((f) => ({ name: `${f.name} ${f.name === "medal" ? "lands" : "fills"}`, from: f.at, to: f.at + f.length, note: f.name === "medal" ? "drops in from 3.5× with a spin, fades in; a gold ring and 12 sparkles burst out" : "damped spring: scale 1 → about 1.25 → just under 1 → 1" })),
+    ...tl.fills.map((f) => ({ name: `${f.name} ${f.name === "medal" ? "lands" : "fills"}`, from: f.at, to: f.at + f.length, note: f.name === "medal" ? "falls from 3.5× (speeding up), spinning, fading in; hits hard: squash to 0.75, stiff bounce, track shakes; ring and 12 sparkles burst out on the hit" : "damped spring: scale 1 → about 1.25 → just under 1 → 1" })),
     ...(tl.medalAt !== null ? [{ name: "Wait for the medal", from: tl.fills.at(-2).at + POP_MS, to: tl.medalAt, note: "" }] : []),
     { name: "Pause; star lines fade", from: tl.gather - HOLD_MS, to: tl.gather, note: "line opacity 1 → 0" },
     { name: "Track and number fade", from: tl.gather, to: tl.end, note: "opacity 1 → 0" },
