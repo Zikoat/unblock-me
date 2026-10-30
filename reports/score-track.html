@@ -207,7 +207,7 @@ let clips = 0;
  * passed) and "hollow" (outlines until the goal, then filled one at a time). `finish` is how
  * far the finish animation is: the stars filled so far (with `pop` for the newest).
  */
-function track(g, x0, y0, used, { undone = false, scale = 1, size = null, style = "now", finish = null, collapse = 0, upright = false, trace = null, medalP = null } = {}) {
+function track(g, x0, y0, used, { undone = false, scale = 1, size = null, style = "now", finish = null, collapse = 0, upright = false, trace = null, medalP = null, lines = 1 } = {}) {
   // `size` (width and height) overrides the look's, e.g. to fit inside the goal's target.
   const width = size ? size.width : LOOK.width * scale, h = size ? size.height : LOOK.height * scale;
   const w = width / END;
@@ -220,7 +220,7 @@ function track(g, x0, y0, used, { undone = false, scale = 1, size = null, style 
   el("rect", { x: x0, y: y0, width: done * w, height: h, fill: C.used, "fill-opacity": 0.78 }, bar);
   // Icons as big as the look says, but never wider than the gap between two stars.
   const cy = y0 + h / 2, s = Math.min(h * 0.7, STEP * w * 0.95) * LOOK.icons, ms = s * 0.74;
-  for (const m of MARKS) if (m.kind === "star") el("line", { x1: at(m.at), x2: at(m.at), y1: y0, y2: y0 + h, stroke: C.line, "stroke-width": Math.max(1, w * 0.14) }, bar);
+  for (const m of MARKS) if (m.kind === "star") el("line", { x1: at(m.at), x2: at(m.at), y1: y0, y2: y0 + h, stroke: C.line, "stroke-width": Math.max(1, w * 0.14), opacity: lines }, bar);
   // The stars still earned when finishing now, left to right: those not passed along the
   // track, then the last one (on the right end, never lost).
   const endX = x0 + END * w;
@@ -409,7 +409,7 @@ function timeline(n) {
 /** What the demo shows at time t (null: before Play). */
 function demoState(t, tl) {
   const n = demo.until;
-  let used = n, finish = null, collapse = 0, medal = null;
+  let used = n, finish = null, collapse = 0, medal = null, lines = 1;
   if (t !== null) {
     if (tl.medalAt !== null && t >= tl.medalAt) medal = Math.min(1, (t - tl.medalAt) / MEDAL_MS);
     used = Math.min(n, Math.floor(t / MOVE_MS));
@@ -417,17 +417,18 @@ function demoState(t, tl) {
     if (after >= 0) {
       finish = after / STAR_MS;
       collapse = Math.max(0, Math.min(1, (t - tl.gather) / GATHER_MS));
+      lines = 1 - Math.max(0, Math.min(1, (t - tl.gather + HOLD_MS) / HOLD_MS)); // fade in the pause
     }
   }
-  return { used, finish, collapse, medal };
+  return { used, finish, collapse, medal, lines };
 }
 
 function drawDemoAt(t) {
   const n = demo.until, tl = timeline(n);
-  const { used, finish, collapse, medal: medalP } = demoState(t, tl);
+  const { used, finish, collapse, medal: medalP, lines } = demoState(t, tl);
   let kept = [];
   const trace = [];
-  const svg = trackSvg((g, x, y) => { const r = track(g, x, y, used, { style: "hollow", finish, scale: 1.2, collapse, trace, medalP }); kept = r.kept; return r; }, { pad: 14 });
+  const svg = trackSvg((g, x, y) => { const r = track(g, x, y, used, { style: "hollow", finish, scale: 1.2, collapse, trace, medalP, lines }); kept = r.kept; return r; }, { pad: 14 });
   svg.style.overflow = "visible"; // the medal's entrance and sparkles may reach past it
   document.getElementById("demoHollow").replaceChildren(svg);
   let got = 0, medal = false;
@@ -455,10 +456,10 @@ function samples(tl) {
   if (curveCache.key === key) return curveCache.samples;
   const out = [];
   for (let t = 0; t <= tl.total; t += 20) {
-    const { used, finish, collapse, medal: medalP } = demoState(t, tl);
+    const { used, finish, collapse, medal: medalP, lines } = demoState(t, tl);
     const trace = [];
-    track(el("g", {}), 0, 0, used, { style: "hollow", finish, scale: 1.2, collapse, trace, medalP });
-    out.push({ t, trace, track: 1 - collapse });
+    track(el("g", {}), 0, 0, used, { style: "hollow", finish, scale: 1.2, collapse, trace, medalP, lines });
+    out.push({ t, trace, track: 1 - collapse, lines });
   }
   curveCache = { key, samples: out };
   return out;
@@ -500,7 +501,8 @@ function drawCurves(tl, t) {
     }
     if (p.title === "Opacity") {
       el("path", { d: data.map((sm, k) => `${k ? "L" : "M"}${tx(sm.t, tl).toFixed(1)},${y(sm.track).toFixed(1)}`).join(""), fill: "none", stroke: ink, "stroke-width": 1.4, "stroke-dasharray": "4 3" }, svg);
-      el("text", { x: TL.W - 12, y: top + ph - 4, "font-size": 10, "text-anchor": "end", fill: ink, "fill-opacity": 0.7 }, svg).textContent = "dashed: track and move count";
+      el("path", { d: data.map((sm, k) => `${k ? "L" : "M"}${tx(sm.t, tl).toFixed(1)},${y(sm.lines).toFixed(1)}`).join(""), fill: "none", stroke: ink, "stroke-width": 1.4, "stroke-dasharray": "1 3" }, svg);
+      el("text", { x: TL.W - 12, y: top + ph - 4, "font-size": 10, "text-anchor": "end", fill: ink, "fill-opacity": 0.7 }, svg).textContent = "dashed: track and move count · dotted: star lines";
     }
   });
   el("line", { x1: tx(t, tl), x2: tx(t, tl), y1: legendH, y2: H, stroke: "#d64545", "stroke-width": 2 }, svg);
@@ -521,7 +523,7 @@ function drawTimeline(tl, t, used, collapse, trace) {
     { name: `Moves 0 → ${demo.until}`, from: 0, to: tl.movesEnd, note: `${MOVE_MS} ms a move` },
     ...tl.fills.map((f) => ({ name: `${f.name} ${f.name === "medal" ? "lands" : "fills"}`, from: f.at, to: f.at + f.length, note: f.name === "medal" ? "drops in from 3.5× with a spin, fades in; a gold ring and 12 sparkles burst out" : "damped spring: scale 1 → about 1.25 → just under 1 → 1" })),
     ...(tl.medalAt !== null ? [{ name: "Wait for the medal", from: tl.fills.at(-2).at + POP_MS, to: tl.medalAt, note: "" }] : []),
-    { name: "Pause", from: tl.gather - HOLD_MS, to: tl.gather, note: "" },
+    { name: "Pause; star lines fade", from: tl.gather - HOLD_MS, to: tl.gather, note: "line opacity 1 → 0" },
     { name: "Track and number fade", from: tl.gather, to: tl.end, note: "opacity 1 → 0" },
     { name: "Stars gather", from: tl.gather, to: tl.end, note: "ease in-out; scale 1 → 1.5; gray ones to opacity 0.55" },
   ];
@@ -537,7 +539,7 @@ function drawTimeline(tl, t, used, collapse, trace) {
   rows.forEach((r, i) => {
     const y = i * rh + 4;
     el("text", { x: 0, y: y + 12, "font-size": 11, fill: ink }, svg).textContent = r.name;
-    el("rect", { x: x(r.from), y: y + 2, width: Math.max(2, x(r.to) - x(r.from)), height: rh - 8, rx: 3, fill: r.name.startsWith("Moves") ? C.used : r.name.includes("fill") || r.name.includes("lands") ? C.star : r.name === "Pause" || r.name.startsWith("Wait") ? "#b9bcc1" : "#3b6fd4", "fill-opacity": 0.85 }, svg).append(Object.assign(el("title", {}), { textContent: `${r.name}: ${Math.round(r.from)}–${Math.round(r.to)} ms${r.note ? ` (${r.note})` : ""}` }));
+    el("rect", { x: x(r.from), y: y + 2, width: Math.max(2, x(r.to) - x(r.from)), height: rh - 8, rx: 3, fill: r.name.startsWith("Moves") ? C.used : r.name.includes("fill") || r.name.includes("lands") ? C.star : r.name.startsWith("Pause") || r.name.startsWith("Wait") ? "#b9bcc1" : "#3b6fd4", "fill-opacity": 0.85 }, svg).append(Object.assign(el("title", {}), { textContent: `${r.name}: ${Math.round(r.from)}–${Math.round(r.to)} ms${r.note ? ` (${r.note})` : ""}` }));
   });
   el("line", { x1: x(t), x2: x(t), y1: 0, y2: H - 18, stroke: "#d64545", "stroke-width": 2 }, svg);
   svg.onclick = (e) => {
