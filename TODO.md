@@ -3,8 +3,7 @@
 ## Later
 
 - Deploy script for exe.dev, owned by this project (not shared: each app's setup diverges); waits on you picking it.
-- Lock the next red block (darker, immovable until the previous goal is reached); waits on you trying the goal trail.
+- Lock the next red block (darker, immovable until the current goal is reached), chosen among blocks the current solution doesn't touch and locked where it stands when the current goal is made, so it can't strand the current goal; waits on you picking it.
 - Walls in generated boards (dead ends to plan around); waits on a difficulty measure to tune them against.
-- Shortest-solution solver as the goal difficulty measure; waits on you picking it.
 - Density × walls report graph; waits on walls in generated boards.
 - Pins pointing the same way can overlap (red wins the tap); waits on seeing it bother you in play.
