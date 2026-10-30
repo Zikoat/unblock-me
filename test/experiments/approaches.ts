@@ -24,3 +24,7 @@ APPROACHES.stats = (l, n, o) => {
 };
 /** pruned, plus a one-slide lookahead for blockers when the moves left are tight. */
 APPROACHES.lookahead = (l, n, o) => makeGoalFast(l, n, o, { prune: true, lookahead: true });
+/** lookahead, with a node budget for the whole goal (a deterministic time cap). */
+APPROACHES.capped = (l, n, o) => makeGoalFast(l, n, o, { prune: true, lookahead: true, goalBudget: Number(process.env.GOAL_BUDGET ?? 50_000) });
+/** lookahead with the old whole-replay simplify on every push (to check simplifyFast). */
+APPROACHES.slowSimplify = (l, n, o) => makeGoalFast(l, n, o, { prune: true, lookahead: true, slowSimplify: true });

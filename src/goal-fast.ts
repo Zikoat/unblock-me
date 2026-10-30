@@ -16,8 +16,15 @@ export type Tuning = {
   /** Stop trying candidates once one reached full effort (keeps the fewest-moves rule only
    * among those already tried). */
   earlyStop?: boolean;
+  /** Told how long each simplify took (for reports). */
+  timing?: (ms: number) => void;
+  /** Simplify with whole replays, as goal.ts does (for comparison). */
+  slowSimplify?: boolean;
   /** Node budget per cell. */
   budget?: number;
+  /** Node budget for the whole goal: a deterministic cap on the worst case. Once spent,
+   * every push stops at its next blocked cell. */
+  goalBudget?: number;
   /** Count work for reports. */
   stats?: { clears: number; fails: number; nodes: number; failNodes: number };
 };
@@ -170,6 +177,39 @@ export function simplifyOn(board: Board, moves: Move[]): Move[] {
   return out;
 }
 
+/** simplifyOn, replaying only from where a sequence changes (the board keeps the state
+ * after the unchanged prefix), and going on after a fold instead of starting over; passes
+ * repeat until one folds nothing. Not provably the same result as simplifyOn, but the same
+ * on every board tried. */
+export function simplifyFast(board: Board, moves: Move[]): Move[] {
+  let out = merge(moves);
+  const origin = board.mark();
+  for (let folded = true; folded; ) {
+    folded = false;
+    board.undo(origin);
+    for (let i = 0; i < out.length; i++) {
+      // The board holds out[0..i-1].
+      const j = out.findIndex((m, k) => k > i && m.id === out[i]!.id);
+      if (j >= 0) {
+        const tried = merge([...out.slice(0, i), ...out.slice(i + 1, j), { ...out[j]!, from: out[i]!.from }, ...out.slice(j + 1)]);
+        // Merging can only change the sequence from i-1 on.
+        const from = Math.max(0, i - 1);
+        board.undo(origin + from);
+        if (board.replays(tried.slice(from))) {
+          out = tried;
+          folded = true;
+          i = from - 1;
+          continue;
+        }
+        for (let k = from; k < i; k++) board.move(out[k]!.id, out[k]!.to);
+      }
+      board.move(out[i]!.id, out[i]!.to);
+    }
+  }
+  board.undo(origin);
+  return out;
+}
+
 /** makeGoal (goal.ts) on an indexed board. */
 export function makeGoalFast(layout: Layout, near: Point, { effort = 12, perCell = 4, moved: start = new Map(), exclude = new Set(), avoid = [] }: GoalOptions = {}, tuning: Tuning = {}): Goal | null {
   const board = new Board(layout, start);
@@ -189,10 +229,13 @@ export function makeGoalFast(layout: Layout, near: Point, { effort = 12, perCell
     .filter((b) => !b.ui && !b.wall && !exclude.has(b.id) && !taken.has(track(b)))
     .sort((a, b) => Math.hypot(a.x - near.x, a.y - near.y) - Math.hypot(b.x - near.x, b.y - near.y) || (a.id < b.id ? -1 : 1))
     .slice(0, 6);
-  let best: (Goal & { distance: number }) | null = null;
+  const pushes: { id: string; target: Point; raw: Move[]; distance: number }[] = [];
+  let furthest: { distance: number } | null = null;
   const origin = board.mark();
+  const spent = tuning.stats ?? { clears: 0, fails: 0, nodes: 0, failNodes: 0 };
+  const goalBudget = tuning.goalBudget ?? Infinity;
   for (const red of candidates) {
-    if (tuning.earlyStop && best && best.distance >= effort) break;
+    if (tuning.earlyStop && furthest && furthest.distance >= effort) break;
     for (const dir of [1, -1]) {
       const keep = new Set([red.id]);
       const moves: Move[] = [];
@@ -202,7 +245,7 @@ export function makeGoalFast(layout: Layout, near: Point, { effort = 12, perCell
         const ahead = isHorizontal(at)
           ? { x: dir > 0 ? at.x + at.w : at.x - 1, y: at.y }
           : { x: at.x, y: dir > 0 ? at.y + at.h : at.y - 1 };
-        const plan = clearCellOn(board, ahead, keep, { maxMoves: perCell, budget: tuning.budget, prune: tuning.prune, lookahead: tuning.lookahead, stats: tuning.stats });
+        const plan = clearCellOn(board, ahead, keep, { maxMoves: perCell, budget: Math.min(tuning.budget ?? 200_000, Math.max(0, goalBudget - spent.nodes)), prune: tuning.prune, lookahead: tuning.lookahead, stats: spent });
         if (!plan) break;
         moves.push(...plan);
         const to = isHorizontal(at) ? { x: at.x + dir, y: at.y } : { x: at.x, y: at.y + dir };
@@ -214,14 +257,20 @@ export function makeGoalFast(layout: Layout, near: Point, { effort = 12, perCell
       const step = steps.filter((s) => !avoid.some((a) => intersects({ ...s.at, w: red.w, h: red.h }, a))).at(-1);
       if (!step) continue;
       const end = step.at;
-      const solution = simplifyOn(board, moves.slice(0, step.moves));
       const distance = Math.abs(end.x - red.x) + Math.abs(end.y - red.y);
-      if (!best || distance > best.distance || (distance === best.distance && solution.length < best.solution.length)) {
-        best = { id: red.id, target: end, solution, distance };
-      }
+      pushes.push({ id: red.id, target: end, raw: moves.slice(0, step.moves), distance });
+      if (!furthest || distance > furthest.distance) furthest = { distance };
     }
   }
-  if (!best) return null;
-  const { distance: _, ...goal } = best;
-  return goal;
+  // Only the furthest pushes compete on moves, so only they need simplifying: the first
+  // with the fewest moves wins, as in makeGoal.
+  let best: Goal | null = null;
+  for (const p of pushes) {
+    if (p.distance !== furthest?.distance) continue;
+    const t0 = performance.now();
+    const solution = tuning.slowSimplify ? simplifyOn(board, p.raw) : simplifyFast(board, p.raw);
+    tuning.timing?.(performance.now() - t0);
+    if (!best || solution.length < best.solution.length) best = { id: p.id, target: p.target, solution };
+  }
+  return best;
 }

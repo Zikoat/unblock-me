@@ -10,8 +10,8 @@ for (const tries of triesArg!.split(",").map(Number)) {
   for (let seed = 1; seed <= Number(boardsArg); seed++) {
     const layout = randomLayout(seed * 7919, { tries });
     const near = { x: (seed * 37) % 200 - 100, y: (seed * 53) % 200 - 100 };
-    const ga = JSON.stringify(APPROACHES[a!]!(layout, near, { perCell }));
-    const gb = JSON.stringify(APPROACHES[b!]!(layout, near, { perCell }));
+    const ga = JSON.stringify(APPROACHES[a!]!(layout, near, { perCell, effort: Number(process.env.EFFORT ?? 12) }));
+    const gb = JSON.stringify(APPROACHES[b!]!(layout, near, { perCell, effort: Number(process.env.EFFORT ?? 12) }));
     if (ga === gb) same++;
     else {
       differ++;
