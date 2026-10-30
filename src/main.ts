@@ -119,10 +119,9 @@ function upload(): Promise<boolean> {
 addEventListener("pagehide", () => {
   if (unsent && !shared && !forgetting) navigator.sendBeacon(`play-data?device=${device}`, new Blob([JSON.stringify(playData())], { type: "application/json" }));
 });
-/** History entries already in the log. */
-let logged = -1;
+/** History entries already in the log (set once the stored history is loaded). */
+let logged = 0;
 function logMoves(): void {
-  if (logged < 0 || logged > scene.history.length) logged = scene.history.length;
   while (logged < scene.history.length) {
     // Counted before logging: logging can upload, which saves, which logs moves again.
     const m = scene.history[logged++]!;
@@ -162,6 +161,8 @@ const scene = newScene(innerWidth, innerHeight, {
   goal: goalsFit ? storedGoal.goal : null,
   done: goalsFit ? (storedGoal.done ?? []) : [],
 });
+// The stored history was logged before this page loaded; log only what comes after it.
+logged = scene.history.length;
 restoreCamera();
 // A fresh start (first visit or after a reset) keeps its seed from the first load on.
 if (localStorage.getItem(SEED_KEY) === null) save();
@@ -376,6 +377,7 @@ const gestures = new Gestures(scene, {
         log({ e: "density", from: tries, to: next, goal: scene.goal?.id ?? null });
         tries = next;
         relayout(scene, randomLayout(seed, { tries }));
+        logged = 0; // a new board starts a new history
       }
       if (done && !scene.goal) requestGoal();
     }
@@ -446,6 +448,7 @@ Object.assign(window, {
       job++; // any goal on its way is for the old board
       placed = blocks;
       restart(scene, fixedLayout(blocks));
+      logged = 0;
       scene.goal = goal;
       lookAhead();
       redraw();

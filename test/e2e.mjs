@@ -700,6 +700,16 @@ const browser = await chromium.launch();
   const auto = uploads.find((u) => u.url.includes("device="));
   check(!!auto && auto.body.stored["unblock-me:log"]?.filter((e) => e.e === "move").length >= 24, `play data uploads by itself after 25 events (${uploads.length} uploads, ${auto?.url})`);
 
+  // The first move after a page load is logged too.
+  await page.reload();
+  await frame(page);
+  await page.evaluate(() => unblock.place([{ id: "f", x: 0, y: 4, w: 2, h: 1 }]));
+  const before = await page.evaluate(() => unblock.playLog.length);
+  await page.mouse.click(...at(0.5, 4.5));
+  await page.waitForTimeout(300);
+  const afterLoad = await page.evaluate(() => unblock.playLog.slice(-1).map((e) => [e.e, e.id]));
+  check(JSON.stringify(afterLoad) === JSON.stringify([["move", "f"]]) && (await page.evaluate(() => unblock.playLog.length)) === before + 1, `the first move after a page load is in the play log (${JSON.stringify(afterLoad)})`);
+
   // Hovering a block hints where a click would send it: a faint trail fading that way.
   await page.evaluate(() => unblock.place([{ id: "h", x: 0, y: 4, w: 2, h: 1 }]));
   await page.mouse.move(...at(0.5, 4.5));
