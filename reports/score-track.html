@@ -65,7 +65,7 @@
   <li>Every move takes the same width of the track. Moves used are dark, moves left are light, so the dark fill grows to the right.</li>
   <li>A line across the track marks the exact point where something is lost: finish before it and you keep the icon on it.</li>
   <li>The icons sit on the lines, on their own layer, so their width never shifts the track.</li>
-  <li>The rosette sits just before 15, the shortest solution the game has, at the start of the gray stripes: beating it beats the game.</li>
+  <li>The rosette sits just before 15, the shortest solution the game has: beating it beats the game.</li>
   <li>One star every 5 moves (a third of 15). Passed icons turn gray.</li>
   <li>The track ends at 31. The last star sits outside it: it is never lost.</li>
   <li>After an undo the medal is gray and faint: it can no longer be won on this goal.</li>
@@ -162,8 +162,6 @@ function track(g, x0, y0, w, used, undone) {
   const bar = el("g", { "clip-path": `url(#${clip})` }, g);
   el("rect", { x: x0, y: y0, width, height: h, fill: C.left }, bar);
   el("rect", { x: x0, y: y0, width: fill, height: h, fill: C.used }, bar);
-  // Gray stripes from the medal to the 5th star: beating the game's solution.
-  el("rect", { x: x0 + (FEWEST - 1) * w, y: y0, width: w, height: h, fill: "url(#hatch)" }, bar);
   const r = h * 0.25, cy = y0 + h / 2;
   // The medal last: it sits on top where it meets the 5th star.
   for (const m of [...MARKS].reverse()) {
