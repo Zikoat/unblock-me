@@ -501,7 +501,12 @@ canvas.addEventListener("pointerdown", (e) => {
     return;
   }
   tip.style.display = "none";
-  animation = null; // a new touch shows every block where it really is
+  // A new touch shows every block where it really is, so a cut-short slide still lands: the
+  // red block reaches its goal now instead of never.
+  if (animation) {
+    animation = null;
+    reachGoal(performance.now());
+  }
   gestures.down(e.pointerId, point(e));
   redraw();
 });

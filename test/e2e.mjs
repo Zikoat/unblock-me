@@ -552,6 +552,14 @@ const browser = await chromium.launch();
   check(Math.abs(shown[0] - 243) + Math.abs(shown[1] - 242) > 30, `and with the border off, the same spot shows it (${shown.join(",")})`);
   await page.evaluate(() => { unblock.scene.camera = { scale: 1, offsetX: 170, offsetY: 370 }; unblock.redraw(); });
 
+  // A touch before the slide ends cuts it short, and it still counts.
+  await place([...UI, Wall(-4, 4), H("q", -3, 4), Wall(3, 4)], { id: "q", target: { x: 1, y: 4 }, solution: [] });
+  await page.evaluate(() => (unblock.scene.done = []));
+  await tap(cell(-2, 4.5));
+  const midway = await page.evaluate(() => unblock.scene.done.length);
+  await tap(cell(-1.5, 6.5));
+  check(midway === 0 && (await page.evaluate(() => unblock.scene.done.map((g) => g.id).join())) === "q", `a slide onto the target cut short by another touch still reaches it (${midway} reached before the touch)`);
+
   // Edge markers for an out-of-view goal: a red arrow to the red block and a red glow at the
   // edge towards the target, on the red block's axis. Tapping either goes there. (Row 3 keeps
   // the glow clear of the undo button in the corner, which would take the tap.)
