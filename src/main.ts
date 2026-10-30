@@ -20,6 +20,7 @@ const GOAL_KEY = "unblock-me:v6:goal";
 const BORDER_KEY = "unblock-me:border";
 const TRIES_KEY = "unblock-me:tries";
 const CAMERA_KEY = "unblock-me:camera"; // where the view is, kept across reloads
+const LOG_KEY = "unblock-me:log"; // the play log; kept across resets
 /** How many cells the goal's red block is pushed. */
 const EFFORT = 12;
 /** The density slider's track, as a share of its block (see densityIcon). */
@@ -74,8 +75,40 @@ function load<T>(key: string, fallback: T): T {
   }
 }
 
+// The play log: what happened when, for analysing goals and their difficulty against how they
+// were really played (sent with the play data). Append-only; the oldest events go past LOG_MAX.
+type LogEvent =
+  | { e: "goal"; id: string; target: Point; start?: Point; tries: number; seed: number; solution: number; moved: [string, number, number][] }
+  | { e: "move" | "undo"; id: string; from: Point; to: Point }
+  | { e: "reached"; id: string; used: number }
+  | { e: "reset"; goal: string | null }
+  | { e: "density"; from: number; to: number; goal: string | null };
+const LOG_MAX = 3000;
+const playLog: (LogEvent & { t: number })[] = (() => {
+  try {
+    return JSON.parse(localStorage.getItem(LOG_KEY) ?? "[]");
+  } catch {
+    return [];
+  }
+})();
+function log(event: LogEvent): void {
+  if (shared) return;
+  playLog.push({ t: Date.now(), ...event });
+  if (playLog.length > LOG_MAX) playLog.splice(0, playLog.length - LOG_MAX);
+}
+/** History entries already in the log. */
+let logged = -1;
+function logMoves(): void {
+  if (logged < 0 || logged > scene.history.length) logged = scene.history.length;
+  for (; logged < scene.history.length; logged++) {
+    const m = scene.history[logged]!;
+    log({ e: "move", id: m.id, from: m.from, to: m.to });
+  }
+}
+
 function save(): void {
   if (shared || forgetting) return;
+  logMoves();
   try {
     localStorage.setItem(SEED_KEY, JSON.stringify(seed));
     localStorage.setItem(BORDER_KEY, JSON.stringify(scene.border));
@@ -84,6 +117,7 @@ function save(): void {
     localStorage.setItem(HISTORY_KEY, JSON.stringify(scene.history));
     // A goal belongs to one seed and density.
     localStorage.setItem(GOAL_KEY, JSON.stringify({ seed, tries, goal: scene.goal, done: scene.done }));
+    localStorage.setItem(LOG_KEY, JSON.stringify(playLog));
   } catch {
     // Private mode or full storage: changes just don't survive a reload.
   }
@@ -146,6 +180,8 @@ function showGoal(goal: Goal | null): void {
   if (goal) {
     goal.tries = tries;
     goal.begun = scene.history.length;
+    // A snapshot of the board, so the goal can be measured again later.
+    log({ e: "goal", id: goal.id, target: goal.target, start: goal.start, tries, seed, solution: goal.solution.length, moved: [...scene.moved].map(([id, p]) => [id, p.x, p.y]) });
   }
   // The new red block throbs once; its clock starts at the first frame drawn.
   if (scene.goal) throb = { id: scene.goal.id, born: -1 };
@@ -239,6 +275,8 @@ function reachGoal(now: number): void {
   if (!goal || !goalSolved(scene) || animation?.move.id === goal.id) return;
   // Done: its target keeps a check, and the next goal starts from a block close to it.
   goal.used = Math.max(1, movesSince(goal.begun ?? 0));
+  logMoves();
+  log({ e: "reached", id: goal.id, used: goal.used });
   scene.done.push(goal);
   scene.goal = null;
   requestGoal(goal.target);
@@ -260,6 +298,8 @@ function reachGoal(now: number): void {
 function takeBack(): void {
   const move = undo(scene);
   if (!move) return;
+  log({ e: "undo", id: move.id, from: move.from, to: move.to });
+  logged = scene.history.length;
   animate({ id: move.id, from: move.to, to: move.from });
   save();
   redraw();
@@ -295,6 +335,7 @@ const gestures = new Gestures(scene, {
       const at = slide(ui, (tries - MIN_TRIES) / (MAX_TRIES - MIN_TRIES), dx);
       const next = Math.round(MIN_TRIES + at * (MAX_TRIES - MIN_TRIES));
       if (next !== tries) {
+        log({ e: "density", from: tries, to: next, goal: scene.goal?.id ?? null });
         tries = next;
         relayout(scene, randomLayout(seed, { tries }));
       }
@@ -310,7 +351,14 @@ const gestures = new Gestures(scene, {
 /** Delete everything Unblock Me stored and reload: a new seed, default settings, centred.
  * Only our own keys go, since other pages on this origin keep theirs in the same storage. */
 function forgetEverything(): void {
+  log({ e: "reset", goal: scene.goal?.id ?? null });
+  const kept = JSON.stringify(playLog);
   forget();
+  try {
+    localStorage.setItem(LOG_KEY, kept);
+  } catch {
+    // No storage: nothing to keep.
+  }
   location.reload();
 }
 
@@ -347,11 +395,12 @@ Object.assign(window, {
     redraw: () => redraw(),
     /** Forget everything stored, like the reset block but without reloading (for tests). */
     forget: () => forget(),
+    playLog,
     /** Frames drawn while recording: when, and where the sliding block was drawn. */
     frames: null as { t: number; x: number; y: number }[] | null,
-    /** Resolves once a goal requested by the app has arrived. */
     /** Ask the worker for a goal near a lattice point, as reaching a goal does. */
     requestGoal: (near: Point) => requestGoal(near),
+    /** Resolves once a goal requested by the app has arrived. */
     goalReady: () => (scene.goal ? Promise.resolve() : new Promise<void>((resolve) => goalWaiters.push(resolve))),
     /** Replace the random layout with exactly these blocks, and optionally a goal (for tests). */
     place: (blocks: Placed[], goal: Goal | null = null) => {

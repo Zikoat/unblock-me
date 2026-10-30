@@ -149,7 +149,9 @@ const browser = await chromium.launch();
   check(await page.evaluate(() => unblock.scene.camera.offsetX === 170 && unblock.scene.camera.offsetY === 370 && unblock.scene.camera.scale === 1), "and the view centred");
   await page.evaluate(() => unblock.goalReady());
   const stored = await page.evaluate(() => Object.fromEntries(Object.keys(localStorage).sort().map((k) => [k, localStorage.getItem(k)])));
-  const { "unblock-me:v6:goal": storedGoal, "unblock-me:camera": storedCamera, ...rest } = stored;
+  const { "unblock-me:v6:goal": storedGoal, "unblock-me:camera": storedCamera, "unblock-me:log": storedLog, ...rest } = stored;
+  const kinds = JSON.parse(storedLog ?? "[]").map((e) => e.e);
+  check(kinds.includes("move") && kinds.at(-2) === "reset" && kinds.at(-1) === "goal", `the play log survives the reset, which it records (${kinds.join(",")})`);
   check(!storedCamera || JSON.stringify(JSON.parse(storedCamera)) === JSON.stringify({ scale: 1, offsetX: 170, offsetY: 370 }), `and the stored view, if any, is the centred one (${storedCamera})`);
   check(JSON.stringify(rest) === JSON.stringify({
     "someone-else": "keep me",
@@ -524,6 +526,10 @@ const browser = await chromium.launch();
   await page.evaluate(() => unblock.goalReady());
   const next = await page.evaluate(() => unblock.scene.goal);
   check(next?.id === "n", `the next goal's red block is the block next to the reached target (${next?.id}, target ${JSON.stringify(next?.target)})`);
+  const logged = await page.evaluate(() => unblock.playLog.slice(-3).map((e) => [e.e, e.id, typeof e.t]));
+  check(JSON.stringify(logged) === JSON.stringify([["move", "r", "number"], ["reached", "r", "number"], ["goal", "n", "number"]]), `the play log has the move, the goal reached and the next goal, with times (${JSON.stringify(logged)})`);
+  const snapshot = await page.evaluate(() => unblock.playLog.at(-1).moved);
+  check(JSON.stringify(snapshot) === JSON.stringify([["r", 1, 4]]), `and the next goal's board snapshot (${JSON.stringify(snapshot)})`);
   await page.waitForTimeout(100);
   await expectColor(page, cell(0.5, 6.5), "goal", "and it is red now");
   await expectColor(page, cell(1.25, 4.5), "done", "and the reached red block stays red, a darker red");
