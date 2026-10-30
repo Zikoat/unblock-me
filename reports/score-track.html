@@ -29,7 +29,6 @@
   .variant { background: var(--card); border: 2px solid var(--line); border-radius: 10px; padding: 8px; cursor: pointer; font: inherit; color: inherit; text-align: left; }
   .variant[aria-pressed=true] { border-color: #3b6fd4; }
   .variant svg { width: 100%; height: auto; display: block; border-radius: 6px; }
-  .options-title { font-size: 14px; font-weight: 600; margin: 14px 0 6px; }
   .variant span { display: block; font-size: 13px; margin-top: 4px; color: var(--ink-2); }
   ul { padding-left: 20px; }
   li { margin: 4px 0; max-width: 68ch; }
@@ -52,12 +51,8 @@
   <div class="readout" id="readout"></div>
 </div>
 
-<h2>Options</h2>
-<p class="sub">Pick one in each row to use it everywhere on this page.</p>
-<div id="options"></div>
-
 <h2>Three goals</h2>
-<p class="sub">The same scale for each: every move is the same width, so a longer goal has a longer track. Each shown part way.</p>
+<p class="sub">The same scale for each: every move is the same width, so a longer goal has a longer track. Each finished in a different number of moves, from a medal to 1 star.</p>
 <div class="steps" id="goals"></div>
 
 <h2>As the moves go up</h2>
@@ -121,31 +116,10 @@ const MEDALS = {
   } },
 };
 const STARS = {
-  drawn: { name: "Drawn ⭐", draw: (g, cx, cy, s) => el("path", { d: starPath(cx, cy + s * 0.057, s * 0.6), fill: C.star, stroke: opt("starLine").color, "stroke-width": s * 0.06, "stroke-linejoin": "round" }, g) },
+  drawn: { name: "Drawn ⭐", draw: (g, cx, cy, s) => el("path", { d: starPath(cx, cy + s * 0.057, s * 0.6), fill: C.star, stroke: LOOK.starLine, "stroke-width": s * 0.06, "stroke-linejoin": "round" }, g) },
 };
-/** Choices to review: each a row of buttons. */
-const OPTIONS = {
-  zone: { title: "Moves before the medal (not yet made)", items: {
-    same: { name: "Same as the rest", color: null },
-    white: { name: "White", color: "#ffffff" },
-    gray: { name: "Light gray", color: "#d9dbde" },
-    muted: { name: "Muted red", color: "#d9c3c0" },
-  } },
-  line: { title: "Lines at the stars (gray)", items: {
-    a25: { name: "25%", color: "rgba(80, 82, 86, 0.25)" },
-    a45: { name: "45%", color: "rgba(80, 82, 86, 0.45)" },
-    a65: { name: "65%", color: "rgba(80, 82, 86, 0.65)" },
-    a100: { name: "100%", color: "rgba(80, 82, 86, 1)" },
-  } },
-  starLine: { title: "Star border", items: {
-    amber: { name: "Amber", color: "#e0a000" },
-    orange: { name: "Orange", color: "#e07b00" },
-    brown: { name: "Brown", color: "#9a6a00" },
-    none: { name: "None", color: "none" },
-  } },
-};
-const pick = { medal: "rosette", star: "drawn", zone: "gray", line: "a25", starLine: "orange" };
-const opt = (k) => OPTIONS[k].items[pick[k]];
+const LOOK = { zone: "#d9dbde", line: "rgba(80, 82, 86, 0.25)", starLine: "#e07b00" };
+const pick = { medal: "rosette", star: "drawn" };
 
 /** An icon in one state: kept (colour), lost (gray) or undone (gray and faint). */
 function icon(g, set, key, cx, cy, s, state) {
@@ -163,16 +137,16 @@ function track(g, x0, y0, w, used, undone) {
   el("rect", { x: x0, y: y0, width, height: h, rx: h * 0.2 }, el("clipPath", { id: clip }, g));
   const bar = el("g", { "clip-path": `url(#${clip})` }, g);
   el("rect", { x: x0, y: y0, width, height: h, fill: C.left }, bar);
-  if (opt("zone").color) el("rect", { x: x0, y: y0, width: LOW * w, height: h, fill: opt("zone").color }, bar);
+  el("rect", { x: x0, y: y0, width: LOW * w, height: h, fill: LOOK.zone }, bar);
   el("rect", { x: x0, y: y0, width: fill, height: h, fill: C.used, "fill-opacity": 0.78 }, bar); // the zone shows through
   const r = h * 0.25, cy = y0 + h / 2;
   // The move count, on the left of the track (before the medal).
-  const count = el("text", { x: x0 + h * 0.35, y: cy, "dominant-baseline": "central", "font-size": h * 0.62, "font-weight": 700, "font-family": "system-ui, sans-serif", fill: used > 0 ? "#ffffff" : "#6b6e73" }, g);
+  const count = el("text", { x: x0 + h * 0.35, y: cy, "dominant-baseline": "central", "font-size": h * 0.45, "font-weight": 700, "font-family": "system-ui, sans-serif", fill: used > 0 ? "#ffffff" : "#6b6e73" }, g);
   count.textContent = used;
   // The medal last: it sits on top where it meets the 5th star.
   for (const m of [...MARKS].reverse()) {
     const cx = x0 + m.at * w, lost = used > m.at;
-    if (m.kind === "star") el("line", { x1: cx, x2: cx, y1: y0, y2: y0 + h, stroke: opt("line").color, "stroke-width": Math.max(1, w * 0.14) }, bar);
+    if (m.kind === "star") el("line", { x1: cx, x2: cx, y1: y0, y2: y0 + h, stroke: LOOK.line, "stroke-width": Math.max(1, w * 0.14) }, bar);
     if (m.kind === "star") icon(g, STARS, pick.star, cx, cy, r * 2.8, lost ? "lost" : "kept");
     else {
       icon(g, MEDALS, pick.medal, cx, cy, r * 2.08, undone ? "undone" : lost ? "lost" : "kept");
@@ -250,45 +224,16 @@ function drawSteps() {
   }
 }
 
-function drawOptions() {
-  const box = document.getElementById("options");
-  box.replaceChildren();
-  for (const [kind, o] of Object.entries(OPTIONS)) {
-    const title = document.createElement("div");
-    title.className = "options-title";
-    title.textContent = o.title;
-    const row = document.createElement("div");
-    row.className = "variants";
-    for (const [key, v] of Object.entries(o.items)) {
-      const b = document.createElement("button");
-      b.className = "variant";
-      b.setAttribute("aria-pressed", String(pick[kind] === key));
-      const was = pick[kind];
-      pick[kind] = key; // preview with this choice
-      const svg = el("svg", { viewBox: "0 0 160 34" });
-      svg.style.background = C.bg;
-      defs(svg);
-      // A piece of track (moves 7 to 22), 9 moves made.
-      const g = el("g", { transform: "translate(-62 0)" }, svg);
-      track(g, 6, 6, 10, 9, false);
-      pick[kind] = was;
-      b.append(svg);
-      const label = document.createElement("span");
-      label.textContent = v.name;
-      b.append(label);
-      b.onclick = () => { pick[kind] = key; redraw(); };
-      row.append(b);
-    }
-    box.append(title, row);
-  }
-}
 function drawGoals() {
   const box = document.getElementById("goals");
   box.replaceChildren();
   const goals = [
-    { low: 13, fewest: 15, used: 17, name: "This goal", about: "fewest 13 to 15" },
     { low: 4, fewest: 4, used: 4, name: "A simple goal", about: "fewest exactly 4" },
-    { low: 27, fewest: 33, used: 36, name: "A hard goal", about: "fewest 27 to 33" },
+    { low: 4, fewest: 4, used: 7, name: "A simple goal", about: "fewest exactly 4" },
+    { low: 13, fewest: 15, used: 15, name: "This goal", about: "fewest 13 to 15" },
+    { low: 13, fewest: 15, used: 27, name: "This goal", about: "fewest 13 to 15" },
+    { low: 27, fewest: 33, used: 40, name: "A hard goal", about: "fewest 27 to 33" },
+    { low: 27, fewest: 33, used: 70, name: "A hard goal", about: "fewest 27 to 33" },
   ];
   for (const g of goals) {
     setGoal(g.low, g.fewest);
@@ -307,7 +252,6 @@ function drawGoals() {
 }
 function redraw() {
   drawGoals();
-  drawOptions();
   update();
   document.getElementById("steps").replaceChildren();
   drawSteps();
