@@ -67,7 +67,7 @@
 <h2>Finishing</h2>
 <p class="sub">Two ways to make stars feel earned, played from the first move to the goal. Pick where it finishes, then play.</p>
 <div class="card">
-  <div class="demo"><div class="demo-title">Stars earned at the end</div><div class="demo-sub">During play the stars are outlines, still in reach. At the goal they fill in, one at a time, from the last star back to where you finished.</div><div id="demoHollow"></div><div class="demo-score" id="scoreHollow"></div></div>
+  <div class="demo"><div class="demo-title">Stars earned at the end</div><div class="demo-sub">During play the stars are outlines, still in reach. At the goal they fill in one at a time, left to right; then the track goes and the stars gather in the middle.</div><div id="demoHollow"></div><div class="demo-score" id="scoreHollow"></div></div>
   <div class="demo"><div class="demo-title">Fuel gauge</div><div class="demo-sub">The track holds the moves you have left. At the goal the fuel left drains towards the end, collecting each star it passes.</div><div id="demoFuel"></div><div class="demo-score" id="scoreFuel"></div></div>
   <div class="controls">
     <label for="finish">Finish at</label>
@@ -78,7 +78,7 @@
 </div>
 
 <h2>Goals from play</h2>
-<p class="sub">Six goals you reached (from the uploaded play data), from the easiest to the hardest. Every track has the same width, so a harder goal packs its moves tighter. Of the 21 goals in the data, under this rule 4 would get the medal, 3 get 5 stars, 10 get 4, 2 get 3, none get 2 and 1 gets 1: harder goals space their stars wider, so they mostly give 4 or 5.</p>
+<p class="sub">Six goals you reached (from the uploaded play data), from the easiest to the hardest. Every track has the same width, so a harder goal packs its moves tighter. Of the 21 goals in the data, under this rule 2 would get the medal, 6 get 5 stars, 10 get 4, 2 get 3, none get 2 and 1 gets 1: harder goals space their stars wider, so they mostly give 4 or 5.</p>
 <div class="steps" id="goals"></div>
 
 <h2>As the moves go up</h2>
@@ -89,7 +89,7 @@
   <li>Every move takes the same width of a track, and every track has the same total width. Moves used are dark, moves left are light, so the dark fill grows to the right.</li>
   <li>A line across the track marks the exact point where a star is lost: finish before it and you keep the star on it. The medal has no line: its part of the track has its own colour.</li>
   <li>The icons sit on the lines, on their own layer, so their width never shifts the track.</li>
-  <li>The rosette sits at 13, the lower bound: no solution is shorter, so finishing there is a perfect solve (and beats the game's own 15).</li>
+  <li>5 stars is the game's own best, 15. The rosette sits one move before it, at 14: finishing there beats the game. Before it the track is gray.</li>
   <li>One star every 5 moves (a third of 15). Passed icons turn gray.</li>
   <li>The track ends at 35, a step past the last star you can lose, with the star that is never lost on its right end. Past 35 the track stays full.</li>
   <li>After an undo the medal is gray and faint, with an undo arrow under it: it can no longer be won on this goal.</li>
@@ -99,14 +99,15 @@
 // The goal shown: its lower bound and the shortest solution the game has. One star every
 // third of the fewest moves (at least 2); the track ends a step past the last star that can
 // be lost, with the star that is never lost on its edge.
-let FEWEST, LOW, STEP, END, MARKS;
+let FEWEST, LOW, MEDAL, STEP, END, MARKS;
 function setGoal(low, fewest) {
   [LOW, FEWEST] = [low, fewest];
+  MEDAL = fewest - 1; // beating the game's own shortest solution
   STEP = Math.max(2, Math.round(fewest / 3));
   END = fewest + 4 * STEP; // the last star sits on the right edge, a step past the 4th
-  // Where each thing is lost: finishing in `at` moves or fewer keeps it. When the fewest is
-  // known exactly, the medal takes the 5th star's place.
-  MARKS = [{ at: LOW, kind: "medal" }, ...[0, 1, 2, 3].map((i) => ({ at: FEWEST + i * STEP, kind: "star" })).filter((m) => m.at !== LOW)];
+  // Where each thing is lost: finishing in `at` moves or fewer keeps it. 5 stars is the
+  // game's own best; the medal, one move under it, is better than the game.
+  MARKS = [{ at: MEDAL, kind: "medal" }, ...[0, 1, 2, 3].map((i) => ({ at: FEWEST + i * STEP, kind: "star" }))];
 }
 setGoal(13, 15);
 
@@ -122,7 +123,6 @@ const SLIDERS = [
   ["height", "Track height", 8, 36, 1, (v) => v],
   ["icons", "Icon size", 0.4, 1.4, 0.05, (v) => `${Math.round(v * 100)}%`],
   ["radius", "Corner radius", 0, 0.5, 0.05, (v) => `${Math.round(v * 100)}%`],
-  ["number", "Number size", 0.25, 0.8, 0.05, (v) => `${Math.round(v * 100)}%`],
 ];
 
 const NS = "http://www.w3.org/2000/svg";
@@ -184,12 +184,13 @@ let clips = 0;
  * fill is the moves left). `finish` is how far the finish animation is: for "hollow" the
  * stars filled so far (with `pop` for the newest), for "fuel" the move the drain has got to.
  */
-function track(g, x0, y0, used, { undone = false, scale = 1, style = "now", finish = null } = {}) {
+function track(g, x0, y0, used, { undone = false, scale = 1, style = "now", finish = null, collapse = 0 } = {}) {
   const width = LOOK.width * scale, h = LOOK.height * scale, w = width / END;
   const at = (m) => x0 + m * w;
   const clip = `track${++clips}`;
   el("rect", { x: x0, y: y0, width, height: h, rx: Math.min(h / 2, h * LOOK.radius) }, el("clipPath", { id: clip }, g));
-  const bar = el("g", { "clip-path": `url(#${clip})` }, g);
+  // While collapsing (after the finish) the track fades and only the stars stay.
+  const bar = el("g", { "clip-path": `url(#${clip})`, opacity: 1 - collapse }, g);
   const done = Math.min(used, END);
   if (style === "fuel") {
     // Empty where moves are spent; fuel from there to the end (or to where the drain is).
@@ -198,16 +199,25 @@ function track(g, x0, y0, used, { undone = false, scale = 1, style = "now", fini
     el("rect", { x: at(from), y: y0, width: Math.max(0, width - (from) * w), height: h, fill: C.fuel }, bar);
   } else {
     el("rect", { x: x0, y: y0, width, height: h, fill: C.left }, bar);
-    el("rect", { x: x0, y: y0, width: LOW * w, height: h, fill: C.zone }, bar);
+    el("rect", { x: x0, y: y0, width: MEDAL * w, height: h, fill: C.zone }, bar);
     el("rect", { x: x0, y: y0, width: done * w, height: h, fill: C.used, "fill-opacity": 0.78 }, bar); // the zone shows through
   }
   const cy = y0 + h / 2, s = h * 0.7 * LOOK.icons, ms = h * 0.52 * LOOK.icons;
   for (const m of MARKS) if (m.kind === "star") el("line", { x1: at(m.at), x2: at(m.at), y1: y0, y2: y0 + h, stroke: C.line, "stroke-width": Math.max(1, w * 0.14) }, bar);
-  // The stars still earned when finishing now, in the order they are counted: the last star
-  // (on the track's right edge, never lost), then back along the track.
+  // The stars still earned when finishing now, left to right: those not passed along the
+  // track, then the last one (on the right end, never lost).
   const endX = x0 + width;
-  const kept = [{ x: endX, kind: "star", m: Infinity }, ...[...MARKS].reverse().filter((m) => used <= m.at && !(m.kind === "medal" && undone)).map((m) => ({ x: at(m.at), kind: m.kind, m: m.at }))];
-  const drawIcon = (x, kind, look) => {
+  const kept = [...MARKS.filter((m) => used <= m.at && !(m.kind === "medal" && undone)).map((m) => ({ x: at(m.at), kind: m.kind, m: m.at })), { x: endX, kind: "star", m: Infinity }];
+  // Where the kept ones gather when the track goes: a row in the middle, close together.
+  const grow = 1 + 0.5 * collapse, gap = s * 1.3 * grow;
+  const ease = collapse < 0.5 ? 2 * collapse * collapse : 1 - (-2 * collapse + 2) ** 2 / 2;
+  const gather = (icon) => {
+    const i = kept.findIndex((c) => c.m === icon.m);
+    return i < 0 ? icon.x : icon.x + (x0 + width / 2 + (i - (kept.length - 1) / 2) * gap - icon.x) * ease;
+  };
+  const drawIcon = (x0i, kind, look) => {
+    const x = collapse ? gather({ x: x0i, m: look.m }) : x0i;
+    if (collapse) look = { ...look, pop: (look.pop ?? 1) * grow, opacity: look.m !== undefined && kept.some((c) => c.m === look.m) ? look.opacity : (look.opacity ?? 1) * (1 - collapse) };
     const box = iconBox(g, x, cy, look);
     if (kind === "star") star(box, x, cy, s, { outline: look.outline });
     else rosette(box, x, cy, ms);
@@ -220,8 +230,8 @@ function track(g, x0, y0, used, { undone = false, scale = 1, style = "now", fini
       const k = finish === null ? -1 : kept.findIndex((c) => c.m === icon.m);
       const filled = k >= 0 && k < Math.floor(finish ?? 0);
       const pop = filled && k === Math.floor(finish) - 1 ? 1 + 0.6 * Math.sin(Math.PI * Math.min(1, (finish % 1) * 1.6)) : 1;
-      if (filled) drawIcon(icon.x, icon.kind, { pop });
-      else drawIcon(icon.x, icon.kind, { outline: true, gray: icon.kind === "medal", opacity: lost ? 0.25 : icon.kind === "medal" ? 0.45 : 1 });
+      if (filled) drawIcon(icon.x, icon.kind, { pop, m: icon.m });
+      else drawIcon(icon.x, icon.kind, { outline: true, gray: icon.kind === "medal", opacity: lost ? 0.25 : icon.kind === "medal" ? 0.45 : 1, m: lost ? undefined : icon.m });
     } else {
       // Fuel: an icon in the fuel is kept; the drain collects it with a pop.
       const m = Math.min(icon.m, END), reached = finish !== null && finish >= m;
@@ -231,20 +241,20 @@ function track(g, x0, y0, used, { undone = false, scale = 1, style = "now", fini
     if (icon.kind === "medal" && undone) undoIcon(g, icon.x, y0 + h + ms * 0.75, ms);
   }
   // The move count, white with a shadow, on the left of the track.
-  const count = el("text", { x: x0 + h * 0.35, y: cy, "dominant-baseline": "central", "font-size": h * LOOK.number, "font-weight": 700, "font-family": "system-ui, sans-serif", fill: "#ffffff", filter: "url(#shadow)" }, g);
+  const count = el("text", { x: x0 + h * 0.35, y: cy, "dominant-baseline": "central", "font-size": h * LOOK.number, "font-weight": 700, "font-family": "system-ui, sans-serif", fill: "#ffffff", filter: "url(#shadow)", opacity: 1 - collapse }, g);
   count.textContent = used;
   return { width: width + s * 0.65, height: h, kept };
 }
 
 function stars(used) {
-  const lost = MARKS.filter((m) => m.kind === "star" && used > m.at).length + (LOW === FEWEST && used > LOW ? 1 : 0);
+  const lost = MARKS.filter((m) => m.kind === "star" && used > m.at).length;
   return 5 - lost;
 }
 function verdict(used, undone) {
-  const medal = !undone && used <= LOW;
+  const medal = !undone && used <= MEDAL;
   const n = stars(used);
-  if (medal) return `🏅 medal: the fewest possible, ${LOW}`;
-  return `${n} of 5 stars` + (undone && used <= LOW ? " (no medal: undone)" : "");
+  if (medal) return `🏅 medal: better than the game's ${FEWEST}`;
+  return `${n} of 5 stars` + (undone && used <= MEDAL ? " (no medal: undone)" : "");
 }
 
 /** An svg just big enough for a track of the look's size, drawn by `draw(g, x0, y0)`. */
@@ -292,7 +302,7 @@ function row(box, left, svg, right) {
 function drawSteps() {
   const box = document.getElementById("steps");
   box.replaceChildren();
-  const rows = [[0, false, "start"], [9, false, ""], [13, false, "last move for 🏅"], [14, false, "medal gone"], [15, false, ""], [16, false, ""], [22, false, "your finish"], [35, false, "end of the track"], [38, false, "past the end"], [12, true, "undone once: no medal"]];
+  const rows = [[0, false, "start"], [9, false, ""], [13, false, ""], [14, false, "last move for 🏅"], [15, false, "medal gone, 5 stars"], [16, false, ""], [22, false, "your finish"], [35, false, "end of the track"], [38, false, "past the end"], [12, true, "undone once: no medal"]];
   for (const [used, undone, note] of rows) {
     const svg = trackSvg((g, x, y) => track(g, x, y, used, { undone }), { below: undone ? LOOK.height * 0.5 : 0 });
     row(box, `${used} moves`, svg, `${verdict(used, undone)}${note ? `<br><span style="color:var(--ink-2)">${note}</span>` : ""}`);
@@ -320,11 +330,11 @@ function drawGoals() {
 }
 
 // The finish demos: moves tick up to the finish, then each style's finish plays.
-const MOVE_MS = 110, STAR_MS = 420, DRAIN_MS = 70;
+const MOVE_MS = 110, STAR_MS = 420, DRAIN_MS = 70, HOLD_MS = 500, GATHER_MS = 900;
 let demo = { start: null, until: 18 };
 function drawDemos(now) {
   const n = demo.until;
-  let used = n, hollow = null, fuel = null;
+  let used = n, hollow = null, fuel = null, collapse = 0;
   if (demo.start !== null) {
     const t = now - demo.start;
     used = Math.min(n, Math.floor(t / MOVE_MS));
@@ -332,11 +342,15 @@ function drawDemos(now) {
     if (after >= 0) {
       hollow = after / STAR_MS;
       fuel = n + after / DRAIN_MS;
+      // Once every kept star has filled, a pause, then the track goes and the stars gather.
+      setGoal(13, 15);
+      const kept = MARKS.filter((m) => n <= m.at).length + 1;
+      collapse = Math.max(0, Math.min(1, (after - kept * STAR_MS - HOLD_MS) / GATHER_MS));
     }
   }
   for (const [id, style, finish, scoreId] of [["demoHollow", "hollow", hollow, "scoreHollow"], ["demoFuel", "fuel", fuel, "scoreFuel"]]) {
     let kept = [];
-    const svg = trackSvg((g, x, y) => { const r = track(g, x, y, used, { style, finish, scale: 1.2 }); kept = r.kept; return r; }, { pad: 14 });
+    const svg = trackSvg((g, x, y) => { const r = track(g, x, y, used, { style, finish, scale: 1.2, collapse: style === "hollow" ? collapse : 0 }); kept = r.kept; return r; }, { pad: 14 });
     document.getElementById(id).replaceChildren(svg);
     // The count so far: stars filled (or collected) and the medal.
     let got = 0, medal = false;
@@ -347,7 +361,7 @@ function drawDemos(now) {
     }
     document.getElementById(scoreId).textContent = finish === null ? `${used} moves` : `${used} moves: ${"★".repeat(got)}${"☆".repeat(5 - got)}${medal ? " + medal" : ""}`;
   }
-  const total = n * MOVE_MS + Math.max(6 * STAR_MS, (END + 3 - n) * DRAIN_MS) + 600;
+  const total = n * MOVE_MS + Math.max(6 * STAR_MS + HOLD_MS + GATHER_MS, (END + 3 - n) * DRAIN_MS) + 600;
   if (demo.start !== null && now - demo.start < total) requestAnimationFrame(drawDemos);
 }
 
