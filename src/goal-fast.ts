@@ -27,6 +27,8 @@ export type Tuning = {
   goalBudget?: number;
   /** Count work for reports. */
   stats?: { clears: number; fails: number; nodes: number; failNodes: number };
+  /** Candidate red blocks tried, nearest first. */
+  candidates?: number;
 };
 
 /** Empty `cell` without moving blocks in `keep` (see clearCell in frozen.ts); moves are
@@ -210,9 +212,9 @@ export function simplifyFast(board: Board, moves: Move[]): Move[] {
   return out;
 }
 
-/** makeGoal (goal.ts) on an indexed board. */
-export function makeGoalFast(layout: Layout, near: Point, { effort = 12, perCell = 4, moved: start = new Map(), exclude = new Set(), avoid = [] }: GoalOptions = {}, tuning: Tuning = {}): Goal | null {
-  const board = new Board(layout, start);
+/** The sliding blocks nearest `near` that may be the red block: in the 8x8 area round it,
+ * not excluded nor on an excluded block's track, nearest first, at most `count`. */
+export function candidatesNear(board: Board, layout: Layout, near: Point, exclude: ReadonlySet<string>, count = 6): Block[] {
   const track = (b: Block) => `${isHorizontal(b) ? "row" : "column"} ${isHorizontal(b) ? b.y : b.x}`;
   const taken = new Set([...exclude].flatMap((id) => {
     const b = layout.byId(id);
@@ -224,18 +226,24 @@ export function makeGoalFast(layout: Layout, near: Point, { effort = 12, perCell
     const id = board.at(x, y);
     if (id !== null) seen.add(id);
   }
-  const candidates = [...seen].map((id) => board.block(id))
+  return [...seen].map((id) => board.block(id))
     .filter((b) => intersects(b, { x: near.x - 4, y: near.y - 4, width: 8, height: 8 }))
     .filter((b) => !b.ui && !b.wall && !exclude.has(b.id) && !taken.has(track(b)))
     .sort((a, b) => Math.hypot(a.x - near.x, a.y - near.y) - Math.hypot(b.x - near.x, b.y - near.y) || (a.id < b.id ? -1 : 1))
-    .slice(0, 6);
-  const pushes: { id: string; target: Point; raw: Move[]; distance: number }[] = [];
-  let furthest: { distance: number } | null = null;
+    .slice(0, count);
+}
+
+export type Push = { id: string; dir: number; /** Where the red block got to after each cell, and the moves so far. */ steps: { at: Point; moves: number }[]; raw: Move[] };
+
+/** Every candidate pushed both ways: the raw shuffles, with where the red block was after
+ * each cell. The board is left as it was. */
+export function pushes(board: Board, layout: Layout, near: Point, { effort = 12, perCell = 4, exclude = new Set() }: GoalOptions = {}, tuning: Tuning = {}): Push[] {
+  const candidates = candidatesNear(board, layout, near, exclude, tuning.candidates);
+  const out: Push[] = [];
   const origin = board.mark();
   const spent = tuning.stats ?? { clears: 0, fails: 0, nodes: 0, failNodes: 0 };
   const goalBudget = tuning.goalBudget ?? Infinity;
   for (const red of candidates) {
-    if (tuning.earlyStop && furthest && furthest.distance >= effort) break;
     for (const dir of [1, -1]) {
       const keep = new Set([red.id]);
       const moves: Move[] = [];
@@ -254,18 +262,33 @@ export function makeGoalFast(layout: Layout, near: Point, { effort = 12, perCell
         steps.push({ at: to, moves: moves.length });
       }
       board.undo(origin);
-      const step = steps.filter((s) => !avoid.some((a) => intersects({ ...s.at, w: red.w, h: red.h }, a))).at(-1);
-      if (!step) continue;
-      const end = step.at;
-      const distance = Math.abs(end.x - red.x) + Math.abs(end.y - red.y);
-      pushes.push({ id: red.id, target: end, raw: moves.slice(0, step.moves), distance });
-      if (!furthest || distance > furthest.distance) furthest = { distance };
+      out.push({ id: red.id, dir, steps, raw: moves });
     }
+  }
+  return out;
+}
+
+/** makeGoal (goal.ts) on an indexed board. */
+export function makeGoalFast(layout: Layout, near: Point, options: GoalOptions = {}, tuning: Tuning = {}): Goal | null {
+  const { moved: start = new Map(), avoid = [] } = options;
+  const board = new Board(layout, start);
+  const all = pushes(board, layout, near, options, tuning);
+  const picked: { id: string; target: Point; raw: Move[]; distance: number }[] = [];
+  let furthest: { distance: number } | null = null;
+  for (const p of all) {
+    if (tuning.earlyStop && furthest && furthest.distance >= (options.effort ?? 12)) break;
+    const red = board.block(p.id);
+    const step = p.steps.filter((s) => !avoid.some((a) => intersects({ ...s.at, w: red.w, h: red.h }, a))).at(-1);
+    if (!step) continue;
+    const end = step.at;
+    const distance = Math.abs(end.x - red.x) + Math.abs(end.y - red.y);
+    picked.push({ id: p.id, target: end, raw: p.raw.slice(0, step.moves), distance });
+    if (!furthest || distance > furthest.distance) furthest = { distance };
   }
   // Only the furthest pushes compete on moves, so only they need simplifying: the first
   // with the fewest moves wins, as in makeGoal.
   let best: Goal | null = null;
-  for (const p of pushes) {
+  for (const p of picked) {
     if (p.distance !== furthest?.distance) continue;
     const t0 = performance.now();
     const solution = tuning.slowSimplify ? simplifyOn(board, p.raw) : simplifyFast(board, p.raw);
