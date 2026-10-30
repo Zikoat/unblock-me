@@ -15,6 +15,10 @@ const CAMERA_KEY = "unblock-me:camera"; // carried over a live reload only
 
 declare const __BUILD_ID__: string;
 
+// ?board=<JSON list of placed blocks> opens exactly that board (the reports link to their
+// structures this way). Nothing is stored while it is open.
+const shared = new URLSearchParams(location.search).get("board");
+
 const canvas = document.querySelector("canvas")!;
 const fps = document.querySelector<HTMLElement>("#fps")!;
 
@@ -27,6 +31,7 @@ function load<T>(key: string, fallback: T): T {
 }
 
 function save(): void {
+  if (shared) return;
   try {
     localStorage.setItem(SEED_KEY, JSON.stringify(seed));
     localStorage.setItem(BORDER_KEY, JSON.stringify(scene.border));
@@ -118,6 +123,14 @@ Object.assign(window, {
     },
   },
 });
+
+if (shared) {
+  try {
+    restart(scene, fixedLayout(JSON.parse(shared)));
+  } catch {
+    // A broken link: show the normal board.
+  }
+}
 
 // Live reload: every build writes a new id to build.txt. While the page is visible, check
 // it every second (and right away when the page comes back), and reload on a new build,

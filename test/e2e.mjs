@@ -217,9 +217,24 @@ const browser = await chromium.launch();
   await gesture([cell(-0.5, 2.5)], [cell(1.5, 2.5)]);
   check((await block(page, "w")).x === -1, "dragging a wall moves the view, not the wall");
 
+  // A ?board= link opens exactly that board, here the frozen pinwheel from the jam report;
+  // none of its blocks can be dragged anywhere, and nothing is stored.
+  const W = (x, y) => ({ id: `w${x},${y}`, x, y, w: 1, h: 1, wall: true });
+  const pinwheel = [H("a", 0, 0), V("b", 2, 0), H("c", 1, 2), V("d", 0, 1), W(-1, 0), W(2, -1), W(3, 2), W(0, 3)];
+  await page.goto(url);
+  await page.evaluate(() => localStorage.clear());
+  await page.goto(`${url}?board=${encodeURIComponent(JSON.stringify(pinwheel))}`);
+  await frame(page);
+  check((await page.evaluate(() => unblock.visibleBlocks().map((b) => b.id).sort().join())) === pinwheel.map((b) => b.id).sort().join(), "a ?board= link shows exactly its blocks");
+  for (const [id, x, y] of [["a", 1, 0.5], ["b", 2.5, 1], ["c", 2, 2.5], ["d", 0.5, 2]]) {
+    for (const [dx, dy] of [[2, 0], [-2, 0], [0, 2], [0, -2]]) await gesture([cell(x, y)], [cell(x + dx, y + dy)]);
+  }
+  check(await page.evaluate(() => unblock.visibleBlocks().every((b) => !b.moved)), "no block of the frozen pinwheel moves, however it is dragged");
+  check(await page.evaluate(() => !Object.keys(localStorage).some((k) => k.startsWith("unblock-me:"))), "and nothing is stored while a shared board is open");
+
   // The reports block opens the list of reports, which links back to the game.
   await fresh();
-  await page.evaluate(() => unblock.scene.camera = { scale: 1, offsetX: 170, offsetY: 370 });
+  await fresh();
   await Promise.all([page.waitForURL("**/reports/"), tap(cell(2.5, 0.5))]);
   check(page.url().endsWith("/reports/"), `tapping the reports block opens the report list (${page.url()})`);
   check((await page.textContent("h1")) === "Reports", "which is the report list");
