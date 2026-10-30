@@ -29,8 +29,8 @@ const TRACK = 0.52;
 
 declare const __BUILD_ID__: string;
 
-// ?board=<JSON list of placed blocks> opens exactly that board (the reports link to their
-// structures this way). Nothing is stored while it is open.
+// ?board=<JSON list of placed blocks> opens exactly that board (for sharing a board, and
+// for tests). Nothing is stored while it is open.
 const shared = new URLSearchParams(location.search).get("board");
 // Set by a reset: from then on this page stores nothing.
 let forgetting = false;
@@ -356,8 +356,6 @@ const gestures = new Gestures(scene, {
       save();
     } else if (ui === "fullscreen") {
       toggleFullscreen();
-    } else if (ui === "reports") {
-      location.href = "reports/";
     } else if (ui === "home") {
       location.href = "/";
     } else if (ui === "upload") {
@@ -602,7 +600,6 @@ function tooltip(ui: Ui): string | null {
   switch (ui) {
     case "border": return "Debug: Make the viewport smaller to test frustum culling.";
     case "reset": return "Reset";
-    case "reports": return "Reports";
     case "fps": return "Debug: Show or hide the fps counter";
     case "upload": return "Debug: Send play data to the VM for analysis";
     default: return null;

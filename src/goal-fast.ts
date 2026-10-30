@@ -16,7 +16,7 @@ export type Tuning = {
   /** Stop trying candidates once one reached full effort (keeps the fewest-moves rule only
    * among those already tried). */
   earlyStop?: boolean;
-  /** Told how long each simplify took (for reports). */
+  /** Told how long each simplify took (for experiments). */
   timing?: (ms: number) => void;
   /** Simplify with whole replays, as goal.ts does (for comparison). */
   slowSimplify?: boolean;
@@ -25,7 +25,7 @@ export type Tuning = {
   /** Node budget for the whole goal: a deterministic cap on the worst case. Once spent,
    * every push stops at its next blocked cell. */
   goalBudget?: number;
-  /** Count work for reports. */
+  /** Count work for experiments. */
   stats?: { clears: number; fails: number; nodes: number; failNodes: number };
   /** Candidate red blocks tried, nearest first. */
   candidates?: number;

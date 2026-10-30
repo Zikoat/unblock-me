@@ -69,7 +69,7 @@ describe("random layout", () => {
       const near = layout.blocksIn({ x: -5, y: -5, width: 10, height: 10 });
       expect(near.filter((b) => b.ui).map((b) => [b.ui, b.x, b.y, b.w, b.h])).toEqual([
         ["home", -1, 0, 1, 1], ["reset", 0, 0, 1, 1], ["fullscreen", 1, 0, 1, 1],
-        ["density", -1, 2, 1, 1], ["border", 0, 2, 1, 1], ["upload", 1, 2, 1, 1], ["reports", 2, 2, 1, 1], ["fps", 3, 2, 1, 1],
+        ["density", -1, 2, 1, 1], ["border", 0, 2, 1, 1], ["upload", 1, 2, 1, 1], ["fps", 2, 2, 1, 1],
       ]);
       // Nothing is generated in the rectangle around both rows and the gap between them.
       for (const b of near) if (!b.ui) for (const c of cells(b)) {

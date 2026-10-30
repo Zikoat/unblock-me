@@ -3,7 +3,6 @@
 import { watch } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { writeReportsIndex } from "./reports-index";
 
 const root = join(import.meta.dir, "..");
 const src = join(root, "src");
@@ -29,7 +28,6 @@ async function build(): Promise<void> {
   });
   for (const r of [result, worker]) if (!r.success) throw new Error(r.logs.map((log) => log.message).join("\n"));
   await Bun.write(join(outdir, "index.html"), Bun.file(join(src, "index.html")));
-  await writeReportsIndex();
   // Written last, so a page only reloads once the new app is complete.
   await Bun.write(join(outdir, "build.txt"), id);
   console.log(`Built ${outdir} (${id})`);

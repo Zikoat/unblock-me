@@ -160,7 +160,7 @@ export const viewCentre = (camera: { scale: number; offsetX: number; offsetY: nu
   y: Math.floor((height / 2 - camera.offsetY) / camera.scale / UNIT),
 });
 
-/** Can the red block slide at all from where it is now? (For tests and reports.) */
+/** Can the red block slide at all from where it is now? (For tests and experiments.) */
 export function canMove(layout: Layout, block: Block, changes: Changes): boolean {
   const s = slide(layout, block, changes);
   return s.hi > s.lo && position(block) >= s.lo;

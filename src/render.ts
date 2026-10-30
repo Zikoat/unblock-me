@@ -190,7 +190,6 @@ export function draw(
     if (block.ui === "reset") resetIcon(ctx, block);
     else if (block.ui === "border") borderIcon(ctx, block, scene.border);
     else if (block.ui === "fullscreen") fullscreenIcon(ctx, block, fullscreen);
-    else if (block.ui === "reports") reportsIcon(ctx, block);
     else if (block.ui === "upload") uploadIcon(ctx, block);
     else if (block.ui === "fps") fpsIcon(ctx, block, fps);
     else if (block.ui === "density") densityIcon(ctx, block, density);
@@ -412,7 +411,6 @@ function sliderTrack(ctx: CanvasRenderingContext2D, block: Block, at: number): v
   ctx.fill();
 }
 
-/** Three rising bars on a baseline: the reports. */
 /** "fps" with a switch under it, like the border toggle's. */
 function fpsIcon(ctx: CanvasRenderingContext2D, block: Block, on: boolean): void {
   const x = block.x * UNIT;
@@ -457,19 +455,6 @@ function uploadIcon(ctx: CanvasRenderingContext2D, block: Block): void {
   ctx.lineTo(x + UNIT * 0.73, y + UNIT * 0.74);
   ctx.lineTo(x + UNIT * 0.73, y + UNIT * 0.6);
   ctx.stroke();
-}
-
-function reportsIcon(ctx: CanvasRenderingContext2D, block: Block): void {
-  const left = (block.x + 0.27) * UNIT;
-  const base = (block.y + 0.72) * UNIT;
-  const bar = UNIT * 0.11;
-  const gap = UNIT * 0.06;
-  ctx.fillStyle = COLORS.icon;
-  [0.18, 0.3, 0.42].forEach((height, i) => {
-    ctx.beginPath();
-    ctx.roundRect(left + i * (bar + gap), base - height * UNIT, bar, height * UNIT, [2, 2, 0, 0]);
-    ctx.fill();
-  });
 }
 
 /** A reached goal's stars along its long edge: what it was worth (0..10), the earned ones

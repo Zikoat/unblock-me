@@ -97,8 +97,7 @@ const browser = await chromium.launch();
     { id: "home", x: -1, y: 0, w: 1, h: 1, ui: "home" },
     { id: "reset", x: 0, y: 0, w: 1, h: 1, ui: "reset" },
     { id: "fullscreen", x: 1, y: 0, w: 1, h: 1, ui: "fullscreen" },
-    { id: "reports", x: 2, y: 2, w: 1, h: 1, ui: "reports" },
-    { id: "fps", x: 3, y: 2, w: 1, h: 1, ui: "fps" },
+    { id: "fps", x: 2, y: 2, w: 1, h: 1, ui: "fps" },
     { id: "density", x: -1, y: 2, w: 1, h: 1, ui: "density" },
     { id: "border", x: 0, y: 2, w: 1, h: 1, ui: "border" },
   ];
@@ -107,16 +106,16 @@ const browser = await chromium.launch();
   await fresh();
   check(await page.evaluate(() => document.body.innerText.trim() === "" && getComputedStyle(document.querySelector("#fps")).display === "none"), "no text on the page: the fps counter starts off");
   // The fps toggle shows and hides the counter.
-  await tap(cell(3.5, 2.5));
+  await tap(cell(2.5, 2.5));
   await page.waitForTimeout(100);
   const text = await page.evaluate(() => document.body.innerText.trim());
   check(/^\d+ fps · \d+[smhd] ago$/.test(text), `the fps toggle shows the debug counter: fps and build age ("${text}")`);
   await page.waitForTimeout(1200);
   const idleFps = await page.evaluate(() => parseInt(document.querySelector("#fps").textContent));
   check(idleFps > 10, `with nothing moving the counter still counts frames (${idleFps} fps)`);
-  await tap(cell(3.5, 2.5));
+  await tap(cell(2.5, 2.5));
   check(await page.evaluate(() => getComputedStyle(document.querySelector("#fps")).display === "none" && getComputedStyle(document.querySelector("#spin")).display === "none"), "and hides it again");
-  for (const [x, y, what] of [[-0.85, 0.15, "home"], [0.15, 0.15, "reset"], [1.15, 0.15, "fullscreen"], [-0.85, 2.15, "density"], [0.15, 2.15, "border toggle"], [1.15, 2.15, "upload"], [2.15, 2.15, "reports"], [3.15, 2.15, "fps toggle"]]) {
+  for (const [x, y, what] of [[-0.85, 0.15, "home"], [0.15, 0.15, "reset"], [1.15, 0.15, "fullscreen"], [-0.85, 2.15, "density"], [0.15, 2.15, "border toggle"], [1.15, 2.15, "upload"], [2.15, 2.15, "fps toggle"]]) {
     await expectColor(page, cell(x, y), "reset", `the ${what} block is black`);
   }
   check((await colorAt(page, ...cell(0.5, 1.5))) !== "reset", "with an empty row between the game's row and the debug row");
@@ -286,15 +285,6 @@ const browser = await chromium.launch();
   }
   check(await page.evaluate(() => unblock.visibleBlocks().every((b) => !b.moved)), "no block of the frozen pinwheel moves, however it is dragged");
   check(await page.evaluate(() => !Object.keys(localStorage).some((k) => k.startsWith("unblock-me:"))), "and nothing is stored while a shared board is open");
-
-  // The reports block opens the list of reports, which links back to the game.
-  await fresh();
-  await fresh();
-  await Promise.all([page.waitForURL("**/reports/"), tap(cell(2.5, 2.5))]);
-  check(page.url().endsWith("/reports/"), `tapping the reports block opens the report list (${page.url()})`);
-  check((await page.textContent("h1")) === "Reports", "which is the report list");
-  await Promise.all([page.waitForURL(url), page.click("a.back")]);
-  check(await page.evaluate(() => typeof unblock === "object"), "and its back link returns to the game");
 
   // Exact boards from here on.
   await fresh();
