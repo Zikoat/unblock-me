@@ -1,5 +1,6 @@
-// Goal search on an indexed board (src/board.ts). Same search as makeGoal/clearCell, with
-// optional prunings, so each change can be measured on its own.
+// The push search on an indexed board (src/board.ts): push a block one cell at a time,
+// clearing each next cell with a bounded backwards search, with optional prunings. Its
+// work is counted in ticks (search nodes, plus a cost per cell pushed), not cells or time.
 import type { Point } from "./camera";
 import { Board, cellKey, isFixed } from "./board";
 import { merge, type Goal, type GoalOptions } from "./goal";
@@ -13,25 +14,22 @@ export type Tuning = {
   /** With prune: when the moves left are exactly one per blocker, skip the slide if some
    * blocker cannot get out of the way in one slide (it needs another block moved first). */
   lookahead?: boolean;
-  /** Stop trying candidates once one reached full effort (keeps the fewest-moves rule only
-   * among those already tried). */
-  earlyStop?: boolean;
-  /** Told how long each simplify took (for experiments). */
-  timing?: (ms: number) => void;
-  /** Simplify with whole replays, as goal.ts does (for comparison). */
-  slowSimplify?: boolean;
   /** Node budget per cell. */
   budget?: number;
-  /** Node budget for the whole goal: a deterministic cap on the worst case. Once spent,
-   * every push stops at its next blocked cell. */
+  /** Ticks for all the pushes: the cap on their work, the same whatever the machine. Each
+   * push gets an equal share of what the pushes before it left. */
   goalBudget?: number;
+  /** Ticks a pushed cell costs on top of its search nodes (what it costs the caller, e.g.
+   * measuring it as a candidate), so a push into open space stops too. */
+  cellCost?: number;
   /** Count work for experiments. */
   stats?: { clears: number; fails: number; nodes: number; failNodes: number };
   /** Candidate red blocks tried, nearest first. */
   candidates?: number;
 };
 
-/** Empty `cell` without moving blocks in `keep` (see clearCell in frozen.ts); moves are
+/** Empty `cell` with legal slides without moving blocks in `keep`, working back from the
+ * cell (the block in it slides away, which may need others out of its way first); moves are
  * applied to the board on success, and it is left as it was on failure. */
 export function clearCellOn(board: Board, cell: Point, keep: ReadonlySet<string>, { maxMoves = 12, reach = 8, budget = 200_000, prune = false, lookahead = false, stats }: { maxMoves?: number; reach?: number; budget?: number; prune?: boolean; lookahead?: boolean; stats?: Tuning["stats"] } = {}): Move[] | null {
   const plan: Move[] = [];
@@ -161,28 +159,11 @@ export function clearCellOn(board: Board, cell: Point, keep: ReadonlySet<string>
   return null;
 }
 
-/** simplify (goal.ts) with an indexed board for the replays. */
-export function simplifyOn(board: Board, moves: Move[]): Move[] {
-  let out = merge(moves);
-  for (let changed = true; changed; ) {
-    changed = false;
-    for (let i = 0; i < out.length && !changed; i++) {
-      const j = out.findIndex((m, k) => k > i && m.id === out[i]!.id);
-      if (j < 0) continue;
-      const tried = merge([...out.slice(0, i), ...out.slice(i + 1, j), { ...out[j]!, from: out[i]!.from }, ...out.slice(j + 1)]);
-      if (board.replays(tried)) {
-        out = tried;
-        changed = true;
-      }
-    }
-  }
-  return out;
-}
-
-/** simplifyOn, replaying only from where a sequence changes (the board keeps the state
- * after the unchanged prefix), and going on after a fold instead of starting over; passes
- * repeat until one folds nothing. Not provably the same result as simplifyOn, but the same
- * on every board tried. */
+/** Fewer moves for the same end: a block's move is dropped and folded into its next move
+ * whenever the whole sequence still plays legally (e.g. the red block steps once, a blocker
+ * clears, the red block steps again: one red move after the blocker does). Replays only
+ * from where a sequence changes, and goes on after a fold; passes repeat until one folds
+ * nothing. */
 export function simplifyFast(board: Board, moves: Move[]): Move[] {
   let out = merge(moves);
   const origin = board.mark();
@@ -235,25 +216,29 @@ export function candidatesNear(board: Board, layout: Layout, near: Point, exclud
 
 export type Push = { id: string; dir: number; /** Where the red block got to after each cell, and the moves so far. */ steps: { at: Point; moves: number }[]; raw: Move[] };
 
-/** Every candidate pushed both ways: the raw shuffles, with where the red block was after
- * each cell. The board is left as it was. */
-export function pushes(board: Board, layout: Layout, near: Point, { effort = 12, perCell = 4, exclude = new Set() }: GoalOptions = {}, tuning: Tuning = {}): Push[] {
+/** Every candidate pushed both ways, each until a cell cannot be cleared or its share of
+ * the ticks is spent: the raw shuffles, with where the red block was after each cell. The
+ * board is left as it was. */
+export function pushes(board: Board, layout: Layout, near: Point, { perCell = 4, exclude = new Set() }: GoalOptions = {}, tuning: Tuning = {}): Push[] {
   const candidates = candidatesNear(board, layout, near, exclude, tuning.candidates);
   const out: Push[] = [];
   const origin = board.mark();
   const spent = tuning.stats ?? { clears: 0, fails: 0, nodes: 0, failNodes: 0 };
-  const goalBudget = tuning.goalBudget ?? Infinity;
+  const { goalBudget = 50_000, cellCost = 1 } = tuning;
+  let left = candidates.length * 2;
   for (const red of candidates) {
     for (const dir of [1, -1]) {
+      const until = spent.nodes + (goalBudget - spent.nodes) / left--;
       const keep = new Set([red.id]);
       const moves: Move[] = [];
       const steps: { at: Point; moves: number }[] = [];
-      for (let i = 0; i < effort; i++) {
+      while (spent.nodes + cellCost <= until) {
+        spent.nodes += cellCost;
         const at = board.block(red.id);
         const ahead = isHorizontal(at)
           ? { x: dir > 0 ? at.x + at.w : at.x - 1, y: at.y }
           : { x: at.x, y: dir > 0 ? at.y + at.h : at.y - 1 };
-        const plan = clearCellOn(board, ahead, keep, { maxMoves: perCell, budget: Math.min(tuning.budget ?? 200_000, Math.max(0, goalBudget - spent.nodes)), prune: tuning.prune, lookahead: tuning.lookahead, stats: spent });
+        const plan = clearCellOn(board, ahead, keep, { maxMoves: perCell, budget: Math.min(tuning.budget ?? 200_000, Math.max(0, until - spent.nodes)), prune: tuning.prune, lookahead: tuning.lookahead, stats: spent });
         if (!plan) break;
         moves.push(...plan);
         const to = isHorizontal(at) ? { x: at.x + dir, y: at.y } : { x: at.x, y: at.y + dir };
@@ -266,34 +251,4 @@ export function pushes(board: Board, layout: Layout, near: Point, { effort = 12,
     }
   }
   return out;
-}
-
-/** makeGoal (goal.ts) on an indexed board. */
-export function makeGoalFast(layout: Layout, near: Point, options: GoalOptions = {}, tuning: Tuning = {}): Goal | null {
-  const { moved: start = new Map(), avoid = [] } = options;
-  const board = new Board(layout, start);
-  const all = pushes(board, layout, near, options, tuning);
-  const picked: { id: string; target: Point; raw: Move[]; distance: number }[] = [];
-  let furthest: { distance: number } | null = null;
-  for (const p of all) {
-    if (tuning.earlyStop && furthest && furthest.distance >= (options.effort ?? 12)) break;
-    const red = board.block(p.id);
-    const step = p.steps.filter((s) => !avoid.some((a) => intersects({ ...s.at, w: red.w, h: red.h }, a))).at(-1);
-    if (!step) continue;
-    const end = step.at;
-    const distance = Math.abs(end.x - red.x) + Math.abs(end.y - red.y);
-    picked.push({ id: p.id, target: end, raw: p.raw.slice(0, step.moves), distance });
-    if (!furthest || distance > furthest.distance) furthest = { distance };
-  }
-  // Only the furthest pushes compete on moves, so only they need simplifying: the first
-  // with the fewest moves wins, as in makeGoal.
-  let best: Goal | null = null;
-  for (const p of picked) {
-    if (p.distance !== furthest?.distance) continue;
-    const t0 = performance.now();
-    const solution = tuning.slowSimplify ? simplifyOn(board, p.raw) : simplifyFast(board, p.raw);
-    tuning.timing?.(performance.now() - t0);
-    if (!best || solution.length < best.solution.length) best = { id: p.id, target: p.target, solution };
-  }
-  return best;
 }

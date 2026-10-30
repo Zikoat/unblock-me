@@ -12,7 +12,6 @@ export type GoalRequest = {
   placed: Placed[] | null;
   near: Point;
   moved: [string, Point][];
-  effort: number;
   /** How hard to try (goal-search.ts, LEVELS_OF_EFFORT): 0 when the player is waiting. */
   level?: number;
   exclude: string[];
@@ -21,10 +20,10 @@ export type GoalRequest = {
 };
 
 self.onmessage = (event: MessageEvent<GoalRequest>) => {
-  const { job, seed, tries, placed, near, moved, effort, level = 1, exclude, avoid } = event.data;
+  const { job, seed, tries, placed, near, moved, level = 1, exclude, avoid } = event.data;
   const layout = placed ? fixedLayout(placed) : randomLayout(seed, { tries });
   // The push search's targets ranked by the difficulty measure (docs/goal-search.md).
-  const found = makeGoalHard(layout, near, { effort, moved: new Map(moved), exclude: new Set(exclude), avoid }, level);
+  const found = makeGoalHard(layout, near, { moved: new Map(moved), exclude: new Set(exclude), avoid }, level);
   if (!found) {
     postMessage({ job, goal: null });
     return;

@@ -111,12 +111,13 @@ export type Ranked = Goal & { difficulty: Difficulty; distance: number };
 
 /** Tournament settings by effort level: 0 for a goal the player is waiting for (a few
  * hundred ms), 1 for one made ahead (about a second), 2 and 3 for more time (several
- * seconds): more candidates, and more boards to measure the finalists on. */
+ * seconds): more candidates, and more boards to measure the finalists on. A pushed cell
+ * costs the boards its rough measure may take, so the ticks bound the whole search. */
 export const LEVELS_OF_EFFORT: TournamentOptions[] = [
-  { rough: 300, exact: 5_000, finalists: 2, stride: 2, tuning: { prune: true, lookahead: true, goalBudget: 50_000, candidates: 6 } },
-  { rough: 300, exact: 20_000, finalists: 3, tuning: { prune: true, lookahead: true, goalBudget: 50_000, candidates: 6 } },
-  { rough: 1_000, exact: 50_000, finalists: 4, tuning: { prune: true, lookahead: true, goalBudget: 100_000, candidates: 12 } },
-  { rough: 3_000, exact: 100_000, finalists: 6, perCell: 8, tuning: { prune: true, lookahead: true, goalBudget: 200_000, candidates: 12 } },
+  { rough: 300, exact: 5_000, finalists: 2, stride: 2, tuning: { prune: true, lookahead: true, goalBudget: 40_000, cellCost: 150, candidates: 6 } },
+  { rough: 300, exact: 20_000, finalists: 3, tuning: { prune: true, lookahead: true, goalBudget: 100_000, cellCost: 300, candidates: 6 } },
+  { rough: 1_000, exact: 50_000, finalists: 4, tuning: { prune: true, lookahead: true, goalBudget: 400_000, cellCost: 1_000, candidates: 12 } },
+  { rough: 3_000, exact: 100_000, finalists: 6, perCell: 8, tuning: { prune: true, lookahead: true, goalBudget: 1_000_000, cellCost: 3_000, candidates: 12 } },
 ];
 
 /** A hard goal near `near` at an effort level (LEVELS_OF_EFFORT). */
@@ -127,7 +128,7 @@ export function makeGoalHard(layout: Layout, near: Point, options: GoalOptions =
 /** How a goal's difficulty is weighed against its distance: difficulty / distance^alpha.
  * 0 ranks by difficulty alone (nearly always the furthest cell: each nearer cell's proof
  * is a prefix of the further one's); 1 by difficulty per cell. */
-export const tradeoff = { alpha: 0.6 }; // distances 3-12, most of the difficulty (test/experiments/effort-sweep.ts, reports/play-analysis.html)
+export const tradeoff = { alpha: 0.6 }; // (reports/play-analysis.html)
 export const balance = (g: { difficulty: Difficulty; distance: number }) => g.difficulty.score / Math.pow(g.distance, tradeoff.alpha);
 
 /** The push search's targets, ranked by the difficulty measure. */

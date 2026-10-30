@@ -23,8 +23,6 @@ const TRIES_KEY = "unblock-me:tries";
 const CAMERA_KEY = "unblock-me:camera"; // where the view is, kept across reloads
 const LOG_KEY = "unblock-me:log"; // the play log; kept across resets
 const DEVICE_KEY = "unblock-me:device"; // names this browser's automatic uploads; kept across resets
-/** How many cells the goal's red block is pushed. */
-const EFFORT = 12;
 /** The density slider's track, as a share of its block (see densityIcon). */
 const TRACK = 0.52;
 
@@ -200,7 +198,7 @@ function requestGoal(near: Point = viewCentre(scene.camera, scene.width, scene.h
     showGoal(ahead.ready.goal);
     return;
   }
-  const request: GoalRequest = { job: ++job, seed, tries, placed, near, moved: [...scene.moved], effort: EFFORT, level: 0, exclude, avoid: targetsOf(scene.done) };
+  const request: GoalRequest = { job: ++job, seed, tries, placed, near, moved: [...scene.moved], level: 0, exclude, avoid: targetsOf(scene.done) };
   worker.postMessage(request);
 }
 type Measured = { of: { id: string; target: Point }; difficulty: Difficulty; choices?: number };
@@ -271,7 +269,7 @@ function lookAhead(): void {
   const key = boardKey(moved, exclude, goal.target);
   if (key === ahead.asked || ahead.ready?.key === key) return;
   ahead.asked = key;
-  const request: GoalRequest = { job: ++ahead.job, seed, tries, placed, near: goal.target, moved: [...moved], effort: EFFORT, level: 2, exclude, avoid: targetsOf([...scene.done, goal]) };
+  const request: GoalRequest = { job: ++ahead.job, seed, tries, placed, near: goal.target, moved: [...moved], level: 2, exclude, avoid: targetsOf([...scene.done, goal]) };
   ahead.worker.postMessage(request);
 }
 ahead.worker.onmessage = (event: MessageEvent<Reply>) => {

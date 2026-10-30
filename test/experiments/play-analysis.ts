@@ -24,7 +24,6 @@ import { randomLayout } from "../../src/layout";
 import type { Move } from "../../src/rules";
 import { Pool, runWindow, Window } from "../../src/window";
 import { makeGoalHard, tradeoff } from "../../src/goal-search";
-import { makeGoalFast } from "../../src/goal-fast";
 
 type Ev = { t: number; e: string; [k: string]: any };
 
@@ -385,7 +384,6 @@ async function regen(file: string, outFile: string, only?: Set<number>) {
     const opts = { effort: 12, moved, exclude: new Set(done.map((g) => g.id)), avoid: done.flatMap(rect) };
     const configs: [string, () => any][] = [];
     for (const alpha of p.phase === "hard-a" ? [0.67, 0] : [0, 0.67]) for (const level of fresh ? [0, 1, 2] : [2, 1, 0]) configs.push([`hard${level} a${alpha}`, () => { tradeoff.alpha = alpha; return makeGoalHard(layout, near, opts, level); }]);
-    configs.push(["fast", () => makeGoalFast(layout, near, { ...opts, perCell: 6 }, { prune: true, lookahead: true, goalBudget: 50_000 })]);
     if (p.phase === "push") configs.unshift(configs.pop()!);
     let hit: any = null;
     const tried: string[] = [];

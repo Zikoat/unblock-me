@@ -12,7 +12,7 @@ for (let seed = 1; seed <= boards; seed++) {
   const layout = randomLayout(seed * 7919, { tries });
   const near = { x: (seed % 5) * 7, y: 6 + (seed % 3) * 5 };
   const t = performance.now();
-  const goal = makeGoalHard(layout, near, { effort: 12 }, level);
+  const goal = makeGoalHard(layout, near, {}, level);
   slowest = Math.max(slowest, performance.now() - t);
   if (!goal) continue;
   const d = goal.difficulty;

@@ -1,38 +1,60 @@
-// The indexed, pruned goal search makes the same goals as makeGoal.
+// The push search: how far a push gets, which blocks it may push, and the tick budget.
 import { describe, expect, test } from "bun:test";
 import { Board } from "../../src/board";
-import { replay } from "../../src/frozen";
-import { makeGoal } from "../../src/goal";
-import { makeGoalFast } from "../../src/goal-fast";
-import { fixedLayout, randomLayout, type Placed } from "../../src/layout";
+import { candidatesNear, pushes, simplifyFast } from "../../src/goal-fast";
+import { makeGoalHard } from "../../src/goal-search";
+import { fixedLayout, type Placed } from "../../src/layout";
 
 const H = (id: string, x: number, y: number): Placed => ({ id, x, y, w: 2, h: 1 });
 const V = (id: string, x: number, y: number): Placed => ({ id, x, y, w: 1, h: 2 });
 const W = (x: number, y: number): Placed => ({ id: `w${x},${y}`, x, y, w: 1, h: 1, wall: true });
 const FAST = { prune: true, lookahead: true };
+const push = (board: Board, all: ReturnType<typeof pushes>, id: string, dir: number) => {
+  const p = all.find((q) => q.id === id && q.dir === dir)!;
+  return { to: p.steps.at(-1)?.at, solution: simplifyFast(board, p.raw) };
+};
 
-describe("makeGoalFast", () => {
-  test("small boards: the same goals as makeGoal, exclude, avoid and moved blocks included", () => {
-    const boards = [
-      { layout: fixedLayout([H("r", 0, 0), V("v", 3, 0), W(3, -1), W(3, 3), W(7, 0), W(-1, 0)]), near: { x: 0, y: 0 }, options: { effort: 10 } },
-      { layout: fixedLayout([W(-1, 0), H("r", 0, 0), W(9, 0)]), near: { x: 0, y: 0 }, options: { effort: 3, avoid: [{ x: 4, y: 0, width: 2, height: 1 }] } },
-      { layout: fixedLayout([H("r", 0, 0), H("s", 3, 0), V("v", 2, 1), H("t", 0, 4)]), near: { x: 2, y: 1 }, options: { effort: 3, exclude: new Set(["r"]) } },
-      { layout: fixedLayout([H("r", 0, 0), W(-1, 0)]), near: { x: 4, y: 0 }, options: { effort: 2, moved: new Map([["r", { x: 4, y: 0 }]]) } },
-      { layout: fixedLayout([W(-1, 0), H("r", 0, 0), W(2, 0)]), near: { x: 0, y: 0 }, options: {} },
-    ];
-    for (const { layout, near, options } of boards) expect(makeGoalFast(layout, near, options, FAST)).toEqual(makeGoal(layout, near, options));
+describe("pushes", () => {
+  test("a push clears the blockers it can and stops at a wall", () => {
+    // v blocks r at x 3 but can drop one cell (walls above and below it); a wall at x 7.
+    const layout = fixedLayout([H("r", 0, 0), V("v", 3, 0), W(3, -1), W(3, 3), W(7, 0), W(-1, 0)]);
+    const board = new Board(layout);
+    expect(push(board, pushes(board, layout, { x: 0, y: 0 }, {}, FAST), "r", 1)).toEqual({
+      to: { x: 5, y: 0 },
+      solution: [
+        { id: "v", from: { x: 3, y: 0 }, to: { x: 3, y: 1 } },
+        { id: "r", from: { x: 0, y: 0 }, to: { x: 5, y: 0 } },
+      ],
+    });
   });
 
-  test("random boards: the same goals as makeGoal, and they replay", () => {
-    for (const tries of [7, 25]) {
-      for (const seed of [1, 2]) {
-        const layout = randomLayout(seed, { tries });
-        const near = { x: seed * 13, y: -seed * 7 };
-        const goal = makeGoalFast(layout, near, { effort: 6 }, FAST);
-        expect(goal).toEqual(makeGoal(layout, near, { effort: 6 }));
-        expect(replay(layout, goal!.solution)!.moved.get(goal!.id)).toEqual(goal!.target);
-      }
-    }
+  test("no cell cap: in open space a push stops when its share of the ticks is spent", () => {
+    const layout = fixedLayout([H("r", 0, 0), W(-1, 0)]);
+    const board = new Board(layout);
+    // One candidate, two pushes: the right one (first) gets half the ticks.
+    expect(push(board, pushes(board, layout, { x: 0, y: 0 }, {}, { goalBudget: 100, cellCost: 1 }), "r", 1).to).toEqual({ x: 50, y: 0 });
+    expect(push(board, pushes(board, layout, { x: 0, y: 0 }, {}, { goalBudget: 100, cellCost: 10 }), "r", 1).to).toEqual({ x: 5, y: 0 });
+  });
+
+  test("it starts from the board as it is, moved blocks included", () => {
+    const layout = fixedLayout([H("r", 0, 0), W(-1, 0), W(7, 0)]);
+    const board = new Board(layout, new Map([["r", { x: 4, y: 0 }]]));
+    expect(push(board, pushes(board, layout, { x: 4, y: 0 }, {}, FAST), "r", 1).to).toEqual({ x: 5, y: 0 });
+  });
+});
+
+describe("the red block", () => {
+  test("excluded blocks are never candidates, nor blocks on an excluded block's track", () => {
+    // s shares r's row; v crosses it but runs on its own column; t has its own row.
+    const layout = fixedLayout([H("r", 0, 0), H("s", 3, 0), V("v", 2, 1), H("t", 0, 4)]);
+    const ids = (exclude: string[]) => candidatesNear(new Board(layout), layout, { x: 2, y: 1 }, new Set(exclude)).map((b) => b.id).sort();
+    expect(ids([])).toEqual(["r", "s", "t", "v"]);
+    expect(ids(["r"])).toEqual(["t", "v"]);
+    expect(ids(["r", "v", "t"])).toEqual([]);
+  });
+
+  test("no goal when nothing nearby can move", () => {
+    expect(makeGoalHard(fixedLayout([W(-1, 0), H("r", 0, 0), W(2, 0)]), { x: 0, y: 0 }, {}, 0)).toBeNull();
   });
 });
 

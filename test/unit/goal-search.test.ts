@@ -1,11 +1,8 @@
 // The difficulty-first goal searches: their solutions replay and end on the target, they
-// honour exclude and avoid, they are deterministic, and the tournament's goals measure
-// harder than the push search's.
+// honour exclude and avoid, and they are deterministic.
 import { describe, expect, test } from "bun:test";
 import { Board } from "../../src/board";
-import { difficulty } from "../../src/difficulty";
 import { replay } from "../../src/frozen";
-import { makeGoalFast } from "../../src/goal-fast";
 import { makeGoalDeep, makeGoalHard, makeGoalTournament } from "../../src/goal-search";
 import { fixedLayout, randomLayout, type Placed } from "../../src/layout";
 import { isHorizontal } from "../../src/rules";
@@ -53,19 +50,5 @@ describe("goal search", () => {
         for (const a of avoid) expect(goal.target.x < a.x + a.width && goal.target.x + red.w > a.x && goal.target.y < a.y + a.height && goal.target.y + red.h > a.y).toBe(false);
       }
     }
-  }, 30_000);
-
-  test("the tournament's goals measure at least as hard as the push search's", () => {
-    let harder = 0;
-    for (const tries of [7, 15]) {
-      const layout = randomLayout(tries, { tries });
-      const near = { x: 20, y: 20 };
-      const fast = makeGoalFast(layout, near, { effort: 12, perCell: 6 }, { prune: true, lookahead: true, goalBudget: 50_000 })!;
-      const hard = makeGoalHard(layout, near, {}, 0)!;
-      const a = difficulty(layout, new Map(), fast, { limit: 5_000 });
-      expect(hard.difficulty.score).toBeGreaterThanOrEqual(a.score);
-      if (hard.difficulty.score > a.score) harder++;
-    }
-    expect(harder).toBeGreaterThan(0);
   }, 30_000);
 });

@@ -1,7 +1,7 @@
 # The goal search problem
 
 What the game needs from goal generation, stated without the rest of the game. Current code:
-`src/goal.ts` (`makeGoal`) on top of `src/frozen.ts` (`clearCell`).
+`makeGoalHard` in `src/goal-search.ts`.
 
 ## Board
 
@@ -56,11 +56,10 @@ the problem. It is also slow on dense boards (seconds, often capped at a lower b
 - Deterministic for the same input.
 - Every goal's solution must replay legally from the board it was made for.
 
-## Current approach (for reference only)
+## Current approach
 
-`makeGoalFast` in `src/goal-fast.ts`: for the blocks nearest `near`, push the block one cell
-at a time, clearing each next cell with a bounded backwards search (`clearCellOn`), on a
-cell-indexed board (`src/board.ts`), with pruning. It maximises distance, not difficulty,
-and takes milliseconds. Its solutions are often short (1-3 moves at default density).
-Benchmark cases: `test/experiments/bench-cases.ts`; the difficulty measure on them:
-`test/experiments/difficulty.ts`.
+`makeGoalTournament` in `src/goal-search.ts`: the push search (`pushes` in `src/goal-fast.ts`)
+pushes the blocks nearest `near` one cell at a time, clearing each next cell with a bounded
+backwards search, until a cell cannot be cleared or the push's share of the tick budget is
+spent (no cap on cells). Every cell reached is a candidate; the difficulty measure ranks
+them by difficulty for the distance, roughly and then exactly for the best few.
