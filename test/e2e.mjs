@@ -96,7 +96,7 @@ const browser = await chromium.launch();
   // Random layout with the UI blocks in the middle.
   await fresh();
   const text = await page.evaluate(() => document.body.innerText.trim());
-  check(/^\d+ fps · \d+[smhd] ago · 7 tries$/.test(text), `only text is the debug counter: fps, build age, density ("${text}")`);
+  check(/^\d+ fps · \d+[smhd] ago · 12 tries$/.test(text), `only text is the debug counter: fps, build age, density ("${text}")`);
   await page.waitForTimeout(1200);
   const idleFps = await page.evaluate(() => parseInt(document.querySelector("#fps").textContent));
   check(idleFps > 10, `with nothing moving the counter still counts frames (${idleFps} fps)`);
@@ -156,7 +156,7 @@ const browser = await chromium.launch();
   check(JSON.stringify(rest) === JSON.stringify({
     "someone-else": "keep me",
     "unblock-me:border": "false",
-    "unblock-me:tries": "7",
+    "unblock-me:tries": "12",
     "unblock-me:v6:history": "[]",
     "unblock-me:v6:moved": "[]",
     "unblock-me:v6:seed": String(seedAfter),
@@ -220,11 +220,11 @@ const browser = await chromium.launch();
   check(await page.evaluate(() => document.fullscreenElement === null), "tapping it again leaves fullscreen");
 
   // The density slider: its knob follows the finger, and the board follows the knob.
-  // Track: x from 0.24 to 0.76 of the block, at y 0.7; 7 tries puts the knob at 6/29.
+  // Track: x from 0.24 to 0.76 of the block, at y 0.7; 12 tries puts the knob at 11/29.
   await fresh();
   const sparse = (await page.evaluate(() => unblock.visibleBlocks())).length;
   const track = { left: cell(-1 + 0.24, 0)[0], width: 0.52 * UNIT, y: cell(0, 2.7)[1] };
-  const knob = [track.left + track.width * (6 / 29), track.y];
+  const knob = [track.left + track.width * (11 / 29), track.y];
   let underFinger = [];
   await gesture([knob], [[knob[0] + 10, knob[1]]], {
     steps: 10,
@@ -236,16 +236,16 @@ const browser = await chromium.launch();
     },
   });
   check(underFinger[0] === "background" && underFinger[1] === "reset", `the knob stays under the finger while dragging (${underFinger.join(", ")})`);
-  // 10 px on a 31.2 px track from 6/29: round(1 + 29 * (6/29 + 10/31.2)) = 16.
-  check(await page.evaluate(() => unblock.tries() === 16), `dragging the knob 10 px right sets 16 tries (${await page.evaluate(() => unblock.tries())})`);
+  // 10 px on a 31.2 px track from 11/29: round(1 + 29 * (11/29 + 10/31.2)) = 21.
+  check(await page.evaluate(() => unblock.tries() === 21), `dragging the knob 10 px right sets 21 tries (${await page.evaluate(() => unblock.tries())})`);
   const dense = (await page.evaluate(() => unblock.visibleBlocks())).length;
   check(dense > sparse, `and the board fills up (${sparse} -> ${dense} blocks)`);
   check(await page.evaluate(() => unblock.scene.camera.offsetX === 170), "without panning");
   await page.screenshot({ path: shots + "phone-2d-dense.png" });
   await page.reload();
   await frame(page);
-  check(await page.evaluate(() => unblock.tries() === 16), "the density survives a reload");
-  await gesture([[track.left + track.width * (15 / 29), track.y]], [[track.left - 200, track.y]]);
+  check(await page.evaluate(() => unblock.tries() === 21), "the density survives a reload");
+  await gesture([[track.left + track.width * (20 / 29), track.y]], [[track.left - 200, track.y]]);
   check(await page.evaluate(() => unblock.tries() === 1), "and stops at 1 try at the left end");
 
   // Walls are drawn grey and do not move.

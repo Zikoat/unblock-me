@@ -63,7 +63,7 @@ export const UI_AREA = { x: -1, y: 0, width: 4, height: 3 };
  * blocks and keeps those that fit, so blocks stay inside their chunk and never overlap.
  * More tries, denser board. */
 export const CHUNK = 4;
-export const TRIES = 7;
+export const TRIES = 12;
 /** The range the density slider covers. */
 export const MIN_TRIES = 1;
 export const MAX_TRIES = 30;
