@@ -37,7 +37,7 @@ const UNIT = 60;
 const COLORS = {
   background: [243, 242, 238], dot: [211, 209, 202], border: [185, 182, 173],
   block: [79, 109, 143], moved: [63, 154, 122], dragging: [224, 130, 61],
-  goal: [214, 69, 69], circle: [58, 57, 54], reset: [29, 29, 31], wall: [95, 93, 87], star: [242, 182, 50], stuck: [141, 151, 163],
+  goal: [214, 69, 69], reset: [29, 29, 31], wall: [95, 93, 87], star: [242, 182, 50], stuck: [141, 151, 163],
   done: [142, 63, 60],
 };
 let failures = 0;
@@ -379,8 +379,23 @@ const browser = await chromium.launch();
   await page.waitForTimeout(450);
   check((await block(page, "a")).x === -1 && !(await block(page, "a")).moved, "and the first, back to the start");
   check(await page.evaluate(() => document.querySelector("#undo").disabled), "and then it is dimmed again");
-  await tap(cell(-1.5, -3));
-  await expectColor(page, cell(-1.5, -3), "circle", "a tap on the background puts the circle there");
+  // A tap on the background: a yellow ring spreads out from it and fades; nothing stays.
+  const drop = cell(-1.5, -3);
+  const ringWatch = page.evaluate(([x, y]) => new Promise((resolve) => {
+    const c = document.querySelector("canvas"), d = c.width / c.clientWidth;
+    let frames = 0, yellow = 0;
+    const look = () => {
+      const data = c.getContext("2d").getImageData(Math.round(x * d), Math.round((y - 40) * d), 1, Math.round(40 * d)).data;
+      for (let i = 0; i < data.length; i += 4) if (data[i] > 200 && data[i + 2] < 170 && data[i] - data[i + 2] > 60) { yellow++; break; }
+      if (++frames < 60) requestAnimationFrame(look); else resolve(yellow);
+    };
+    look();
+  }), drop);
+  await tap(drop);
+  const ringFrames = await ringWatch;
+  check(ringFrames > 3, `a tap on the background sends out a yellow ripple (${ringFrames} frames with yellow above the tap)`);
+  await page.waitForTimeout(300);
+  await expectColor(page, drop, "background", "and nothing stays where it landed");
 
   // An undo that happens entirely out of view shows a small green arrow towards it while it runs.
   await place([...UI, Wall(-1, 4), H("a", 0, 4), Wall(4, 4)]);

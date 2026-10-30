@@ -21,7 +21,6 @@ export const COLORS = {
   done: "#8e3f3c",
   doneTarget: "rgba(120, 66, 60, 0.10)",
   doneLine: "rgba(120, 66, 60, 0.32)",
-  circle: "#3a3936",
   star: "#f2b632",
   ui: "#1d1d1f",
   wall: "#5f5d57",
@@ -36,6 +35,8 @@ export type Sparkle = { x: number; y: number; dx: number; dy: number; born: numb
 
 /** `density` is the slider's position, 0..1. `sliding` draws one block somewhere between
  * cells while a tap's slide is animated. `now` times the sparkles. */
+/** How long a tap's ripple lasts, in ms. */
+export const RIPPLE_MS = 600;
 /** How long a new red block's heartbeat lasts, in ms. */
 export const THROB_MS = 450;
 /** One heartbeat: up to 15% larger and back, quick out, slower settle. */
@@ -44,7 +45,7 @@ const throbScale = (t: number) => (t <= 0 || t >= 1 ? 1 : 1 + 0.15 * Math.sin(Ma
 export function draw(
   canvas: HTMLCanvasElement,
   scene: Scene,
-  { fullscreen, density, fps = true, sliding, sparkles = [], throb = null, now = 0 }: {
+  { fullscreen, density, fps = true, sliding, sparkles = [], throb = null, ripple = null, now = 0 }: {
     fullscreen: boolean;
     density: number;
     /** Whether the fps counter is showing. */
@@ -54,6 +55,8 @@ export function draw(
     sparkles?: Sparkle[];
     /** A block that just became red, and when, for one heartbeat. */
     throb?: { id: string; born: number } | null;
+    /** When the last background tap's ripple started. */
+    ripple?: { born: number } | null;
     now?: number;
   },
 ): void {
@@ -185,11 +188,23 @@ export function draw(
   }
   for (const s of sparkles) sparkle(ctx, s, now);
 
-  if (scene.circle) {
-    ctx.fillStyle = COLORS.circle;
-    ctx.beginPath();
-    ctx.arc(scene.circle.x, scene.circle.y, 12, 0, Math.PI * 2);
-    ctx.fill();
+  // A tap on the background: a small yellow ring spreading out and fading, like a drop
+  // landing in water. Nothing stays.
+  if (ripple && scene.circle) {
+    const t = (now - ripple.born) / RIPPLE_MS;
+    if (t >= 0 && t < 1) {
+      const e = 1 - Math.pow(1 - t, 3);
+      for (const [delay, size] of [[0, 1], [0.18, 0.6]] as const) {
+        const k = (t - delay) / (1 - delay);
+        if (k <= 0) continue;
+        const spread = 1 - Math.pow(1 - k, 3);
+        ctx.strokeStyle = `rgba(242, 182, 50, ${(1 - k) * 0.9})`;
+        ctx.lineWidth = (3 - 2 * e) / scene.camera.scale;
+        ctx.beginPath();
+        ctx.arc(scene.circle.x, scene.circle.y, ((4 + 26 * spread) * size) / scene.camera.scale, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
   }
 
   // The culling border is a screen thing, so it is drawn in screen pixels.
