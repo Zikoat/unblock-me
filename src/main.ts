@@ -6,7 +6,7 @@ import { viewCentre } from "./goal";
 import type { GoalRequest } from "./goal-worker";
 import { Gestures } from "./gestures";
 import { fixedLayout, MAX_TRIES, MIN_TRIES, randomLayout, TRIES, UNIT, type Placed, type Ui } from "./layout";
-import { draw, RIPPLE_MS, SHAKE_MS, THROB_MS, goalBand, redArrow, uiArrow, type Sparkle } from "./render";
+import { CUE_MS, draw, RIPPLE_MS, SHAKE_MS, THROB_MS, goalBand, redArrow, uiArrow, type Sparkle } from "./render";
 import { ease, slideDuration } from "./slide";
 import { blockAt, blocksIn, slideRange, type Move } from "./rules";
 import { borderOnScreen, goalSolved, latticeRect, newScene, relayout, resize, restart, undo, visibleBlocks, whereIs } from "./scene";
@@ -211,6 +211,7 @@ function showGoal(goal: Goal | null): void {
   }
   // The new red block throbs once; its clock starts at the first frame drawn.
   if (scene.goal) throb = { id: scene.goal.id, born: -1 };
+  if (scene.goal) cue = { id: scene.goal.id, born: -1 };
   save();
   redraw();
   goalWaiters.forEach((resolve) => resolve());
@@ -296,6 +297,8 @@ function sliding(now: number): { id: string; x: number; y: number; from: Point; 
 // target keeps a check.
 let sparkles: Sparkle[] = [];
 let throb: { id: string; born: number } | null = null;
+// Just after the throb, a trail from the new red block towards its target shows the way.
+let cue: { id: string; born: number } | null = null;
 // Each tap's ripple runs to its end, however many taps come in the meantime.
 let ripples: { at: Point; born: number }[] = [];
 // A tapped block that cannot move shakes.
@@ -540,6 +543,8 @@ function redraw(): void {
     const moving = sliding(now);
     if (throb && throb.born < 0) throb.born = now;
     if (throb && now > throb.born + THROB_MS) throb = null;
+    if (cue && cue.born < 0) cue.born = now;
+    if (cue && now > cue.born + CUE_MS) cue = null;
     for (const r of ripples) if (r.born < 0) r.born = now;
     ripples = ripples.filter((r) => now <= r.born + RIPPLE_MS);
     if (shake && shake.born < 0) shake.born = now;
@@ -551,6 +556,7 @@ function redraw(): void {
       sliding: moving,
       sparkles,
       throb,
+      cue,
       ripples,
       shake,
       now,
@@ -559,7 +565,7 @@ function redraw(): void {
     undoButton.disabled = scene.history.length === 0;
     const debug = (window as unknown as { unblock: { frames: { t: number; x: number; y: number }[] | null } }).unblock;
     if (debug.frames && moving) debug.frames.push({ t: now, x: moving.x, y: moving.y });
-    if (animation || sparkles.length || flight || throb || ripples.length || shake) redraw();
+    if (animation || sparkles.length || flight || throb || cue || ripples.length || shake) redraw();
   });
 }
 

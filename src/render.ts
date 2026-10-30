@@ -35,6 +35,10 @@ export type Sparkle = { x: number; y: number; dx: number; dy: number; born: numb
 
 /** `density` is the slider's position, 0..1. `sliding` draws one block somewhere between
  * cells while a tap's slide is animated. `now` times the sparkles. */
+/** The way-to-target cue: it starts CUE_DELAY ms after the red block appears (once the
+ * throb has peaked), grows towards the target, holds, and fades; CUE_MS in all. */
+const CUE_DELAY = 200, CUE_GROW = 450, CUE_HOLD = 700, CUE_FADE = 450;
+export const CUE_MS = CUE_DELAY + CUE_GROW + CUE_HOLD + CUE_FADE;
 /** How long a stuck block shakes, in ms. */
 export const SHAKE_MS = 360;
 /** How long a tap's ripple lasts, in ms. */
@@ -47,7 +51,7 @@ const throbScale = (t: number) => (t <= 0 || t >= 1 ? 1 : 1 + 0.15 * Math.sin(Ma
 export function draw(
   canvas: HTMLCanvasElement,
   scene: Scene,
-  { fullscreen, density, fps = true, sliding, sparkles = [], throb = null, ripples = [], shake = null, now = 0 }: {
+  { fullscreen, density, fps = true, sliding, sparkles = [], throb = null, cue = null, ripples = [], shake = null, now = 0 }: {
     fullscreen: boolean;
     density: number;
     /** Whether the fps counter is showing. */
@@ -57,6 +61,8 @@ export function draw(
     sparkles?: Sparkle[];
     /** A block that just became red, and when, for one heartbeat. */
     throb?: { id: string; born: number } | null;
+    /** A new red block's way to its target, shown for a moment from `born`. */
+    cue?: { id: string; born: number } | null;
     /** Background taps' ripples: where (world units) and when each started. */
     ripples?: { at: { x: number; y: number }; born: number }[];
     /** A block that was tapped but cannot move, shaking since `born`. */
@@ -145,6 +151,33 @@ export function draw(
     if (horizontal) ctx.roundRect(a, hovered.y * UNIT + GAP, b - a, hovered.h * UNIT - 2 * GAP, 8);
     else ctx.roundRect(hovered.x * UNIT + GAP, a, hovered.w * UNIT - 2 * GAP, b - a, 8);
     ctx.fill();
+  }
+
+  // The new red block's way to its target: a red trail growing from it along its lane.
+  const cueing = cue && goal && cue.id === goal.id ? blocks.find((b) => b.id === goal.id) : null;
+  if (cue && goal && cueing) {
+    const t = now - cue.born - CUE_DELAY;
+    if (t > 0) {
+      const grow = 1 - Math.pow(1 - Math.min(1, t / CUE_GROW), 3);
+      const fade = 1 - Math.max(0, Math.min(1, (t - CUE_GROW - CUE_HOLD) / CUE_FADE));
+      const horizontal = cueing.w > cueing.h;
+      const at = horizontal ? cueing.x : cueing.y, aim = horizontal ? goal.target.x : goal.target.y;
+      const size = horizontal ? cueing.w : cueing.h;
+      if (aim !== at && fade > 0) {
+        const forward = aim > at;
+        const near = forward ? at + size : at;
+        const far = near + ((forward ? aim + size : aim) - near) * grow;
+        const g = horizontal ? ctx.createLinearGradient(near * UNIT, 0, far * UNIT, 0) : ctx.createLinearGradient(0, near * UNIT, 0, far * UNIT);
+        g.addColorStop(0, `rgba(214, 69, 69, ${0.4 * fade})`);
+        g.addColorStop(1, "rgba(214, 69, 69, 0)");
+        ctx.fillStyle = g;
+        const [a, b] = [Math.min(near, far) * UNIT, Math.max(near, far) * UNIT];
+        ctx.beginPath();
+        if (horizontal) ctx.roundRect(a, cueing.y * UNIT + GAP, b - a, cueing.h * UNIT - 2 * GAP, 8);
+        else ctx.roundRect(cueing.x * UNIT + GAP, a, cueing.w * UNIT - 2 * GAP, b - a, 8);
+        ctx.fill();
+      }
+    }
   }
 
   // A throbbing block grows over its neighbours, so it goes on top.
