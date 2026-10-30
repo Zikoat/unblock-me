@@ -1,4 +1,5 @@
-// Reports: Markdown files in reports/ become pages in dist/reports/, with a list of them.
+// Reports: pages in reports/ go to dist/reports/, with a list of them. A report is an HTML
+// page (copied as it is) or Markdown (made into a page).
 // The Markdown is the plain kind the analyses use: headings, paragraphs, lists, tables,
 // code blocks, **bold**, *italic*, `code` and [links](url).
 import { mkdir, readdir, readFile, rm, stat } from "node:fs/promises";
@@ -102,14 +103,21 @@ export async function buildReports(from: string, to: string): Promise<void> {
   await rm(to, { recursive: true, force: true });
   await mkdir(to, { recursive: true });
   const reports: { file: string; title: string; changed: Date }[] = [];
-  for (const name of (await readdir(from).catch(() => [])).filter((f) => f.endsWith(".md"))) {
-    const md = await readFile(join(from, name), "utf8");
-    const title = md.match(/^# (.+)$/m)?.[1] ?? name;
-    const file = name.replace(/\.md$/, ".html");
-    await Bun.write(join(to, file), page(title, "./", markdown(md)));
+  for (const name of await readdir(from).catch(() => [])) {
+    const text = await readFile(join(from, name), "utf8");
+    let title: string, file: string;
+    if (name.endsWith(".html")) {
+      title = text.match(/<title>(.*?)<\/title>/)?.[1] ?? name;
+      file = name;
+      await Bun.write(join(to, file), text);
+    } else if (name.endsWith(".md")) {
+      title = escape(text.match(/^# (.+)$/m)?.[1] ?? name);
+      file = name.replace(/\.md$/, ".html");
+      await Bun.write(join(to, file), page(title, "./", markdown(text)));
+    } else continue;
     reports.push({ file, title, changed: (await stat(join(from, name))).mtime });
   }
   reports.sort((a, b) => b.changed.getTime() - a.changed.getTime());
-  const list = reports.map((r) => `<li><a href="${escape(r.file)}">${inline(r.title)}<span class="meta">${r.changed.toISOString().slice(0, 10)}</span></a></li>`).join("");
+  const list = reports.map((r) => `<li><a href="${escape(r.file)}">${r.title}<span class="meta">${r.changed.toISOString().slice(0, 10)}</span></a></li>`).join("");
   await Bun.write(join(to, "index.html"), page("Unblock Me reports", "../", `<h1>Reports</h1>\n<ul class="list">${list || "<li>No reports yet.</li>"}</ul>`));
 }

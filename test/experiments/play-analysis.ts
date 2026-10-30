@@ -1,5 +1,5 @@
 // Real play against the difficulty measure: every goal in a play-data file, re-measured with
-// the current code, next to how it was played (docs/play-analysis.md). Run capped, one step at
+// the current code, next to how it was played (reports/play-analysis.html). Run capped, one step at
 // a time (copy the play data somewhere first: the game keeps uploading over it):
 //   scripts/capped.sh 1500 1500 bun test/experiments/play-analysis.ts regen <play.json> <regen.json>
 //   scripts/capped.sh 2500 3000 bun test/experiments/play-analysis.ts measure <play.json> <regen.json> <out.json> [limit 1M] [good limit 20k] [goals]

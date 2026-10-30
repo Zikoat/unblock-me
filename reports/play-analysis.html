@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Play analysis</title>
+<meta name="description" content="42 goals played on 30 October, against the difficulty measure and stars">
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+    --grid: #e1e0d9; --axis: #c3c2b7; --ring: rgba(11,11,11,0.10);
+    --s1: #2a78d6; --s2: #eb6834;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+      --grid: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,0.10);
+      --s1: #3987e5; --s2: #d95926;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 24px 16px 56px; }
+  .back { color: var(--ink-2); text-decoration: none; font-size: 14px; }
+  h1 { font-size: 24px; margin: 8px 0 2px; }
+  .lede { color: var(--ink-2); margin: 0 0 18px; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .stat { background: var(--surface); border: 1px solid var(--ring); border-radius: 12px; padding: 12px 14px; }
+  .stat b { display: block; font-size: 28px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .stat span { color: var(--ink-2); font-size: 13px; }
+  .card { background: var(--surface); border: 1px solid var(--ring); border-radius: 12px; padding: 16px; margin-bottom: 14px; }
+  h2 { font-size: 16px; margin: 0; }
+  .sub { color: var(--ink-2); font-size: 13px; margin: 2px 0 10px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13px; color: var(--ink-2); margin-bottom: 4px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--key); margin-right: 6px; vertical-align: -1px; }
+  .legend i.bar { border-radius: 2px; }
+  svg { display: block; width: 100%; overflow: visible; touch-action: pan-y; }
+  svg text { font: 11px system-ui, sans-serif; fill: var(--muted); font-variant-numeric: tabular-nums; }
+  svg text.label { fill: var(--ink-2); font-size: 12px; }
+  ul.conclusions { margin: 0; padding-left: 20px; }
+  ul.conclusions li { margin-bottom: 6px; }
+  .tip { position: fixed; pointer-events: none; background: var(--surface); border: 1px solid var(--ring); border-radius: 8px; padding: 7px 10px; font-size: 13px; box-shadow: 0 4px 16px rgba(0,0,0,.12); display: none; z-index: 2; font-variant-numeric: tabular-nums; }
+  .tip div:first-child { color: var(--ink-2); }
+</style>
+</head>
+<body>
+<main>
+  <a class="back" href="./">← All reports</a>
+  <h1>Play analysis</h1>
+  <p class="lede">42 goals reached on 30 October, re-measured with a search of up to a million boards.</p>
+
+  <div class="stats" id="stats"></div>
+
+  <section class="card">
+    <h2>Conclusions</h2>
+    <ul class="conclusions">
+      <li>The fewest moves explains how hard a goal felt as well as the difficulty score does. Distance explains almost nothing.</li>
+      <li>Extra moves grow with the fewest moves: about half a move on easy goals, 6 on hard ones (median).</li>
+      <li>Counting choices as blocks in the red block's chain (7–15 a move) predicts extra moves best. The game counted slide destinations (45–77) and predicted worst. <b>Next.</b></li>
+      <li>The old stars graded the generator, not the player: most stars were never on offer. Stars now come from the fewest moves, 1 to 5. <b>Changed.</b></li>
+      <li>With the 50k cap, the game never knew the fewest moves of a hard goal. <b>Being tuned.</b></li>
+      <li>The first move after each page load was missing from the log. <b>Fixed.</b></li>
+    </ul>
+  </section>
+
+  <section class="card">
+    <h2>Moves used against the fewest</h2>
+    <p class="sub">On the dashed line: solved in the fewest moves. A line through a dot: the fewest is only known as a range.</p>
+    <div class="legend"><span><i style="--key: var(--s1)"></i>Fewest known exactly</span><span><i style="--key: var(--s2)"></i>Fewest is a range</span></div>
+    <svg id="used" height="300" role="img" aria-label="Moves used against fewest moves, per goal"></svg>
+  </section>
+
+  <section class="card">
+    <h2>Extra moves, by how hard the goal was</h2>
+    <p class="sub">Median moves over the fewest</p>
+    <svg id="excess" height="170" role="img" aria-label="Median extra moves for goals of up to 5, 6 to 12, and over 12 fewest moves"></svg>
+  </section>
+
+  <section class="card">
+    <h2>What predicts time spent</h2>
+    <p class="sub">Rank correlation with active time per goal; whiskers show the 90% range</p>
+    <svg id="predict" height="250" role="img" aria-label="Correlation of each measure with active time"></svg>
+  </section>
+
+  <section class="card">
+    <h2>Choices a move, by how they are counted</h2>
+    <p class="sub">Typical range per board on hard goals. The player's own reasoning is in the low single digits to teens.</p>
+    <svg id="choices" height="250" role="img" aria-label="Typical range of choices a move for four ways of counting"></svg>
+  </section>
+
+  <section class="card">
+    <h2>Stars, old rule against new</h2>
+    <p class="sub">Average per reached goal, as a share of the most stars possible (10 before, 5 now)</p>
+    <div class="legend"><span><i class="bar" style="--key: var(--s1)"></i>Worth</span><span><i class="bar" style="--key: var(--s2)"></i>Earned</span></div>
+    <svg id="stars" height="170" role="img" aria-label="Stars worth and earned, old rule against new"></svg>
+  </section>
+</main>
+<div class="tip" id="tip" role="status"></div>
+<script>
+const GOALS = [{"n": 0, "t": 1793362533986, "gen": "?", "tries": 7, "outcome": "reached", "distance": 12, "used": 2, "L": 2, "U": 2, "exact": true, "gameM": null, "gameExact": false, "slides": 14.0, "blocks": 3.0, "chain": 1.5, "active": 3, "think": 2, "undos": 0, "worthNew": 1, "earnedNew": 1}, {"n": 1, "t": 1793362537069, "gen": "push", "tries": 7, "outcome": "reached", "distance": 12, "used": 3, "L": 3, "U": 3, "exact": true, "gameM": 3, "gameExact": true, "slides": 25.0, "blocks": 5.0, "chain": 2.6666666666666665, "active": 6, "think": 3, "undos": 0, "worthNew": 1, "earnedNew": 1}, {"n": 2, "t": 1793362542587, "gen": "push", "tries": 7, "outcome": "reached", "distance": 12, "used": 5, "L": 4, "U": 4, "exact": true, "gameM": 4, "gameExact": true, "slides": 20.25, "blocks": 5.0, "chain": 3.0, "active": 16, "think": 7, "undos": 0, "worthNew": 2, "earnedNew": 2}, {"n": 3, "t": 1793362558985, "gen": "push", "tries": 7, "outcome": "reached", "distance": 12, "used": 4, "L": 3, "U": 3, "exact": true, "gameM": 3, "gameExact": true, "slides": 22.666666666666668, "blocks": 3.6666666666666665, "chain": 2.0, "active": 12, "think": 2, "undos": 0, "worthNew": 1, "earnedNew": 1}, {"n": 4, "t": 1793362571302, "gen": "push", "tries": 7, "outcome": "reached", "distance": 12, "used": 7, "L": 4, "U": 4, "exact": true, "gameM": 4, "gameExact": true, "slides": 24.25, "blocks": 4.5, "chain": 3.25, "active": 12, "think": 3, "undos": 0, "worthNew": 2, "earnedNew": 1}, {"n": 5, "t": 1793362583335, "gen": "push", "tries": 7, "outcome": "reached", "distance": 12, "used": 1, "L": 1, "U": 1, "exact": true, "gameM": 1, "gameExact": true, "slides": 14.0, "blocks": 1.0, "chain": 1.0, "active": 3, "think": 2, "undos": 0, "worthNew": 1, "earnedNew": 1}, {"n": 6, "t": 1793362586018, "gen": "push", "tries": 7, "outcome": "reached", "distance": 12, "used": 4, "L": 4, "U": 4, "exact": true, "gameM": 4, "gameExact": true, "slides": 28.25, "blocks": 4.75, "chain": 3.0, "active": 7, "think": 4, "undos": 0, "worthNew": 2, "earnedNew": 2}, {"n": 7, "t": 1793362592851, "gen": "push", "tries": 7, "outcome": "reached", "distance": 12, "used": 6, "L": 5, "U": 5, "exact": true, "gameM": 5, "gameExact": true, "slides": 21.2, "blocks": 4.0, "chain": 3.2, "active": 8, "think": 3, "undos": 0, "worthNew": 2, "earnedNew": 2}, {"n": 8, "t": 1793362600931, "gen": "push", "tries": 7, "outcome": "reached", "distance": 12, "used": 9, "L": 5, "U": 5, "exact": true, "gameM": 5, "gameExact": true, "slides": 23.6, "blocks": 7.4, "chain": 4.8, "active": 13, "think": 5, "undos": 0, "worthNew": 2, "earnedNew": 1}, {"n": 9, "t": 1793362614401, "gen": "push", "tries": 7, "outcome": "reached", "distance": 12, "used": 3, "L": 3, "U": 3, "exact": true, "gameM": 3, "gameExact": true, "slides": 13.333333333333334, "blocks": 3.0, "chain": 2.0, "active": 8, "think": 6, "undos": 0, "worthNew": 1, "earnedNew": 1}, {"n": 10, "t": 1793362622028, "gen": "push", "tries": 7, "outcome": "reached", "distance": 12, "used": 4, "L": 4, "U": 4, "exact": true, "gameM": 4, "gameExact": true, "slides": 26.5, "blocks": 4.75, "chain": 3.5, "active": 8, "think": 5, "undos": 0, "worthNew": 2, "earnedNew": 2}, {"n": 11, "t": 1793362630340, "gen": "push", "tries": 7, "outcome": "abandoned", "distance": 12, "used": null, "L": 5, "U": 5, "exact": true, "gameM": 5, "gameExact": true, "slides": 27.6, "blocks": 7.6, "chain": 3.8, "active": 41, "think": null, "undos": 0, "worthNew": 2, "earnedNew": null}, {"n": 12, "t": 1793362671731, "gen": "push", "tries": 7, "outcome": "reached", "distance": 12, "used": 2, "L": 2, "U": 2, "exact": true, "gameM": 2, "gameExact": true, "slides": 18.0, "blocks": 5.5, "chain": 1.5, "active": 13, "think": 12, "undos": 0, "worthNew": 1, "earnedNew": 1}, {"n": 13, "t": 1793362685115, "gen": "push", "tries": 7, "outcome": "abandoned", "distance": 12, "used": null, "L": 4, "U": 4, "exact": true, "gameM": 4, "gameExact": true, "slides": 15.75, "blocks": 5.5, "chain": 3.5, "active": 1, "think": null, "undos": 0, "worthNew": 2, "earnedNew": null}, {"n": 15, "t": 1793362735132, "gen": "push", "tries": 30, "outcome": "reached", "distance": 11, "used": 14, "L": 12, "U": 13, "exact": false, "gameM": 11, "gameExact": false, "slides": 38.23076923076923, "blocks": 20.153846153846153, "chain": 7.769230769230769, "active": 58, "think": 44, "undos": 0, "worthNew": 5, "earnedNew": 5}, {"n": 16, "t": 1793362792797, "gen": "push", "tries": 30, "outcome": "reached", "distance": 12, "used": 27, "L": 10, "U": 12, "exact": false, "gameM": 9, "gameExact": false, "slides": 54.583333333333336, "blocks": 26.5, "chain": 5.333333333333333, "active": 182, "think": 60, "undos": 0, "worthNew": 4, "earnedNew": 2}, {"n": 17, "t": 1793363365288, "gen": "push", "tries": 30, "outcome": "reached", "distance": 12, "used": 23, "L": 11, "U": 11, "exact": true, "gameM": 11, "gameExact": true, "slides": 33.36363636363637, "blocks": 18.09090909090909, "chain": 9.181818181818182, "active": 55, "think": 18, "undos": 0, "worthNew": 4, "earnedNew": 2}, {"n": 18, "t": 1793363420417, "gen": "push", "tries": 30, "outcome": "reached", "distance": 12, "used": 17, "L": 12, "U": 16, "exact": false, "gameM": 11, "gameExact": false, "slides": 44.875, "blocks": 21.625, "chain": 6.75, "active": 20, "think": 4, "undos": 0, "worthNew": 5, "earnedNew": 5}, {"n": 19, "t": 1793363440234, "gen": "push", "tries": 30, "outcome": "reached", "distance": 12, "used": 25, "L": 12, "U": 18, "exact": false, "gameM": 11, "gameExact": false, "slides": 50.333333333333336, "blocks": 24.72222222222222, "chain": 8.444444444444445, "active": 53, "think": 11, "undos": 0, "worthNew": 5, "earnedNew": 4}, {"n": 20, "t": 1793363492883, "gen": "push", "tries": 30, "outcome": "reached", "distance": 12, "used": 27, "L": 11, "U": 11, "exact": true, "gameM": 11, "gameExact": true, "slides": 33.45454545454545, "blocks": 16.90909090909091, "chain": 8.636363636363637, "active": 57, "think": 21, "undos": 0, "worthNew": 4, "earnedNew": 2}, {"n": 21, "t": 1793363549865, "gen": "push", "tries": 30, "outcome": "abandoned", "distance": 12, "used": null, "L": 13, "U": 17, "exact": false, "gameM": 12, "gameExact": false, "slides": 60.8235294117647, "blocks": 31.529411764705884, "chain": 10.235294117647058, "active": 16, "think": null, "undos": 0, "worthNew": 5, "earnedNew": null}, {"n": 22, "t": 1793363565913, "gen": "push", "tries": 12, "outcome": "reached", "distance": 12, "used": 11, "L": 8, "U": 8, "exact": true, "gameM": 8, "gameExact": true, "slides": 27.625, "blocks": 8.5, "chain": 6.0, "active": 56, "think": 21, "undos": 0, "worthNew": 3, "earnedNew": 2}, {"n": 23, "t": 1793363621780, "gen": "hard \u03b10", "tries": 12, "outcome": "reached", "distance": 12, "used": 21, "L": 15, "U": 15, "exact": true, "gameM": 14, "gameExact": false, "slides": 45.86666666666667, "blocks": 19.066666666666666, "chain": 7.2, "active": 92, "think": 60, "undos": 0, "worthNew": 5, "earnedNew": 4}, {"n": 24, "t": 1793364656595, "gen": "hard \u03b10", "tries": 12, "outcome": "abandoned", "distance": 12, "used": null, "L": 16, "U": 18, "exact": false, "gameM": 14, "gameExact": false, "slides": 63.77777777777778, "blocks": 24.11111111111111, "chain": 8.444444444444445, "active": 60, "think": null, "undos": 0, "worthNew": 5, "earnedNew": null}, {"n": 25, "t": 1793366905749, "gen": "hard \u03b10", "tries": 12, "outcome": "reached", "distance": 12, "used": 26, "L": 16, "U": 24, "exact": false, "gameM": 15, "gameExact": false, "slides": 121.54166666666667, "blocks": 51.625, "chain": 15.083333333333334, "active": 39, "think": 4, "undos": 0, "worthNew": 5, "earnedNew": 5}, {"n": 26, "t": 1793366944667, "gen": "hard \u03b10", "tries": 12, "outcome": "reached", "distance": 12, "used": 26, "L": 13, "U": 18, "exact": false, "gameM": 12, "gameExact": false, "slides": 54.0, "blocks": 22.333333333333332, "chain": 14.61111111111111, "active": 88, "think": 60, "undos": 0, "worthNew": 5, "earnedNew": 3}, {"n": 27, "t": 1793367039272, "gen": "hard \u03b1.67", "tries": 12, "outcome": "reached", "distance": 5, "used": 19, "L": 12, "U": 13, "exact": false, "gameM": 11, "gameExact": false, "slides": 50.38461538461539, "blocks": 19.692307692307693, "chain": 8.076923076923077, "active": 71, "think": 60, "undos": 0, "worthNew": 5, "earnedNew": 3}, {"n": 28, "t": 1793367128895, "gen": "hard \u03b10", "tries": 12, "outcome": "reached", "distance": 12, "used": 23, "L": 14, "U": 16, "exact": false, "gameM": 13, "gameExact": false, "slides": 55.25, "blocks": 23.8125, "chain": 7.375, "active": 22, "think": 6, "undos": 0, "worthNew": 5, "earnedNew": 3}, {"n": 29, "t": 1793367150486, "gen": "hard \u03b10", "tries": 12, "outcome": "reached", "distance": 12, "used": 21, "L": 14, "U": 19, "exact": false, "gameM": 13, "gameExact": false, "slides": 61.21052631578947, "blocks": 27.789473684210527, "chain": 9.736842105263158, "active": 48, "think": 30, "undos": 0, "worthNew": 5, "earnedNew": 5}, {"n": 30, "t": 1793367198874, "gen": "hard \u03b10", "tries": 12, "outcome": "reached", "distance": 12, "used": 33, "L": 14, "U": 14, "exact": true, "gameM": 14, "gameExact": false, "slides": 48.86666666666667, "blocks": 22.866666666666667, "chain": 10.8, "active": 44, "think": 2, "undos": 0, "worthNew": 5, "earnedNew": 2}, {"n": 31, "t": 1793367242536, "gen": "hard \u03b10", "tries": 12, "outcome": "reached", "distance": 12, "used": 34, "L": 16, "U": 22, "exact": false, "gameM": 15, "gameExact": false, "slides": 53.18181818181818, "blocks": 25.272727272727273, "chain": 8.727272727272727, "active": 43, "think": 5, "undos": 0, "worthNew": 5, "earnedNew": 3}, {"n": 32, "t": 1793367285949, "gen": "hard \u03b10", "tries": 12, "outcome": "reached", "distance": 11, "used": 17, "L": 14, "U": 16, "exact": false, "gameM": 14, "gameExact": false, "slides": 59.6875, "blocks": 21.8125, "chain": 9.1875, "active": 48, "think": 26, "undos": 0, "worthNew": 5, "earnedNew": 5}, {"n": 33, "t": 1793367334264, "gen": "hard \u03b10", "tries": 12, "outcome": "reached", "distance": 12, "used": 30, "L": 15, "U": 17, "exact": false, "gameM": 14, "gameExact": false, "slides": 51.88235294117647, "blocks": 25.41176470588235, "chain": 7.352941176470588, "active": 82, "think": 54, "undos": 0, "worthNew": 5, "earnedNew": 3}, {"n": 34, "t": 1793367416000, "gen": "hard \u03b10", "tries": 12, "outcome": "reached", "distance": 12, "used": 19, "L": 15, "U": 18, "exact": false, "gameM": 15, "gameExact": false, "slides": 77.05555555555556, "blocks": 30.61111111111111, "chain": 13.444444444444445, "active": 18, "think": 4, "undos": 0, "worthNew": 5, "earnedNew": 5}, {"n": 35, "t": 1793367433613, "gen": "hard \u03b10", "tries": 12, "outcome": "reached", "distance": 12, "used": 24, "L": 14, "U": 18, "exact": false, "gameM": 14, "gameExact": false, "slides": 85.55555555555556, "blocks": 30.944444444444443, "chain": 13.444444444444445, "active": 35, "think": 9, "undos": 0, "worthNew": 5, "earnedNew": 4}, {"n": 36, "t": 1793367468729, "gen": "hard \u03b10", "tries": 12, "outcome": "reached", "distance": 12, "used": 36, "L": 15, "U": 20, "exact": false, "gameM": 14, "gameExact": false, "slides": 67.25, "blocks": 30.3, "chain": 8.05, "active": 40, "think": 9, "undos": 0, "worthNew": 5, "earnedNew": 3}, {"n": 37, "t": 1793367508762, "gen": "hard \u03b1.67", "tries": 12, "outcome": "reached", "distance": 2, "used": 6, "L": 6, "U": 6, "exact": true, "gameM": 8, "gameExact": true, "slides": 14.875, "blocks": 7.25, "chain": 1.75, "active": 9, "think": 7, "undos": 0, "worthNew": 2, "earnedNew": 2}, {"n": 38, "t": 1793367517932, "gen": "hard \u03b1.67", "tries": 12, "outcome": "reached", "distance": 4, "used": 17, "L": 9, "U": 9, "exact": true, "gameM": 8, "gameExact": false, "slides": 19.333333333333332, "blocks": 11.11111111111111, "chain": 5.333333333333333, "active": 16, "think": 3, "undos": 0, "worthNew": 3, "earnedNew": 2}, {"n": 39, "t": 1793367534493, "gen": "hard \u03b1.67", "tries": 12, "outcome": "reached", "distance": 12, "used": 44, "L": 15, "U": 19, "exact": false, "gameM": 14, "gameExact": false, "slides": 64.84210526315789, "blocks": 26.736842105263158, "chain": 12.263157894736842, "active": 97, "think": 5, "undos": 0, "worthNew": 5, "earnedNew": 2}, {"n": 40, "t": 1793367651125, "gen": "hard \u03b1.67", "tries": 12, "outcome": "reached", "distance": 4, "used": 10, "L": 8, "U": 8, "exact": true, "gameM": 8, "gameExact": true, "slides": 33.75, "blocks": 15.0, "chain": 7.125, "active": 11, "think": 3, "undos": 0, "worthNew": 3, "earnedNew": 2}, {"n": 41, "t": 1793367662015, "gen": "hard \u03b1.67", "tries": 12, "outcome": "abandoned", "distance": 12, "used": null, "L": 13, "U": 20, "exact": false, "gameM": 13, "gameExact": false, "slides": 62.6, "blocks": 23.55, "chain": 6.95, "active": 27, "think": null, "undos": 0, "worthNew": 5, "earnedNew": null}, {"n": 42, "t": 1793367688946, "gen": "hard \u03b1.67", "tries": 12, "outcome": "reached", "distance": 8, "used": 21, "L": 13, "U": 13, "exact": true, "gameM": 11, "gameExact": false, "slides": 37.38461538461539, "blocks": 14.23076923076923, "chain": 7.846153846153846, "active": 113, "think": 60, "undos": 0, "worthNew": 5, "earnedNew": 3}, {"n": 43, "t": 1793368084516, "gen": "hard \u03b1.67", "tries": 12, "outcome": "reached", "distance": 1, "used": 5, "L": 4, "U": 4, "exact": true, "gameM": 4, "gameExact": true, "slides": 18.0, "blocks": 6.75, "chain": 3.0, "active": 7, "think": 3, "undos": 0, "worthNew": 2, "earnedNew": 2}, {"n": 44, "t": 1793368091916, "gen": "hard \u03b1.67", "tries": 12, "outcome": "reached", "distance": 1, "used": 8, "L": 7, "U": 7, "exact": true, "gameM": 7, "gameExact": true, "slides": 9.857142857142858, "blocks": 6.857142857142857, "chain": 2.7142857142857144, "active": 7, "think": 4, "undos": 0, "worthNew": 3, "earnedNew": 3}, {"n": 45, "t": 1793368099352, "gen": "hard \u03b1.67", "tries": 12, "outcome": "reached", "distance": 4, "used": 11, "L": 9, "U": 9, "exact": true, "gameM": 9, "gameExact": true, "slides": 18.333333333333332, "blocks": 10.666666666666666, "chain": 4.555555555555555, "active": 39, "think": 30, "undos": 0, "worthNew": 3, "earnedNew": 2}, {"n": 46, "t": 1793368138385, "gen": "hard \u03b1.67", "tries": 12, "outcome": "reached", "distance": 10, "used": 25, "L": 14, "U": 19, "exact": false, "gameM": 12, "gameExact": false, "slides": 49.421052631578945, "blocks": 18.36842105263158, "chain": 4.0, "active": 25, "think": 7, "undos": 0, "worthNew": 5, "earnedNew": 4}, {"n": 47, "t": 1793368163140, "gen": "hard \u03b1.67", "tries": 12, "outcome": "reached", "distance": 2, "used": 6, "L": 5, "U": 5, "exact": true, "gameM": 5, "gameExact": true, "slides": 18.4, "blocks": 6.8, "chain": 3.2, "active": 8, "think": 3, "undos": 0, "worthNew": 2, "earnedNew": 2}, {"n": 48, "t": 1793368170865, "gen": "hard \u03b1.67", "tries": 12, "outcome": "open", "distance": 12, "used": null, "L": 14, "U": 21, "exact": false, "gameM": 14, "gameExact": false, "slides": 89.33333333333333, "blocks": 33.095238095238095, "chain": 11.714285714285714, "active": 79, "think": 60, "undos": 0, "worthNew": 5, "earnedNew": null}];
+const reached = GOALS.filter((g) => g.outcome === "reached");
+const median = (xs) => { const s = [...xs].sort((a, b) => a - b), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+const mean = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
+
+const stats = [
+  [reached.length, "goals reached"],
+  [reached.filter((g) => g.used <= g.U).length, "solved in the fewest moves"],
+  ["+" + median(reached.map((g) => g.used - g.U)), "median moves over the fewest"],
+  [mean(reached.map((g) => g.earnedNew)).toFixed(1) + " / 5", "stars earned, new rule"],
+];
+document.getElementById("stats").innerHTML = stats.map(([v, t]) => `<div class="stat"><b>${v}</b><span>${t}</span></div>`).join("");
+
+const NS = "http://www.w3.org/2000/svg";
+const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const el = (tag, attrs, parent) => { const e = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); parent.appendChild(e); return e; };
+const tip = document.getElementById("tip");
+const hover = (node, lines) => {
+  node.addEventListener("pointermove", (e) => {
+    tip.innerHTML = lines.map((l) => `<div>${l}</div>`).join("");
+    tip.style.display = "block";
+    tip.style.left = Math.min(innerWidth - tip.offsetWidth - 8, e.clientX + 14) + "px";
+    tip.style.top = Math.min(innerHeight - tip.offsetHeight - 8, Math.max(8, e.clientY - tip.offsetHeight / 2)) + "px";
+  });
+  node.addEventListener("pointerleave", () => (tip.style.display = "none"));
+};
+function frame(id, pad) {
+  const svg = document.getElementById(id);
+  svg.replaceChildren();
+  return { svg, w: svg.clientWidth, h: +svg.getAttribute("height"), pad };
+}
+function yGrid(f, max, ticks, y, fmt = (v) => v) {
+  for (let i = 0; i <= ticks; i++) {
+    const v = (max / ticks) * i;
+    el("line", { x1: f.pad.l, x2: f.w - f.pad.r, y1: y(v), y2: y(v), stroke: css(i ? "--grid" : "--axis") }, f.svg);
+    el("text", { x: f.pad.l - 6, y: y(v) + 4, "text-anchor": "end" }, f.svg).textContent = fmt(v);
+  }
+}
+
+function usedChart() {
+  const f = frame("used", { l: 36, r: 10, t: 8, b: 30 });
+  const max = Math.ceil(Math.max(...reached.map((g) => Math.max(g.used, g.U))) / 10) * 10;
+  const x = (v) => f.pad.l + (v / max) * (f.w - f.pad.l - f.pad.r);
+  const y = (v) => f.h - f.pad.b - (v / max) * (f.h - f.pad.t - f.pad.b);
+  yGrid(f, max, 4, y);
+  for (let i = 0; i <= 4; i++) el("text", { x: x((max / 4) * i), y: f.h - 14, "text-anchor": "middle" }, f.svg).textContent = (max / 4) * i;
+  el("text", { x: (f.w + f.pad.l) / 2, y: f.h, "text-anchor": "middle", class: "label" }, f.svg).textContent = "fewest moves";
+  el("line", { x1: x(0), y1: y(0), x2: x(max), y2: y(max), stroke: css("--axis"), "stroke-dasharray": "4 4" }, f.svg);
+  for (const g of reached) {
+    const color = css(g.exact ? "--s1" : "--s2");
+    if (!g.exact) el("line", { x1: x(g.L), x2: x(g.U), y1: y(g.used), y2: y(g.used), stroke: color, "stroke-width": 2, "stroke-linecap": "round", opacity: 0.6 }, f.svg);
+    const dot = el("circle", { cx: x(g.U), cy: y(g.used), r: 5, fill: color, stroke: css("--surface"), "stroke-width": 2 }, f.svg);
+    hover(dot, [`Goal ${g.n} · ${g.tries} tries`, `Fewest ${g.exact ? g.U : g.L + " to " + g.U}, used ${g.used}`, `${g.active} s active`]);
+  }
+}
+
+function excessChart() {
+  const f = frame("excess", { l: 36, r: 10, t: 16, b: 30 });
+  const bands = [["up to 5", (g) => g.U <= 5], ["6 to 12", (g) => g.U > 5 && g.U <= 12], ["over 12", (g) => g.U > 12]]
+    .map(([name, test]) => { const set = reached.filter(test); return { name, n: set.length, v: median(set.map((g) => g.used - g.U)) }; });
+  const max = Math.max(4, Math.ceil(Math.max(...bands.map((b) => b.v)) / 2) * 2);
+  const y = (v) => f.h - f.pad.b - (v / max) * (f.h - f.pad.t - f.pad.b);
+  yGrid(f, max, 2, y);
+  const slot = (f.w - f.pad.l - f.pad.r) / bands.length, bw = Math.min(56, slot * 0.5);
+  bands.forEach((b, i) => {
+    const cx = f.pad.l + slot * (i + 0.5);
+    const bar = el("path", { d: `M${cx - bw / 2},${y(0)} V${y(b.v) + 4} q0,-4 4,-4 H${cx + bw / 2 - 4} q4,0 4,4 V${y(0)} Z`, fill: css("--s1") }, f.svg);
+    el("text", { x: cx, y: y(b.v) - 6, "text-anchor": "middle", class: "label" }, f.svg).textContent = "+" + b.v;
+    el("text", { x: cx, y: f.h - 10, "text-anchor": "middle" }, f.svg).textContent = `${b.name} fewest`;
+    hover(bar, [`${b.n} goals of ${b.name} fewest moves`, `median ${b.v} moves over`]);
+  });
+}
+
+// From the analysis (Spearman, bootstrap 90% range), 42 reached goals.
+const PREDICTORS = [
+  ["Blocks in the red block's chain", 0.72, 0.57, 0.82],
+  ["Fewest moves", 0.68, 0.52, 0.79],
+  ["Difficulty score", 0.67, 0.50, 0.78],
+  ["Distance", 0.16, -0.11, 0.41],
+];
+function predictChart() {
+  const f = frame("predict", { l: 10, r: 40, t: 6, b: 22 });
+  const x = (v) => f.pad.l + ((v + 0.2) / 1.2) * (f.w - f.pad.l - f.pad.r);
+  for (const v of [0, 0.5, 1]) {
+    el("line", { x1: x(v), x2: x(v), y1: f.pad.t, y2: f.h - f.pad.b, stroke: css(v ? "--grid" : "--axis") }, f.svg);
+    el("text", { x: x(v), y: f.h - 6, "text-anchor": "middle" }, f.svg).textContent = v;
+  }
+  const row = (f.h - f.pad.t - f.pad.b) / PREDICTORS.length;
+  PREDICTORS.forEach(([name, r, lo, hi], i) => {
+    const cy = f.pad.t + row * (i + 0.5) + 8;
+    el("text", { x: f.pad.l, y: cy - 13, class: "label" }, f.svg).textContent = name;
+    el("rect", { x: x(Math.min(0, r)), y: cy - 7, width: Math.abs(x(r) - x(0)), height: 14, rx: 3, fill: css("--s1") }, f.svg);
+    el("line", { x1: x(lo), x2: x(hi), y1: cy, y2: cy, stroke: css("--ink-2"), "stroke-width": 1.5 }, f.svg);
+    for (const v of [lo, hi]) el("line", { x1: x(v), x2: x(v), y1: cy - 5, y2: cy + 5, stroke: css("--ink-2"), "stroke-width": 1.5 }, f.svg);
+    el("text", { x: x(hi) + 6, y: cy + 4 }, f.svg).textContent = r.toFixed(2);
+    hover(el("rect", { x: 0, y: cy - row / 2, width: f.w, height: row, fill: "transparent" }, f.svg), [name, `correlation ${r.toFixed(2)}`, `90% range ${lo.toFixed(2)} to ${hi.toFixed(2)}`]);
+  });
+}
+
+const CHOICES = [
+  ["Slide destinations (the game's old count)", 45, 77],
+  ["Movable blocks", 18, 50],
+  ["Blocks in the red block's chain (new)", 7, 15],
+  ["Moves that keep the fewest", 1.3, 2.8],
+];
+function choicesChart() {
+  const f = frame("choices", { l: 10, r: 20, t: 6, b: 22 });
+  const x = (v) => f.pad.l + (v / 80) * (f.w - f.pad.l - f.pad.r);
+  for (const v of [0, 20, 40, 60, 80]) {
+    el("line", { x1: x(v), x2: x(v), y1: f.pad.t, y2: f.h - f.pad.b, stroke: css(v ? "--grid" : "--axis") }, f.svg);
+    el("text", { x: x(v), y: f.h - 6, "text-anchor": "middle" }, f.svg).textContent = v;
+  }
+  const row = (f.h - f.pad.t - f.pad.b) / CHOICES.length;
+  CHOICES.forEach(([name, lo, hi], i) => {
+    const cy = f.pad.t + row * (i + 0.5) + 8;
+    el("text", { x: f.pad.l, y: cy - 13, class: "label" }, f.svg).textContent = name;
+    const bar = el("rect", { x: x(lo), y: cy - 7, width: Math.max(4, x(hi) - x(lo)), height: 14, rx: 4, fill: css(i === 2 ? "--s2" : "--s1") }, f.svg);
+    hover(bar, [name, `${lo} to ${hi} a move`]);
+  });
+}
+
+function starsChart() {
+  const f = frame("stars", { l: 40, r: 10, t: 16, b: 26 });
+  // Old rule: worth 0..10 by difficulty within the density's range (from the analysis);
+  // new rule: worth 1..5 by fewest moves.
+  const groups = [
+    { name: "Old rule (of 10)", worth: 3.1 / 10, earned: 1.7 / 10, raw: ["3.1", "1.7"], of: 10 },
+    { name: "New rule (of 5)", worth: mean(reached.map((g) => g.worthNew)) / 5, earned: mean(reached.map((g) => g.earnedNew)) / 5,
+      raw: [mean(reached.map((g) => g.worthNew)).toFixed(1), mean(reached.map((g) => g.earnedNew)).toFixed(1)], of: 5 },
+  ];
+  const y = (v) => f.h - f.pad.b - v * (f.h - f.pad.t - f.pad.b);
+  yGrid(f, 1, 2, y, (v) => Math.round(v * 100) + "%");
+  const slot = (f.w - f.pad.l - f.pad.r) / groups.length, bw = Math.min(40, slot * 0.25);
+  groups.forEach((g, i) => {
+    const cx = f.pad.l + slot * (i + 0.5);
+    [["worth", "--s1", -1], ["earned", "--s2", 1]].forEach(([key, color, side], k) => {
+      const bx = cx + side * (bw / 2 + 1) - bw / 2;
+      const bar = el("path", { d: `M${bx},${y(0)} V${y(g[key]) + 4} q0,-4 4,-4 H${bx + bw - 4} q4,0 4,4 V${y(0)} Z`, fill: css(color) }, f.svg);
+      el("text", { x: bx + bw / 2, y: y(g[key]) - 6, "text-anchor": "middle", class: "label" }, f.svg).textContent = g.raw[k];
+      hover(bar, [g.name, `${key === "worth" ? "Worth" : "Earned"}: ${g.raw[k]} of ${g.of} on average`]);
+    });
+    el("text", { x: cx, y: f.h - 6, "text-anchor": "middle" }, f.svg).textContent = g.name;
+  });
+}
+
+function render() { usedChart(); excessChart(); predictChart(); choicesChart(); starsChart(); }
+render();
+addEventListener("resize", render);
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", render);
+</script>
+</body>
+</html>

@@ -1,5 +1,5 @@
 // Stars: what a goal is worth comes from the fewest moves it takes (the same at every
-// density, reports/play-analysis.md), and what the player earns from the moves they used.
+// density, reports/play-analysis.html), and what the player earns from the moves they used.
 
 export const MAX_STARS = 5;
 
