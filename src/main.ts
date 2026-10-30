@@ -447,10 +447,19 @@ function redraw(): void {
     const debug = (window as unknown as { unblock: { frames: { t: number; x: number; y: number }[] | null } }).unblock;
     if (debug.frames && moving) debug.frames.push({ t: now, x: moving.x, y: moving.y });
     if (animation || sparkles.length || flight || throb) redraw();
-    frames.push(now);
-    showFps(now);
   });
 }
+
+// Frames are counted here, not in redraw: redraw only runs while something changes, and the
+// counter would drop to 0 whenever the board is still. The spinner keeps frames coming.
+const spin = document.querySelector<HTMLElement>("#spin")!;
+function tick(now: number): void {
+  spin.style.transform = `rotate(${(now / 4) % 360}deg)`;
+  frames.push(now);
+  showFps(now);
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
 
 const point = (e: PointerEvent | WheelEvent) => ({ x: e.offsetX, y: e.offsetY });
 

@@ -97,6 +97,9 @@ const browser = await chromium.launch();
   await fresh();
   const text = await page.evaluate(() => document.body.innerText.trim());
   check(/^\d+ fps · \d+[smhd] ago · 7 tries$/.test(text), `only text is the debug counter: fps, build age, density ("${text}")`);
+  await page.waitForTimeout(1200);
+  const idleFps = await page.evaluate(() => parseInt(document.querySelector("#fps").textContent));
+  check(idleFps > 10, `with nothing moving the counter still counts frames (${idleFps} fps)`);
   for (const [x, y, what] of [[-0.85, 0.15, "home"], [0.15, 0.15, "reset"], [1.15, 0.15, "fullscreen"], [2.15, 0.15, "reports"], [-0.85, 2.15, "density"], [0.15, 2.15, "border toggle"]]) {
     await expectColor(page, cell(x, y), "reset", `the ${what} block is black`);
   }

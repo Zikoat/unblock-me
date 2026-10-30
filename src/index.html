@@ -12,7 +12,9 @@
      smaller border when it is on), so they always sit inside it. */
   #view { position: fixed; pointer-events: none; }
   #view > * { pointer-events: auto; }
-  #fps { position: absolute; top: 6px; left: 8px; font: 11px/1 ui-monospace, monospace; color: #8a877e; pointer-events: none !important; }
+  /* Turns a little every frame, so frames keep coming and the fps counter shows the real rate. */
+  #spin { position: absolute; top: 7px; left: 9px; width: 7px; height: 7px; border-radius: 1.5px; background: #b9b6ad; pointer-events: none !important; }
+  #fps { position: absolute; top: 6px; left: 22px; font: 11px/1 ui-monospace, monospace; color: #8a877e; pointer-events: none !important; }
   #tip { position: fixed; display: none; max-width: 260px; padding: 7px 10px; border-radius: 8px; background: #1d1d1f; color: #f3f2ee; font: 13px/1.4 system-ui, sans-serif; pointer-events: none; box-shadow: 0 4px 14px rgba(0,0,0,.18); z-index: 2; }
   #undo { position: absolute; right: 16px; bottom: 16px; width: 52px; height: 52px; border: 0; border-radius: 50%; background: #1d1d1f; color: #f3f2ee; display: grid; place-items: center; box-shadow: 0 3px 10px rgba(0,0,0,.2); cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
   #undo:disabled { opacity: .3; cursor: default; }
@@ -22,6 +24,7 @@
 <body>
 <canvas></canvas>
 <div id="view">
+<div id="spin"></div>
 <div id="fps"></div>
 <div id="tip" role="tooltip"></div>
 <button id="undo" title="Undo" aria-label="Undo" disabled>
