@@ -1,5 +1,6 @@
 // The app: wires the canvas, the gestures, storage, goals and live reload together.
 import type { Point, Rect } from "./camera";
+import type { Difficulty } from "./difficulty";
 import type { Goal } from "./goal";
 import { viewCentre } from "./goal";
 import type { GoalRequest } from "./goal-worker";
@@ -127,10 +128,18 @@ function requestGoal(near: Point = viewCentre(scene.camera, scene.width, scene.h
   const request: GoalRequest = { job: ++job, seed, tries, placed, near, moved: [...scene.moved], effort: EFFORT, exclude, avoid: targetsOf(scene.done) };
   worker.postMessage(request);
 }
-worker.onmessage = (event: MessageEvent<{ job: number; goal: Goal | null }>) => {
+type Reply = { job: number; goal: Goal | null } | { job: number; of: { id: string; target: Point }; difficulty: Difficulty };
+worker.onmessage = (event: MessageEvent<Reply>) => {
+  if ("difficulty" in event.data) return measured(event.data);
   if (event.data.job !== job) return;
   showGoal(event.data.goal);
 };
+/** A goal's difficulty arrived: it belongs to whichever goal it was measured for. */
+function measured({ of, difficulty }: { of: { id: string; target: Point }; difficulty: Difficulty }): void {
+  const all = [scene.goal, ahead.ready?.goal, ...scene.done];
+  for (const g of all) if (g && g.id === of.id && g.target.x === of.target.x && g.target.y === of.target.y) g.difficulty = difficulty;
+  save();
+}
 function showGoal(goal: Goal | null): void {
   job++; // anything still on its way is stale
   scene.goal = goal;
@@ -178,7 +187,8 @@ function lookAhead(): void {
   const request: GoalRequest = { job: ++ahead.job, seed, tries, placed, near: goal.target, moved: [...moved], effort: EFFORT, exclude, avoid: targetsOf([...scene.done, goal]) };
   ahead.worker.postMessage(request);
 }
-ahead.worker.onmessage = (event: MessageEvent<{ job: number; goal: Goal | null }>) => {
+ahead.worker.onmessage = (event: MessageEvent<Reply>) => {
+  if ("difficulty" in event.data) return measured(event.data);
   if (event.data.job === ahead.job) ahead.ready = { key: ahead.asked, goal: event.data.goal };
 };
 if (!scene.goal) requestGoal();
@@ -333,6 +343,8 @@ Object.assign(window, {
     /** Frames drawn while recording: when, and where the sliding block was drawn. */
     frames: null as { t: number; x: number; y: number }[] | null,
     /** Resolves once a goal requested by the app has arrived. */
+    /** Ask the worker for a goal near a lattice point, as reaching a goal does. */
+    requestGoal: (near: Point) => requestGoal(near),
     goalReady: () => (scene.goal ? Promise.resolve() : new Promise<void>((resolve) => goalWaiters.push(resolve))),
     /** Replace the random layout with exactly these blocks, and optionally a goal (for tests). */
     place: (blocks: Placed[], goal: Goal | null = null) => {
@@ -473,10 +485,33 @@ function tooltip(ui: Ui): string | null {
   }
 }
 
+/** A goal's numbers, over its red block or its target (the current goal or a reached one). */
+function goalTip(at: Point): string | null {
+  const inside = (p: Point, w: number, h: number) => at.x >= p.x && at.x < p.x + w && at.y >= p.y && at.y < p.y + h;
+  for (const g of [scene.goal, ...scene.done]) {
+    const red = g && scene.layout.byId(g.id);
+    if (!g || !red) continue;
+    const now = whereIs(scene, g.id)!;
+    if (!inside(now, red.w, red.h) && !inside(g.target, red.w, red.h)) continue;
+    const from = g.start;
+    const lines = [
+      `Distance: ${from ? `${Math.abs(g.target.x - from.x) + Math.abs(g.target.y - from.y)} cells` : "unknown"}`,
+    ];
+    const d = g.difficulty;
+    if (!d) lines.unshift("Fewest moves: measuring…");
+    else {
+      lines.unshift(`Fewest moves: ${d.moves ?? `at least ${d.atLeast} (solved in ${g.solution.length})`}`);
+      lines.push(`Difficulty: ${d.score.toFixed(1)}${d.moves === null ? "+" : ""} (about ${Math.round(d.branching)} choices a move)`);
+    }
+    return lines.join("\n");
+  }
+  return null;
+}
 function showTip(e: PointerEvent): void {
   const world = { x: (e.offsetX - scene.camera.offsetX) / scene.camera.scale / UNIT, y: (e.offsetY - scene.camera.offsetY) / scene.camera.scale / UNIT };
-  const ui = e.pointerType === "mouse" && e.buttons === 0 ? blockAt(visibleBlocks(scene), world)?.ui : null;
-  const text = ui ? tooltip(ui) : null;
+  const hovering = e.pointerType === "mouse" && e.buttons === 0;
+  const ui = hovering ? blockAt(visibleBlocks(scene), world)?.ui : null;
+  const text = ui ? tooltip(ui) : hovering ? goalTip(world) : null;
   if (!text) {
     tip.style.display = "none";
     return;

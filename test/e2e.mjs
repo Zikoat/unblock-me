@@ -671,6 +671,19 @@ const browser = await chromium.launch();
   check(await page.evaluate(() => getComputedStyle(document.querySelector("#tip")).display === "none"), "hovering the home block shows nothing");
   const undoTitle = await page.getAttribute("#undo", "title");
   check(undoTitle === "Undo", `the undo button's tooltip is "Undo" (${undoTitle})`);
+  // Hovering a goal's red block shows how hard it is, once the worker has measured it.
+  // r has to wait for v to get out of its row before it can go right.
+  await page.evaluate(() => {
+    unblock.place([{ id: "r", x: 0, y: 0, w: 2, h: 1 }, { id: "v", x: 3, y: 0, w: 1, h: 2 }, { id: "w", x: 3, y: 2, w: 1, h: 1, wall: true }, { id: "l", x: -1, y: 0, w: 1, h: 1, wall: true }]);
+    unblock.requestGoal({ x: 0, y: 0 });
+  });
+  await page.evaluate(() => unblock.goalReady());
+  await page.waitForFunction(() => unblock.scene.goal?.difficulty, null, { timeout: 5000 });
+  const measured = await page.evaluate(() => ({ goal: unblock.scene.goal, at: unblock.scene.moved.get(unblock.scene.goal.id) ?? unblock.scene.layout.byId(unblock.scene.goal.id) }));
+  await page.mouse.move(...at(measured.at.x + 0.5, measured.at.y + 0.5));
+  const goalTip = await page.evaluate(() => getComputedStyle(document.querySelector("#tip")).display === "block" && document.querySelector("#tip").innerText);
+  check(/Fewest moves: \d+/.test(goalTip) && /Distance: \d+ cells/.test(goalTip) && /Difficulty: [\d.]+/.test(goalTip), `hovering the red block shows its fewest moves, distance and difficulty (${JSON.stringify(goalTip)})`);
+  await page.screenshot({ path: shots + "desktop-goal-tooltip.png" });
   await page.mouse.move(640, 400);
   await page.mouse.wheel(0, -300);
   await frame(page);

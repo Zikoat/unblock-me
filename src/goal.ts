@@ -2,6 +2,7 @@
 // intent, pushing a single block as far as it will go along its axis, so every goal is
 // reachable by construction.
 import type { Point, Rect } from "./camera";
+import type { Difficulty } from "./difficulty";
 import { clearCell, replay, type Move } from "./frozen";
 import { intersects, UNIT, type Block, type Layout } from "./layout";
 import { blocksIn, isHorizontal, position, slide, type Changes } from "./rules";
@@ -14,6 +15,10 @@ export type Goal = {
   /** The shuffle's moves from the start to the goal: proof it can be done, and an upper
    * bound on the moves it takes (one move per block per drag). */
   solution: Move[];
+  /** Where the red block was when the goal was made. */
+  start?: Point;
+  /** How hard it is, once measured (src/difficulty.ts). */
+  difficulty?: Difficulty;
 };
 
 export type GoalOptions = {
