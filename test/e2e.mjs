@@ -568,7 +568,23 @@ const browser = await chromium.launch();
   }), cell(0.5, 6));
   check(starsSeen > 20, `stars fly out when it lands (${starsSeen} star pixels at most)`);
   check(await page.evaluate(() => unblock.scene.done.map((g) => g.id).join() === "r"), "the goal counts as reached");
-  check(shownAt === landedAt && beat.indexOf(true) >= 0 && !beat.at(-1), `and the next red block, made ahead, shows at once and throbs once (landed on frame ${landedAt}, next goal on frame ${shownAt}, past its edge from frame ${beat.indexOf(true)} for ${beat.filter(Boolean).length} frames, then back)`);
+  check(landedAt >= 0 && shownAt === -1 && !beat.some(Boolean), `the next red block waits while the finish plays (landed on frame ${landedAt}, no next goal in the frames after)`);
+  // Once the stars have gathered, the next red block (made ahead) shows and throbs once.
+  const [waited, beat2] = await page.evaluate(([x, y]) => new Promise((resolve) => {
+    const c = document.querySelector("canvas"), d = c.width / c.clientWidth;
+    const start = performance.now(), beat = [];
+    let shownAt = null;
+    const look = (now) => {
+      if (shownAt === null && unblock.scene.goal) shownAt = now;
+      if (shownAt !== null) {
+        const [r, g] = c.getContext("2d").getImageData(Math.round(x * d), Math.round((y - 3) * d), 1, 1).data;
+        beat.push(r - g > 80);
+      }
+      if (beat.length < 40 && now - start < 8000) requestAnimationFrame(look); else resolve([shownAt === null ? null : shownAt - start, beat]);
+    };
+    requestAnimationFrame(look);
+  }), cell(0.5, 6));
+  check(waited !== null && beat2.indexOf(true) >= 0 && !beat2.at(-1), `then it shows and throbs once (${waited?.toFixed(0)} ms later, past its edge from frame ${beat2.indexOf(true)} for ${beat2.filter(Boolean).length} frames, then back)`);
   // The next goal: a block close to the reached target becomes the red block.
   await page.evaluate(() => unblock.goalReady());
   const next = await page.evaluate(() => unblock.scene.goal);

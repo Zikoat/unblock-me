@@ -331,18 +331,19 @@ let ripples: { at: Point; born: number }[] = [];
 // A tapped block that cannot move shakes.
 let shake: { id: string; born: number } | null = null;
 // The goal just reached: its score track plays the finish (stars fill, the medal, the row).
-let finish: { id: string; born: number; end: number } | null = null;
+// The next goal shows once the stars have gathered (`next`: where it is made).
+let finish: { id: string; born: number; end: number; next: Point } | null = null;
 function reachGoal(now: number): void {
   const goal = scene.goal;
   if (!goal || !goalSolved(scene) || animation?.move.id === goal.id) return;
-  // Done: its target keeps a check, and the next goal starts from a block close to it.
+  // Done: its target plays the finish, and once the stars have gathered the next goal
+  // starts from a block close to it.
   goal.used = Math.max(1, movesSince(goal.begun ?? 0));
   logMoves();
   log({ e: "reached", id: goal.id, used: goal.used });
   scene.done.push(goal);
   scene.goal = null;
-  finish = { id: goal.id, born: now, end: finishTimes(bestKnown(goal) ?? goal.solution.length, goal.used).end };
-  requestGoal(goal.target);
+  finish = { id: goal.id, born: now, end: finishTimes(bestKnown(goal) ?? goal.solution.length, goal.used).end, next: goal.target };
   const red = scene.layout.byId(goal.id)!;
   const at = whereIs(scene, goal.id)!;
   const cx = (at.x + red.w / 2) * UNIT;
@@ -638,7 +639,11 @@ function redraw(): void {
       finish,
       now,
     });
-    if (finish && now > finish.born + finish.end) finish = null;
+    if (finish && now > finish.born + finish.end) {
+      const next = finish.next;
+      finish = null;
+      requestGoal(next);
+    }
     sparkles = sparkles.filter((s) => now < s.born + s.life);
     undoButton.disabled = scene.history.length === 0;
     const debug = (window as unknown as { unblock: { frames: { t: number; x: number; y: number }[] | null } }).unblock;
