@@ -1,4 +1,5 @@
 // Makes goals off the main thread, so the board stays responsive while it searches.
+import { choices } from "./choices";
 import { makeGoalHard } from "./goal-search";
 import { fixedLayout, randomLayout, type Placed } from "./layout";
 import type { Point, Rect } from "./camera";
@@ -34,5 +35,5 @@ self.onmessage = (event: MessageEvent<GoalRequest>) => {
   goal.start = map.get(goal.id) ?? { x: home.x, y: home.y };
   postMessage({ job, goal });
   // Its difficulty was measured choosing it.
-  postMessage({ job, of: { id: goal.id, target: goal.target }, difficulty });
+  postMessage({ job, of: { id: goal.id, target: goal.target }, difficulty, choices: choices(layout, map, goal) });
 };

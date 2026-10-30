@@ -203,16 +203,21 @@ function requestGoal(near: Point = viewCentre(scene.camera, scene.width, scene.h
   const request: GoalRequest = { job: ++job, seed, tries, placed, near, moved: [...scene.moved], effort: EFFORT, level: 0, exclude, avoid: targetsOf(scene.done) };
   worker.postMessage(request);
 }
-type Reply = { job: number; goal: Goal | null } | { job: number; of: { id: string; target: Point }; difficulty: Difficulty };
+type Measured = { of: { id: string; target: Point }; difficulty: Difficulty; choices?: number };
+type Reply = { job: number; goal: Goal | null } | ({ job: number } & Measured);
 worker.onmessage = (event: MessageEvent<Reply>) => {
   if ("difficulty" in event.data) return measured(event.data);
   if (event.data.job !== job) return;
   showGoal(event.data.goal);
 };
 /** A goal's difficulty arrived: it belongs to whichever goal it was measured for. */
-function measured({ of, difficulty }: { of: { id: string; target: Point }; difficulty: Difficulty }): void {
+function measured({ of, difficulty, choices }: Measured): void {
   const all = [scene.goal, ahead.ready?.goal, ...scene.done];
-  for (const g of all) if (g && g.id === of.id && g.target.x === of.target.x && g.target.y === of.target.y) g.difficulty = difficulty;
+  for (const g of all) {
+    if (!g || g.id !== of.id || g.target.x !== of.target.x || g.target.y !== of.target.y) continue;
+    g.difficulty = difficulty;
+    g.choices = choices;
+  }
   save();
 }
 function showGoal(goal: Goal | null): void {
@@ -696,6 +701,7 @@ function goalTip(at: Point): string | null {
       const fewest = d.moves ?? (d.atLeast >= g.solution.length ? g.solution.length : `${d.atLeast} to ${g.solution.length}`);
       lines.unshift(`Fewest moves: ${fewest}`);
       lines.push(`Difficulty: ${d.score.toFixed(1)}${d.moves === null ? "+" : ""}`);
+      if (g.choices !== undefined) lines.push(`Choices a move: about ${Math.round(g.choices)}`);
       const worth = starsWorth(bestKnown(g)!);
       lines.push(g.used === undefined ? `Worth ${worth} of ${MAX_STARS} stars` : `Stars: ${starsEarned(worth, bestKnown(g)!, g.used)} of ${worth}`);
       if (medal(g)) lines.push(`Medal: ${g.used} moves, fewer than the game's best (${bestKnown(g)})`);

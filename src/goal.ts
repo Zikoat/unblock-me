@@ -19,6 +19,8 @@ export type Goal = {
   start?: Point;
   /** How hard it is, once measured (src/difficulty.ts). */
   difficulty?: Difficulty;
+  /** Choices a move along its solution (src/choices.ts). */
+  choices?: number;
   /** The density it was made at, for its stars. */
   tries?: number;
   /** How many moves had been made (the undo history's length) when it was shown, and how
