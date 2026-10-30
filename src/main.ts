@@ -21,6 +21,7 @@ const BORDER_KEY = "unblock-me:border";
 const TRIES_KEY = "unblock-me:tries";
 const CAMERA_KEY = "unblock-me:camera"; // where the view is, kept across reloads
 const LOG_KEY = "unblock-me:log"; // the play log; kept across resets
+const DEVICE_KEY = "unblock-me:device"; // names this browser's automatic uploads; kept across resets
 /** How many cells the goal's red block is pushed. */
 const EFFORT = 12;
 /** The density slider's track, as a share of its block (see densityIcon). */
@@ -95,13 +96,36 @@ function log(event: LogEvent): void {
   if (shared) return;
   playLog.push({ t: Date.now(), ...event });
   if (playLog.length > LOG_MAX) playLog.splice(0, playLog.length - LOG_MAX);
+  if (++unsent >= UPLOAD_EVERY) void upload();
 }
+// The play data goes to the VM by itself every UPLOAD_EVERY events, and when the page is
+// hidden with events not yet sent. Each upload replaces this browser's last one.
+const UPLOAD_EVERY = 25;
+let unsent = 0;
+const device = (() => {
+  if (shared) return "";
+  try {
+    const id = localStorage.getItem(DEVICE_KEY) ?? crypto.randomUUID();
+    localStorage.setItem(DEVICE_KEY, id);
+    return id;
+  } catch {
+    return crypto.randomUUID();
+  }
+})();
+function upload(): Promise<boolean> {
+  unsent = 0;
+  return sendPlayData(true);
+}
+addEventListener("pagehide", () => {
+  if (unsent && !shared && !forgetting) navigator.sendBeacon(`play-data?device=${device}`, new Blob([JSON.stringify(playData())], { type: "application/json" }));
+});
 /** History entries already in the log. */
 let logged = -1;
 function logMoves(): void {
   if (logged < 0 || logged > scene.history.length) logged = scene.history.length;
-  for (; logged < scene.history.length; logged++) {
-    const m = scene.history[logged]!;
+  while (logged < scene.history.length) {
+    // Counted before logging: logging can upload, which saves, which logs moves again.
+    const m = scene.history[logged++]!;
     log({ e: "move", id: m.id, from: m.from, to: m.to });
   }
 }
@@ -356,6 +380,7 @@ function forgetEverything(): void {
   forget();
   try {
     localStorage.setItem(LOG_KEY, kept);
+    localStorage.setItem(DEVICE_KEY, device);
   } catch {
     // No storage: nothing to keep.
   }
@@ -544,18 +569,31 @@ function tooltip(ui: Ui): string | null {
 
 /** Everything this game keeps in the browser, sent to the VM (play-data/ in the repo) so the
  * goals and their difficulty can be analysed. A note shows how it went. */
-async function sendPlayData(): Promise<void> {
+function playData() {
   const stored: Record<string, unknown> = {};
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i)!;
-    if (key.startsWith("unblock-me:")) stored[key] = JSON.parse(localStorage.getItem(key) ?? "null");
+    if (!key.startsWith("unblock-me:")) continue;
+    const value = localStorage.getItem(key);
+    try {
+      stored[key] = JSON.parse(value ?? "null");
+    } catch {
+      stored[key] = value; // not JSON (the device id)
+    }
   }
-  const data = { sentAt: new Date().toISOString(), build: builtAt, userAgent: navigator.userAgent, screen: { width: innerWidth, height: innerHeight, dpr: devicePixelRatio }, stored };
+  return { sentAt: new Date().toISOString(), build: builtAt, device, userAgent: navigator.userAgent, screen: { width: innerWidth, height: innerHeight, dpr: devicePixelRatio }, stored };
+}
+/** Send it; `quiet` (automatic) replaces this device's last upload and shows nothing. */
+async function sendPlayData(quiet = false): Promise<boolean> {
+  if (shared) return false;
+  save(); // the log as it is now
   try {
-    const sent = await fetch("play-data", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
-    note(sent.ok ? `Sent play data (${scene.done.length} goals)` : `Sending failed (${sent.status})`);
+    const sent = await fetch(quiet ? `play-data?device=${device}` : "play-data", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(playData()) });
+    if (!quiet) note(sent.ok ? `Sent play data (${scene.done.length} goals)` : `Sending failed (${sent.status})`);
+    return sent.ok;
   } catch {
-    note("Sending failed (offline?)");
+    if (!quiet) note("Sending failed (offline?)");
+    return false;
   }
 }
 /** A short note in the middle of the view for a couple of seconds. */

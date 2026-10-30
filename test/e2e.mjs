@@ -11,7 +11,16 @@ const dist = new URL("../dist/", import.meta.url).pathname;
 const shots = new URL("./screenshots/", import.meta.url).pathname;
 await mkdir(shots, { recursive: true });
 
+// Play data the page sends, as the VM's server would take it.
+const uploads = [];
 const server = createServer(async (req, res) => {
+  if (req.method === "POST") {
+    let body = "";
+    for await (const chunk of req) body += chunk;
+    uploads.push({ url: req.url, body: JSON.parse(body) });
+    res.writeHead(204).end();
+    return;
+  }
   const url = req.url.split("?")[0];
   const path = join(dist, url.endsWith("/") ? url + "index.html" : url);
   try {
@@ -149,7 +158,8 @@ const browser = await chromium.launch();
   check(await page.evaluate(() => unblock.scene.camera.offsetX === 170 && unblock.scene.camera.offsetY === 370 && unblock.scene.camera.scale === 1), "and the view centred");
   await page.evaluate(() => unblock.goalReady());
   const stored = await page.evaluate(() => Object.fromEntries(Object.keys(localStorage).sort().map((k) => [k, localStorage.getItem(k)])));
-  const { "unblock-me:v6:goal": storedGoal, "unblock-me:camera": storedCamera, "unblock-me:log": storedLog, ...rest } = stored;
+  const { "unblock-me:v6:goal": storedGoal, "unblock-me:camera": storedCamera, "unblock-me:log": storedLog, "unblock-me:device": storedDevice, ...rest } = stored;
+  check(/^[0-9a-f-]{36}$/.test(storedDevice), `the device id for automatic uploads survives the reset (${storedDevice})`);
   const kinds = JSON.parse(storedLog ?? "[]").map((e) => e.e);
   check(kinds.includes("move") && kinds.at(-2) === "reset" && kinds.at(-1) === "goal", `the play log survives the reset, which it records (${kinds.join(",")})`);
   check(!storedCamera || JSON.stringify(JSON.parse(storedCamera)) === JSON.stringify({ scale: 1, offsetX: 170, offsetY: 370 }), `and the stored view, if any, is the centred one (${storedCamera})`);
@@ -666,6 +676,17 @@ const browser = await chromium.launch();
   await expectColor(page, at(4.2, 0.5), "dragging", "mouse drag colours the block");
   await page.mouse.up();
   check((await block(page, "a")).x === 3, "mouse drop snaps one cell on");
+  // Play data goes to the VM by itself every 25 events: here, 26 clicks on a block.
+  uploads.length = 0;
+  await page.evaluate(() => unblock.place([{ id: "u", x: 0, y: 4, w: 2, h: 1 }, { id: "uw", x: -1, y: 4, w: 1, h: 1, wall: true }, { id: "uw2", x: 4, y: 4, w: 1, h: 1, wall: true }]));
+  for (let i = 0; i < 26; i++) {
+    await page.mouse.click(...at((i % 2 ? 2.5 : 0.5), 4.5));
+    await page.waitForTimeout(250);
+  }
+  await page.waitForTimeout(300);
+  const auto = uploads.find((u) => u.url.includes("device="));
+  check(!!auto && auto.body.stored["unblock-me:log"]?.filter((e) => e.e === "move").length >= 24, `play data uploads by itself after 25 events (${uploads.length} uploads, ${auto?.url})`);
+
   // Hovering a block hints where a click would send it: a faint trail fading that way.
   await page.evaluate(() => unblock.place([{ id: "h", x: 0, y: 4, w: 2, h: 1 }]));
   await page.mouse.move(...at(0.5, 4.5));
