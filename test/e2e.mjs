@@ -518,6 +518,20 @@ const browser = await chromium.launch();
   check(again !== "star", `landing on it a second time sends no stars (${again})`);
   await page.waitForTimeout(400);
 
+  // With the border on, a goal area wholly outside it is culled, check and all. Moving the
+  // view up puts the target (lattice row 4, x 1..3) at screen y 10..70: on screen, above
+  // the border (y 80).
+  await page.evaluate(() => { unblock.scene.border = true; unblock.scene.camera = { scale: 1, offsetX: 170, offsetY: -230 }; unblock.redraw(); });
+  await frame(page);
+  const spot = [170 + 1.2 * 60, -230 + 4.2 * 60];
+  const pale = await rgbAt(page, ...spot);
+  check(Math.abs(pale[0] - pale[1]) < 10, `a goal area outside the border is not drawn (${pale.join(",")} at ${spot.join(",")})`);
+  await page.evaluate(() => { unblock.scene.border = false; unblock.redraw(); });
+  await frame(page);
+  const shown = await rgbAt(page, ...spot);
+  check(shown[0] - shown[1] > 10, `and with the border off, the same spot shows it (${shown.join(",")})`);
+  await page.evaluate(() => { unblock.scene.camera = { scale: 1, offsetX: 170, offsetY: 370 }; unblock.redraw(); });
+
   // The home block goes to the homepage (here the test server's root).
   const home = page.waitForEvent("load", { timeout: 5000 }).then(() => true, () => false);
   await tap(cell(-0.5, 0.5));

@@ -1,8 +1,8 @@
 // Draws a scene on a canvas. Everything on the board is drawn in world units under one
 // camera transform, so it all zooms and pans together.
 import { worldRect } from "./camera";
-import { UI_AREA, UNIT, type Block } from "./layout";
-import { borderOnScreen, visibleBlocks, type Scene } from "./scene";
+import { intersects, UI_AREA, UNIT, type Block } from "./layout";
+import { borderOnScreen, latticeRect, visibleBlocks, type Scene } from "./scene";
 
 export const COLORS = {
   background: "#f3f2ee",
@@ -69,7 +69,10 @@ export function draw(
 
   const goal = scene.goal;
   const red = goal ? scene.layout.byId(goal.id) : undefined;
-  if (goal && red) {
+  // The target is culled like a block: drawn only when it reaches into the view.
+  const inView = latticeRect(scene, borderOnScreen(scene));
+  const targetInView = !!goal && !!red && intersects({ ...goal.target, w: red.w, h: red.h }, inView);
+  if (goal && red && targetInView) {
     // The target: a pale area with a soft outline, a little larger than the red block, so it
     // still shows around the block when the block is on it.
     ctx.beginPath();
@@ -110,7 +113,7 @@ export function draw(
   }
 
   // Once the goal has been reached, its check stays on the target, above the red block.
-  if (goal && red && scene.reached) goalCheck(ctx, goal.target.x + red.w / 2, goal.target.y + red.h / 2);
+  if (goal && red && targetInView && scene.reached) goalCheck(ctx, goal.target.x + red.w / 2, goal.target.y + red.h / 2);
   for (const s of sparkles) sparkle(ctx, s, now);
 
   if (scene.circle) {
