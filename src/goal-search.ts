@@ -14,7 +14,7 @@
 //   measure finds one, replaces the push's: it is the shortest within the window.
 import { Board } from "./board";
 import type { Point } from "./camera";
-import { difficulty, LEVELS, MARGIN, type Difficulty } from "./difficulty";
+import { measure, type Difficulty } from "./difficulty";
 import type { Goal, GoalOptions } from "./goal";
 import { candidatesNear, pushes, simplifyFast, type Tuning } from "./goal-fast";
 import { intersects, type Layout } from "./layout";
@@ -26,7 +26,8 @@ export type DeepOptions = GoalOptions & {
   /** The window: cells beyond the red block's ends on its axis, and on each side. */
   along?: number;
   across?: number;
-  /** Lanes away from the red block a block may be and still slide. */
+  /** Lanes away from the red block a block may be and still slide (2: the blocks in its
+   * lane and the blocks in theirs). */
   levels?: number;
   /** Candidate red blocks tried, nearest first. */
   candidates?: number;
@@ -36,7 +37,7 @@ export type Found = Goal & { /** Moves of the solution: exact within the window.
 
 /** The hardest target of one block: the red position furthest (in moves) from the board as
  * it is, by breadth-first search over the block's window, with the path to it. */
-export function deepest(board: Board, id: string, { states = 20_000, along = 8, across = 4, levels = LEVELS, avoid = [] as DeepOptions["avoid"] } = {}): Found | null {
+export function deepest(board: Board, id: string, { states = 20_000, along = 8, across = 4, levels = 2, avoid = [] as DeepOptions["avoid"] } = {}): Found | null {
   const red = board.block(id);
   const horizontal = red.w > red.h;
   const pos = horizontal ? red.x : red.y;
@@ -108,21 +109,43 @@ export type TournamentOptions = GoalOptions & {
 
 export type Ranked = Goal & { difficulty: Difficulty; distance: number };
 
+/** Tournament settings by effort level: 0 for a goal the player is waiting for (a few
+ * hundred ms), 1 for one made ahead (about a second), 2 and 3 for more time (several
+ * seconds): more candidates, and more boards to measure the finalists on. */
+export const LEVELS_OF_EFFORT: TournamentOptions[] = [
+  { rough: 300, exact: 5_000, finalists: 2, stride: 2, tuning: { prune: true, lookahead: true, goalBudget: 50_000, candidates: 6 } },
+  { rough: 300, exact: 20_000, finalists: 3, tuning: { prune: true, lookahead: true, goalBudget: 50_000, candidates: 6 } },
+  { rough: 1_000, exact: 50_000, finalists: 4, tuning: { prune: true, lookahead: true, goalBudget: 100_000, candidates: 12 } },
+  { rough: 3_000, exact: 100_000, finalists: 6, perCell: 8, tuning: { prune: true, lookahead: true, goalBudget: 200_000, candidates: 12 } },
+];
+
+/** A hard goal near `near` at an effort level (LEVELS_OF_EFFORT). */
+export function makeGoalHard(layout: Layout, near: Point, options: GoalOptions = {}, level = 1): Ranked | null {
+  return makeGoalTournament(layout, near, { ...LEVELS_OF_EFFORT[Math.max(0, Math.min(level, LEVELS_OF_EFFORT.length - 1))], ...options });
+}
+
 /** The push search's targets, ranked by the difficulty measure. */
 export function makeGoalTournament(layout: Layout, near: Point, options: TournamentOptions = {}): Ranked | null {
   const { moved = new Map(), avoid = [], rough = 3_000, exact = 50_000, finalists = 4, stride = 1, tuning = { prune: true, lookahead: true, goalBudget: 50_000 } } = options;
   const board = new Board(layout, moved);
   const all = pushes(board, layout, near, { ...options, perCell: options.perCell ?? 6 }, tuning);
+  // Every cell of every push is a candidate, measured roughly, the furthest cells first:
+  // a proof no longer than the best lower bound so far cannot have more moves, so it is
+  // skipped (it could still have more branching; that is given up for the time).
   const candidates: Ranked[] = [];
+  let most = 0;
   for (const p of all) {
     const red = board.block(p.id);
-    for (let k = 0; k < p.steps.length; k++) {
+    for (let k = p.steps.length - 1; k >= 0; k--) {
       if ((k + 1) % stride !== 0 && k !== p.steps.length - 1) continue;
       const step = p.steps[k]!;
       if (avoid.some((a) => intersects({ ...step.at, w: red.w, h: red.h }, a))) continue;
       const solution = simplifyFast(board, p.raw.slice(0, step.moves));
+      if (solution.length <= most) continue;
       const goal = { id: p.id, target: step.at, solution };
-      candidates.push({ ...goal, difficulty: difficulty(layout, moved, goal, { limit: rough, margin: MARGIN, levels: LEVELS }), distance: k + 1 });
+      const d = measure(board, goal, { limit: rough });
+      most = Math.max(most, d.atLeast);
+      candidates.push({ ...goal, difficulty: d, distance: k + 1 });
     }
   }
   // Rank by the rough score (a lower bound counts as the moves), the proof's length as a
@@ -131,7 +154,7 @@ export function makeGoalTournament(layout: Layout, near: Point, options: Tournam
   candidates.sort(rank);
   const top = candidates.slice(0, finalists);
   for (const c of top) {
-    c.difficulty = difficulty(layout, moved, c, { limit: exact, margin: MARGIN, levels: LEVELS });
+    c.difficulty = measure(board, c, { limit: exact });
     if (c.difficulty.solution) c.solution = c.difficulty.solution;
   }
   top.sort(rank);

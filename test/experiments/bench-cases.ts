@@ -60,6 +60,10 @@ for (const tries of [7, 15, 25]) {
     CASES[`d${tries}-s${seed}`] = plain(`d${tries}-s${seed}`, seed, tries, near);
   }
 }
+// The ends of the density range.
+CASES["d1-s11"] = plain("d1-s11", 11, 1, { x: 37, y: -21 });
+CASES["d3-s11"] = plain("d3-s11", 11, 3, { x: 37, y: -21 });
+CASES["d30-s11"] = plain("d30-s11", 11, 30, { x: 37, y: -21 });
 for (const tries of [7, 15]) {
   const name = `long${tries}`;
   CASES[name] = () => {

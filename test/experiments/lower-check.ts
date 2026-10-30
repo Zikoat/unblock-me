@@ -1,13 +1,15 @@
 // Is Window.lower admissible? Replay each benchmark goal's solution through the window
 // model and compare the bound with the moves actually left.
+//   scripts/capped.sh 800 120 bun test/experiments/lower-check.ts [approach]
 import { Board } from "../../src/board";
-import { makeGoalFast } from "../../src/goal-fast";
-import { Pool, Window } from "../../src/window";
+import { Window } from "../../src/window";
 import { CASES } from "./bench-cases";
+import { TABLE } from "./goal-table";
 
+const approach = process.argv[2] ?? "fast";
 for (const [name, make] of Object.entries(CASES)) {
   const c = make();
-  const goal = makeGoalFast(c.layout, c.near, { effort: 12, perCell: 6, moved: c.moved, exclude: c.exclude, avoid: c.avoid }, { prune: true, lookahead: true, goalBudget: 50_000 });
+  const goal = TABLE[approach]!(c);
   if (!goal) continue;
   const board = new Board(c.layout, c.moved);
   const red = board.block(goal.id);
@@ -32,12 +34,9 @@ for (const [name, make] of Object.entries(CASES)) {
     const i = win.index(m.id);
     const s = win.sliders[i]!;
     const from = (s.horizontal ? m.from.x - win.x0 : m.from.y - win.y0), to = (s.horizontal ? m.to.x - win.x0 : m.to.y - win.y0);
-    // legal in the model?
-    let legal = state[i] === from;
-    win.moves(state, 0, (j, p) => { if (j === i && p === to) legal = legal && true; });
     let found = false;
     win.moves(state, 0, (j, p) => { if (j === i && p === to) found = true; });
-    if (!found) console.log(`${name}: move ${k} ${m.id} not legal in the model`);
+    if (state[i] !== from || !found) console.log(`${name}: move ${k} ${m.id} not legal in the model`);
     state[i] = to;
   }
   console.log(`${name}: ${bad} bad bounds, sliders ${win.sliders.length}`);

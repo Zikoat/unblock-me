@@ -35,13 +35,21 @@ export type Difficulty = {
 
 /** Cells round the red block's run that are searched. */
 export const MARGIN = 2;
-/** How many lanes away from the red block a block may be and still slide: 1 is the blocks
- * in its lane and the blocks in theirs. (Measured on the benchmark goals: the same fewest
- * moves as the whole window's closure wherever both were exact, in half the time.) */
+/** How many lanes away from the red block and the solution's blocks a block may be and
+ * still slide: 1 is the blocks in their lanes. (Measured on the benchmark goals: the same
+ * fewest moves as the whole window's closure wherever both were exact, in half the time;
+ * a shorter solution through a block two lanes from everything the proof touches would be
+ * missed.) */
 export const LEVELS = 1;
 
-export function difficulty(layout: Layout, moved: ReadonlyMap<string, Point>, goal: Goal, { limit = 50_000, margin = MARGIN, levels = LEVELS } = {}): Difficulty {
-  const board = new Board(layout, moved);
+export type MeasureOptions = { limit?: number; margin?: number; levels?: number };
+
+export function difficulty(layout: Layout, moved: ReadonlyMap<string, Point>, goal: Goal, options: MeasureOptions = {}): Difficulty {
+  return measure(new Board(layout, moved), goal, options);
+}
+
+/** difficulty() on a board as it is now (which it leaves as it was). */
+export function measure(board: Board, goal: Goal, { limit = 50_000, margin = MARGIN, levels = LEVELS }: MeasureOptions = {}): Difficulty {
   const red = board.block(goal.id);
   const horizontal = red.w > red.h;
   const rect = runWindow(red, { from: horizontal ? red.x : red.y, to: horizontal ? goal.target.x : goal.target.y }, margin, margin);
@@ -69,17 +77,29 @@ export function difficulty(layout: Layout, moved: ReadonlyMap<string, Point>, go
  * shortest solution. Stops at `limit` boards with a lower bound. */
 export function shortest(win: Window, r: number, want: number, limit: number): Difficulty {
   const pool = new Pool(win.sliders.length);
+  // Buckets by f, of (state, moves made when pushed) pairs; an entry whose moves are no
+  // longer the state's best is stale.
   const buckets: number[][] = [];
   const best: number[] = []; // moves made to each pooled state
-  const push = (i: number, g: number) => {
-    win.fill(pool.data, pool.offset(i));
-    const f = g + win.lower(pool.data, pool.offset(i), r, want);
-    if (f === Infinity) return;
-    (buckets[f] ??= []).push(i);
+  // A state goes in with the cheap bound (the grid shows the state being expanded; a
+  // child is patched onto it), and gets the full bound when it comes out: if that puts
+  // it in a later bucket, it goes back in there. Correct, since buckets are taken in
+  // order and both bounds are true; and the full bound is only worked out for the few
+  // states that come out, not every state that goes in.
+  // The bounds are not consistent (a move can drop the full bound by more than one), so a
+  // child can bound lower than its parent did; it still cannot be solved in fewer moves
+  // than the bucket in hand, so it goes in there at the earliest (pathmax).
+  let refinedAt = new Uint8Array(1024); // 1 once a state has had its full bound
+  let f = 0;
+  const push = (i: number, g: number, h: number) => {
+    const at = Math.max(g + h, f);
+    if (at === Infinity) return;
+    (buckets[at] ??= []).push(i, g);
   };
   const root = pool.add(win.start, 0, -1, 0);
   best[root] = 0;
-  push(root, 0);
+  win.fill(win.start, 0);
+  push(root, 0, win.lowerCheap(win.start, 0, r, want));
   let expanded = 0, choices = 0;
   const child = new Uint8Array(win.sliders.length);
   const done = (g: number | null, atLeast: number, i: number | null): Difficulty => {
@@ -87,28 +107,46 @@ export function shortest(win: Window, r: number, want: number, limit: number): D
     const moves = g ?? atLeast;
     return { moves: g, atLeast, searched: expanded, branching, score: moves * Math.log2(Math.max(branching, 1)), solution: i === null ? undefined : pool.path(win, i) };
   };
-  for (let f = 0; f < buckets.length; f++) {
+  for (f = 0; f < buckets.length; f++) {
     const bucket = buckets[f];
     while (bucket?.length) {
+      const g = bucket.pop()!;
       const i = bucket.pop()!;
-      const g = best[i]!;
+      if (best[i] !== g) continue; // reached cheaper since
       const at = pool.offset(i);
       if (pool.data[at + r] === want) return done(g, g, i);
-      if (f > g + win.lower(pool.data, at, r, want)) continue; // reached cheaper since
       if (pool.count > limit) return done(null, f, null);
-      expanded++;
       win.fill(pool.data, at);
+      if (i >= refinedAt.length) {
+        const bigger = new Uint8Array(Math.max(1024, refinedAt.length * 2, i + 1));
+        bigger.set(refinedAt);
+        refinedAt = bigger;
+      }
+      if (!refinedAt[i]) {
+        refinedAt[i] = 1;
+        const full = g + win.lower(pool.data, at, r, want);
+        if (full > f) {
+          if (full < Infinity) (buckets[full] ??= []).push(i, g);
+          continue;
+        }
+      }
+      expanded++;
       const slides: number[] = [];
       choices += win.moves(pool.data, at, (k, to) => slides.push(k, to));
       for (let m = 0; m < slides.length; m += 2) {
+        const k = slides[m]!, to = slides[m + 1]!;
         child.set(pool.data.subarray(at, at + pool.n));
-        child[slides[m]!] = slides[m + 1]!;
+        child[k] = to;
         let j = pool.find(child, 0);
         if (j === undefined) j = pool.add(child, 0, i, g + 1);
         else if (best[j]! <= g + 1) continue;
         else pool.parent[j] = i;
         best[j] = g + 1;
-        push(j, g + 1);
+        const from = pool.data[at + k]!;
+        win.patch(k, from, to);
+        push(j, g + 1, win.lowerCheap(child, 0, r, want));
+        win.patch(k, to, from);
+        if (j < refinedAt.length) refinedAt[j] = 0;
       }
     }
   }

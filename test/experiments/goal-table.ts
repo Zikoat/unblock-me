@@ -5,7 +5,7 @@
 import { replay } from "../../src/frozen";
 import { difficulty } from "../../src/difficulty";
 import { makeGoalFast } from "../../src/goal-fast";
-import { makeGoalDeep, makeGoalTournament } from "../../src/goal-search";
+import { makeGoalDeep, makeGoalHard, makeGoalTournament } from "../../src/goal-search";
 import type { Goal } from "../../src/goal";
 import type { Point } from "../../src/camera";
 import type { Layout } from "../../src/layout";
@@ -24,11 +24,22 @@ export const TABLE: Record<string, Maker> = {
   tour1k: (c) => makeGoalTournament(c.layout, c.near, { rough: 1_000, exact: 20_000, finalists: 3, ...opts(c) }),
   tour3k: (c) => makeGoalTournament(c.layout, c.near, { rough: 3_000, exact: 50_000, finalists: 4, ...opts(c) }),
   tour10k: (c) => makeGoalTournament(c.layout, c.near, { rough: 10_000, exact: 100_000, finalists: 6, ...opts(c) }),
+  /** TOUR=rough,exact,finalists,candidates,stride,perCell */
+  tour: (c) => {
+    const [rough, exact, finalists, candidates, stride, perCell] = (process.env.TOUR ?? "1000,20000,3,6,1,6").split(",").map(Number) as [number, number, number, number, number, number];
+    return makeGoalTournament(c.layout, c.near, { rough, exact, finalists, stride, perCell, tuning: { prune: true, lookahead: true, goalBudget: 50_000 * candidates / 6, candidates }, ...opts(c) });
+  },
+  hard0: (c) => makeGoalHard(c.layout, c.near, opts(c), 0),
+  hard1: (c) => makeGoalHard(c.layout, c.near, opts(c), 1),
+  hard2: (c) => makeGoalHard(c.layout, c.near, opts(c), 2),
+  hard3: (c) => makeGoalHard(c.layout, c.near, opts(c), 3),
   tour3kC12: (c) => makeGoalTournament(c.layout, c.near, { rough: 3_000, exact: 50_000, finalists: 4, tuning: { prune: true, lookahead: true, goalBudget: 100_000, candidates: 12 }, ...opts(c) }),
   tour3kC12P8: (c) => makeGoalTournament(c.layout, c.near, { rough: 3_000, exact: 50_000, finalists: 4, perCell: 8, tuning: { prune: true, lookahead: true, goalBudget: 200_000, candidates: 12 }, ...opts(c) }),
 };
 
 const [approach, ...names] = process.argv.slice(2);
+if (import.meta.main) main();
+function main() {
 const make = TABLE[approach!];
 if (!make) throw new Error(`approaches: ${Object.keys(TABLE)}`);
 const cases = names.length ? names : Object.keys(CASES);
@@ -60,3 +71,4 @@ for (const name of cases) {
   console.log(`${name.padEnd(9)} | ${d.score.toFixed(1).padStart(5)} | ${(d.moves ?? `>=${d.atLeast}`).toString().padStart(4)} | ${d.branching.toFixed(1).padStart(5)} | ${String(distance).padStart(2)} | ${String(goal.solution.length).padStart(3)} | ${ms.toFixed(0).padStart(5)} | ${dms.toFixed(0).padStart(4)} | ${check(c.layout, c, goal)} ${goal.id}${"states" in goal ? ` states ${(goal as { states: number }).states}` : ""}`);
 }
 console.log(`${approach}: total ${total.toFixed(0)}ms, mean score ${(score / cases.length).toFixed(1)}, heap ${Math.round(process.memoryUsage().heapUsed / 1e6)}MB`);
+}
