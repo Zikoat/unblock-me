@@ -290,44 +290,99 @@ export class Window {
   }
 }
 
-/** A pool of states, each `n` bytes, keyed, with parents: the memory of a search. */
+/** A pool of states, each `n` bytes, keyed, with parents: the memory of a search. All in
+ * typed arrays (the states, their parents and depths, and an open-addressing hash table
+ * over the states' bytes), about n + 20 bytes per state, so a search of millions of
+ * boards fits in memory. */
 export class Pool {
   readonly n: number;
   data: Uint8Array;
-  readonly parent: number[] = [];
-  readonly depth: number[] = [];
-  readonly index = new Map<string, number>();
+  parent: Int32Array;
+  depth: Int32Array;
+  /** State index + 1 at a key's slot, 0 when free; a power of two long, at most half full. */
+  private table: Int32Array;
+  private mask: number;
   count = 0;
 
   constructor(n: number, capacity = 1024) {
     this.n = n;
     this.data = new Uint8Array(Math.max(1, n) * capacity);
+    this.parent = new Int32Array(capacity);
+    this.depth = new Int32Array(capacity);
+    let size = 1024;
+    while (size < capacity * 2) size *= 2;
+    this.table = new Int32Array(size);
+    this.mask = size - 1;
   }
 
-  key(state: Uint8Array, offset: number): string {
-    return String.fromCharCode.apply(null, state.subarray(offset, offset + this.n) as unknown as number[]);
+  private hash(state: Uint8Array, offset: number): number {
+    let h = 0x811c9dc5;
+    for (let k = 0; k < this.n; k++) h = Math.imul(h ^ state[offset + k]!, 0x01000193);
+    return (h ^ (h >>> 15)) >>> 0;
+  }
+
+  private same(i: number, state: Uint8Array, offset: number): boolean {
+    const { data, n } = this;
+    const at = i * n;
+    for (let k = 0; k < n; k++) if (data[at + k] !== state[offset + k]) return false;
+    return true;
+  }
+
+  /** The table slot holding `state`, or the free slot where it would go. */
+  private slot(state: Uint8Array, offset: number): number {
+    const { table, mask } = this;
+    let s = this.hash(state, offset) & mask;
+    for (;;) {
+      const v = table[s]!;
+      if (v === 0 || this.same(v - 1, state, offset)) return s;
+      s = (s + 1) & mask;
+    }
+  }
+
+  private grow(): void {
+    const { n } = this;
+    const bigger = new Uint8Array(this.data.length * 2);
+    bigger.set(this.data);
+    this.data = bigger;
+    const parent = new Int32Array(this.parent.length * 2);
+    parent.set(this.parent);
+    this.parent = parent;
+    const depth = new Int32Array(this.depth.length * 2);
+    depth.set(this.depth);
+    this.depth = depth;
+    const table = new Int32Array(this.table.length * 2);
+    const mask = table.length - 1;
+    for (let i = 0; i < this.count; i++) {
+      let s = this.hash(this.data, i * n) & mask;
+      while (table[s] !== 0) s = (s + 1) & mask;
+      table[s] = i + 1;
+    }
+    this.table = table;
+    this.mask = mask;
   }
 
   /** Add a state unless it is known; its index, or -1 when known. */
   add(state: Uint8Array, offset: number, parent: number, depth: number): number {
-    const key = this.key(state, offset);
-    if (this.index.has(key)) return -1;
-    const i = this.count++;
-    if ((i + 1) * this.n > this.data.length) {
-      const bigger = new Uint8Array(this.data.length * 2);
-      bigger.set(this.data);
-      this.data = bigger;
+    const s = this.slot(state, offset);
+    if (this.table[s] !== 0) return -1;
+    const i = this.count;
+    let at = s;
+    if ((i + 1) * this.n > this.data.length || (i + 1) * 2 > this.table.length) {
+      this.grow();
+      at = this.slot(state, offset);
     }
+    this.count++;
     this.data.set(state.subarray(offset, offset + this.n), i * this.n);
-    this.index.set(key, i);
-    this.parent.push(parent);
-    this.depth.push(depth);
+    this.parent[i] = parent;
+    this.depth[i] = depth;
+    this.table[at] = i + 1;
     return i;
   }
 
   /** A known state's index, or undefined. */
   find(state: Uint8Array, offset: number): number | undefined {
-    return this.index.get(this.key(state, offset));
+    const v = this.table[this.slot(state, offset)]!;
+    return v === 0 ? undefined : v - 1;
   }
 
   offset(i: number): number {
