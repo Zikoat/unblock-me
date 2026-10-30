@@ -55,6 +55,7 @@
 <p class="sub">Each shown kept, lost and undone. Pick one to use it everywhere on this page.</p>
 <div class="variants" id="medals"></div>
 <div class="variants" id="stars"></div>
+<div class="variants" id="lines"></div>
 
 <h2>As the moves go up</h2>
 <div class="steps" id="steps"></div>
@@ -134,7 +135,15 @@ const STARS = {
   drawn: { name: "Drawn ⭐", draw: (g, cx, cy, s) => el("path", { d: starPath(cx, cy + s * 0.057, s * 0.6), fill: C.star, stroke: C.starLine, "stroke-width": s * 0.05, "stroke-linejoin": "round" }, g) },
   emoji: { name: "Emoji ⭐", draw: (g, cx, cy, s) => image(g, EMOJI.star, cx, cy, s * 1.5) },
 };
-const pick = { medal: "rosette", star: "drawn" };
+const LINES = {
+  white: { name: "White", color: "#ffffff" },
+  light: { name: "Light gray", color: "#c9ccd0" },
+  gray: { name: "Gray", color: "#8a8d91" },
+  dark: { name: "Dark gray", color: "#4a4c50" },
+  gold: { name: "Star yellow", color: "#f4b400" },
+  blue: { name: "Rosette blue", color: "#3b6fd4" },
+};
+const pick = { medal: "rosette", star: "drawn", line: "gray" };
 
 /** An icon in one state: kept (colour), lost (gray) or undone (gray and faint). */
 function icon(g, set, key, cx, cy, s, state) {
@@ -159,7 +168,7 @@ function track(g, x0, y0, w, used, undone) {
   // The medal last: it sits on top where it meets the 5th star.
   for (const m of [...MARKS].reverse()) {
     const cx = x0 + m.at * w, lost = used > m.at;
-    el("line", { x1: cx, x2: cx, y1: y0, y2: y0 + h, stroke: C.cut, "stroke-width": Math.max(1, w * 0.14) }, bar);
+    el("line", { x1: cx, x2: cx, y1: y0, y2: y0 + h, stroke: LINES[pick.line].color, "stroke-width": Math.max(1, w * 0.14) }, bar);
     if (m.kind === "star") icon(g, STARS, pick.star, cx, cy, r * 2.8, lost ? "lost" : "kept");
     else icon(g, MEDALS, pick.medal, cx, cy, r * 2.08, undone ? "undone" : lost ? "lost" : "kept");
   }
@@ -249,7 +258,29 @@ function drawVariants() {
     }
   }
 }
+function drawLines() {
+  const box = document.getElementById("lines");
+  box.replaceChildren();
+  for (const [key, v] of Object.entries(LINES)) {
+    const b = document.createElement("button");
+    b.className = "variant";
+    b.setAttribute("aria-pressed", String(pick.line === key));
+    const svg = el("svg", { viewBox: "0 0 120 50" });
+    svg.style.background = C.bg;
+    // A piece of track, moved on the left and not on the right, with three lines.
+    el("rect", { x: 10, y: 16, width: 50, height: 18, fill: C.used }, svg);
+    el("rect", { x: 60, y: 16, width: 50, height: 18, fill: C.left }, svg);
+    for (const x of [30, 60, 90]) el("line", { x1: x, x2: x, y1: 16, y2: 34, stroke: v.color, "stroke-width": 1.8 }, svg);
+    b.append(svg);
+    const label = document.createElement("span");
+    label.textContent = `Line: ${v.name}`;
+    b.append(label);
+    b.onclick = () => { pick.line = key; redraw(); };
+    box.append(b);
+  }
+}
 function redraw() {
+  drawLines();
   drawVariants();
   update();
   document.getElementById("steps").replaceChildren();
