@@ -48,6 +48,11 @@
     <output id="usedOut">22</output>
     <label><input id="undone" type="checkbox"> Undone once</label>
   </div>
+  <div class="controls">
+    <label for="compact">Compactness</label>
+    <input id="compact" type="range" min="0" max="70" value="0">
+    <output id="compactOut">0%</output>
+  </div>
   <div class="readout" id="readout"></div>
 </div>
 
@@ -131,8 +136,11 @@ function icon(g, set, key, cx, cy, s, state) {
 let clips = 0;
 /** The track: one bar, `w` wide per move, rounded only at its ends; a line through it where
  * the medal or a star is lost, with the icon centred on the line. */
-function track(g, x0, y0, w, used, undone) {
-  const h = w * 2.2, width = END * w, fill = Math.min(used, END) * w;
+/** How much narrower every track is drawn (the compactness slider): the height and icons
+ * stay, the width per move shrinks. */
+let SCALE = 1;
+function track(g, x0, y0, w0, used, undone) {
+  const h = w0 * 2.2, w = w0 * SCALE, width = END * w, fill = Math.min(used, END) * w;
   const clip = `track${++clips}`;
   el("rect", { x: x0, y: y0, width, height: h, rx: h * 0.2 }, el("clipPath", { id: clip }, g));
   const bar = el("g", { "clip-path": `url(#${clip})` }, g);
@@ -202,7 +210,7 @@ function drawBoard(used, undone) {
   // The track, on the goal: centred over the target, just above it.
   const g = el("g", {}, svg);
   const w = 8;
-  const x0 = tx * CELL + CELL - (END * w) / 2;
+  const x0 = tx * CELL + CELL - (END * w * SCALE) / 2;
   track(g, x0, ty * CELL - w * 2.2 - 4, w, used, undone);
   document.getElementById("readout").textContent = `${used} moves: ${verdict(used, undone)}.`;
 }
@@ -261,6 +269,12 @@ const used = document.getElementById("used"), undone = document.getElementById("
 const update = () => { out.textContent = used.value; drawBoard(Number(used.value), undone.checked); };
 used.addEventListener("input", update);
 undone.addEventListener("change", update);
+const compact = document.getElementById("compact");
+compact.addEventListener("input", () => {
+  SCALE = 1 - compact.value / 100;
+  document.getElementById("compactOut").textContent = `${compact.value}%`;
+  redraw();
+});
 redraw();
 </script>
 </body>
