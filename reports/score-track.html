@@ -116,7 +116,7 @@ const C = {
 };
 /** The look, from the sliders: total track width and height (in the rows' units), icon
  * size and corner radius (shares of the height), and the move count's size. */
-const LOOK = { width: 260, height: 20, icons: 1, radius: 0.2, number: 0.45 };
+const LOOK = { width: 260, height: 20, icons: 0.8, radius: 0.2, number: 0.45 };
 const SLIDERS = [
   ["width", "Track width", 80, 330, 1, (v) => v],
   ["height", "Track height", 8, 36, 1, (v) => v],
@@ -195,7 +195,7 @@ function track(g, x0, y0, used, { undone = false, scale = 1, size = null, style 
   el("rect", { x: x0, y: y0, width: MEDAL * w, height: h, fill: C.zone }, bar);
   el("rect", { x: x0, y: y0, width: done * w, height: h, fill: C.used, "fill-opacity": 0.78 }, bar); // the zone shows through
   // Icons as big as the look says, but never wider than the gap between two stars.
-  const cy = y0 + h / 2, s = Math.min(h * 0.7 * LOOK.icons, STEP * w * 0.95), ms = s * 0.74;
+  const cy = y0 + h / 2, s = Math.min(h * 0.7, STEP * w * 0.95) * LOOK.icons, ms = s * 0.74;
   for (const m of MARKS) if (m.kind === "star") el("line", { x1: at(m.at), x2: at(m.at), y1: y0, y2: y0 + h, stroke: C.line, "stroke-width": Math.max(1, w * 0.14) }, bar);
   // The stars still earned when finishing now, left to right: those not passed along the
   // track, then the last one (on the right end, never lost).
@@ -283,8 +283,9 @@ function drawBoard(used, undone) {
   block(tx + 7, ty, 2, 1, C.red);
   // The track, inside the target.
   // (The last star sits on the track's right end: leave it room inside the target.)
-  const pad = 5;
-  track(el("g", {}, svg), tx * CELL + pad, ty * CELL + pad, used, { undone, size: { width: 2 * CELL - 2 * pad - 6, height: CELL - 2 * pad } });
+  // The look's sliders scale it from its default size (260 by 20), centred in the target.
+  const width = (2 * CELL - 16) * (LOOK.width / 260), height = Math.min(CELL - 4, (CELL - 10) * (LOOK.height / 20));
+  track(el("g", {}, svg), tx * CELL + CELL - width / 2 - 3, ty * CELL + (CELL - height) / 2, used, { undone, size: { width, height } });
   document.getElementById("readout").textContent = `${used} moves: ${verdict(used, undone)}.`;
 }
 
