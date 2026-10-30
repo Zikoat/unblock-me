@@ -537,16 +537,13 @@ const browser = await chromium.launch();
   // Row 4, walls at x -4 and 3: r (x -3..-2) can go right to x 1, where the target is.
   // n (column 0, rows 6..7) can later be pushed up as the next goal's red block.
   await place([...UI, Wall(-4, 4), H("r", -3, 4), Wall(3, 4), V("n", 0, 6)], { id: "r", target: { x: 1, y: 4 }, solution: [] });
-  // The target is a little larger than the red block, with a soft, solid outline.
-  const edge = [];
-  for (let y = 4.1; y < 4.9; y += 0.1) edge.push(await rgbAt(page, cell(1, 0)[0] - 3, cell(0, y)[1])); // 3 px outside the cells
-  check(edge.every(([r, g]) => r - g > 25) && edge.every(([r, g]) => r - g < 100), `the target has a soft, solid red outline just outside the block's cells (${edge.map(([r, g, b]) => `${r},${g},${b}`).join(" ")})`);
+  // The target has no outline: just past its end it is the plain background.
+  check((await colorAt(page, cell(1.5, 0)[0], cell(0, 4)[1] - 6)) === "background", "the target has no outline");
   await page.evaluate(() => (unblock.frames = []));
   await tap(cell(-2, 4.5));
   check((await block(page, "r")).x === 1, "a tap pushes the red block onto its target");
   // Mid-slide it does not count as reached yet.
   const drawnAt = await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => r(unblock.frames.at(-1)?.x))));
-  const checkSpot = [cell(2, 4.5)[0] - 0.3 * 0.16 * 60, cell(0, 4.5)[1] + 0.7 * 0.16 * 60]; // the check's corner
   check(drawnAt !== undefined && drawnAt < 1 && (await page.evaluate(() => unblock.scene.done.length)) === 0, `not reached while it is still sliding (drawn at x ${drawnAt?.toFixed(2)})`);
   await page.evaluate(() => (unblock.frames = null));
   // On landing: reached, stars fly out of it, and a check shows on the target.
@@ -582,14 +579,23 @@ const browser = await chromium.launch();
   check(JSON.stringify(snapshot) === JSON.stringify([["r", 1, 4]]), `and the next goal's board snapshot (${JSON.stringify(snapshot)})`);
   await page.waitForTimeout(100);
   await expectColor(page, cell(0.5, 6.5), "goal", "and it is red now");
-  await expectColor(page, cell(1.25, 4.5), "done", "and the reached red block stays red, a darker red");
-  await expectColor(page, checkSpot, "background", "a white check sits on the target, over the red block");
+  await expectColor(page, cell(1.25, 4.12), "done", "and the reached red block stays red, a darker red");
+  // Its score track plays the finish, then leaves a row of stars on the target.
+  const starsOnTarget = () => page.evaluate(([x0, y0]) => {
+    const c = document.querySelector("canvas"), d = c.width / c.clientWidth;
+    const data = c.getContext("2d").getImageData(x0 * d, y0 * d, 120 * d, 60 * d).data;
+    let n = 0;
+    for (let i = 0; i < data.length; i += 4) if (data[i] > 240 && data[i + 1] > 195 && data[i + 2] < 100) n++;
+    return n;
+  }, cell(1, 4));
+  await page.waitForTimeout(4000);
+  check((await starsOnTarget()) > 30, "a row of gold stars stays on the target, over the red block");
   await page.screenshot({ path: shots + "phone-7-solved.png" });
   // The check stays on the target after the red block leaves, and no stars come again.
   await tap(cell(2, 4.5)); // against the wall now, so it slides all the way back left
   await page.waitForTimeout(500);
   check((await block(page, "r")).x === -3, "the red block can leave the target again");
-  await expectColor(page, checkSpot, "background", "and the check stays on the target");
+  check((await starsOnTarget()) > 30, "and the stars stay on the target");
   await page.screenshot({ path: shots + "phone-7b-left.png" });
   await tap(cell(-2, 4.5));
   await page.waitForTimeout(150);

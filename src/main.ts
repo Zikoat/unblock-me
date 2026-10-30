@@ -1,7 +1,8 @@
 // The app: wires the canvas, the gestures, storage, goals and live reload together.
 import type { Point, Rect } from "./camera";
 import type { Difficulty } from "./difficulty";
-import { MAX_STARS, starsEarned, starsWorth } from "./stars";
+import { MAX_STARS, medalWon, scoreTrack, starsEarned } from "./stars";
+import { finishTimes } from "./score-track";
 import { bestKnown, medal, viewCentre, type Goal } from "./goal";
 import type { GoalRequest } from "./goal-worker";
 import { Gestures } from "./gestures";
@@ -298,13 +299,15 @@ function slide(ui: Ui, from: number, dx: number): number {
 // The clock starts at the first frame that draws it: started at the tap, the first frame
 // came a frame or two late and the block jumped ~20% of the way (measured with
 // test/experiments/slide-frames.mjs).
-let animation: { move: Move; start: number | null; duration: number } | null = null;
+let animation: { move: Move; start: number | null; duration: number; wait?: boolean } | null = null;
 function animate(move: Move): void {
   const cells = Math.abs(move.to.x - move.from.x) + Math.abs(move.to.y - move.from.y);
   animation = { move, start: null, duration: slideDuration(cells) };
 }
 function sliding(now: number): { id: string; x: number; y: number; from: Point; to: Point } | null {
   if (!animation) return null;
+  // Waiting for the view to get there first: the block stays where it was.
+  if (animation.wait && flight) return { id: animation.move.id, x: animation.move.from.x, y: animation.move.from.y, from: animation.move.from, to: animation.move.to };
   animation.start ??= now;
   const t = Math.min(1, Math.max(0, (now - animation.start) / animation.duration));
   if (t >= 1) {
@@ -327,6 +330,8 @@ let cue: { id: string; born: number } | null = null;
 let ripples: { at: Point; born: number }[] = [];
 // A tapped block that cannot move shakes.
 let shake: { id: string; born: number } | null = null;
+// The goal just reached: its score track plays the finish (stars fill, the medal, the row).
+let finish: { id: string; born: number; end: number } | null = null;
 function reachGoal(now: number): void {
   const goal = scene.goal;
   if (!goal || !goalSolved(scene) || animation?.move.id === goal.id) return;
@@ -336,6 +341,7 @@ function reachGoal(now: number): void {
   log({ e: "reached", id: goal.id, used: goal.used });
   scene.done.push(goal);
   scene.goal = null;
+  finish = { id: goal.id, born: now, end: finishTimes(bestKnown(goal) ?? goal.solution.length, goal.used).end };
   requestGoal(goal.target);
   const red = scene.layout.byId(goal.id)!;
   const at = whereIs(scene, goal.id)!;
@@ -356,6 +362,7 @@ function takeBack(): void {
   const move = undo(scene);
   if (!move) return;
   log({ e: "undo", id: move.id, from: move.from, to: move.to });
+  if (scene.goal) scene.goal.undone = true; // no medal for this goal now
   logged = scene.history.length;
   animate({ id: move.id, from: move.to, to: move.from });
   save();
@@ -385,9 +392,21 @@ const gestures = new Gestures(scene, {
     save();
     reachGoal(performance.now()); // a drag lands at once; a tap's slide reaches it at its end
   },
-  onPush: (...args) => {
+  onPush: (move) => {
     debugCode(null);
-    animate(...args);
+    animate(move);
+    // A tap that sends the red block onto its target: if the target is not all in view, the
+    // view glides there first and the block moves after, so the finish shows.
+    const goal = scene.goal, red = goal && scene.layout.byId(goal.id);
+    if (goal && red && animation && move.id === goal.id && move.to.x === goal.target.x && move.to.y === goal.target.y) {
+      const c = scene.camera, view = borderOnScreen(scene);
+      const x = goal.target.x * UNIT * c.scale + c.offsetX, y = goal.target.y * UNIT * c.scale + c.offsetY;
+      const inView = x >= view.x && y >= view.y && x + red.w * UNIT * c.scale <= view.x + view.width && y + red.h * UNIT * c.scale <= view.y + view.height;
+      if (!inView) {
+        flyTo({ x: goal.target.x + red.w / 2, y: goal.target.y + red.h / 2 });
+        animation.wait = true;
+      }
+    }
   },
   onStuck: (id) => {
     debugCode(null);
@@ -615,13 +634,16 @@ function redraw(): void {
       cue,
       ripples,
       shake,
+      used: scene.goal ? movesSince(scene.goal.begun ?? 0) : 0,
+      finish,
       now,
     });
+    if (finish && now > finish.born + finish.end) finish = null;
     sparkles = sparkles.filter((s) => now < s.born + s.life);
     undoButton.disabled = scene.history.length === 0;
     const debug = (window as unknown as { unblock: { frames: { t: number; x: number; y: number }[] | null } }).unblock;
     if (debug.frames && moving) debug.frames.push({ t: now, x: moving.x, y: moving.y });
-    if (animation || sparkles.length || flight || throb || cue || ripples.length || shake) redraw();
+    if (animation || sparkles.length || flight || throb || cue || ripples.length || shake || finish) redraw();
   });
 }
 
@@ -733,9 +755,10 @@ function goalTip(at: Point): string | null {
       lines.unshift(`Fewest moves: ${fewest}`);
       lines.push(`Difficulty: ${d.score.toFixed(1)}${d.moves === null ? "+" : ""}`);
       if (g.choices !== undefined) lines.push(`Choices a move: about ${Math.round(g.choices)}`);
-      const worth = starsWorth(bestKnown(g)!);
-      lines.push(g.used === undefined ? `Worth ${worth} of ${MAX_STARS} stars` : `Stars: ${starsEarned(worth, bestKnown(g)!, g.used)} of ${worth}`);
-      if (medal(g)) lines.push(`Medal: ${g.used} moves, fewer than the game's best (${bestKnown(g)})`);
+      const best = bestKnown(g)!;
+      lines.push(g.used === undefined ? `${MAX_STARS} stars within ${best} moves, one fewer every ${scoreTrack(best).step} more` : `Stars: ${starsEarned(best, g.used)} of ${MAX_STARS}`);
+      if (medal(g)) lines.push(`Medal: ${g.used} moves, fewer than the game's best (${best})`);
+      else if (g.undone && g.used !== undefined && medalWon(best, g.used)) lines.push("No medal: a move was undone");
     }
     return lines.join("\n");
   }

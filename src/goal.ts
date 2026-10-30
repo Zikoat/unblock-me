@@ -2,6 +2,7 @@
 // done (made in src/goal-search.ts).
 import type { Point, Rect } from "./camera";
 import type { Difficulty } from "./difficulty";
+import { medalWon } from "./stars";
 import { UNIT, type Block } from "./layout";
 import type { Move } from "./rules";
 
@@ -25,6 +26,8 @@ export type Goal = {
    * many it took once reached. */
   begun?: number;
   used?: number;
+  /** Whether a move was undone while it was the goal (no medal then). */
+  undone?: boolean;
 };
 
 export type GoalOptions = {
@@ -57,10 +60,10 @@ export function bestKnown(goal: Goal): number | null {
   return goal.difficulty ? goal.difficulty.moves ?? goal.solution.length : null;
 }
 
-/** A medal: the player solved it in fewer moves than the game knew, better than all stars. */
+/** A medal: the player solved it in fewer moves than the game knew, without an undo. */
 export function medal(goal: Goal): boolean {
   const best = bestKnown(goal);
-  return best !== null && goal.used !== undefined && goal.used < best;
+  return best !== null && goal.used !== undefined && medalWon(best, goal.used, goal.undone);
 }
 
 /** Is the red block on its target? */

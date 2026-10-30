@@ -2,8 +2,8 @@
 // camera transform, so it all zooms and pans together.
 import { worldRect } from "./camera";
 import { GAME_AREA, intersects, UNIT, type Block } from "./layout";
-import { starsEarned, starsWorth } from "./stars";
-import { bestKnown, medal, type Goal } from "./goal";
+import { drawScoreTrack } from "./score-track";
+import { bestKnown, type Goal } from "./goal";
 import { borderOnScreen, latticeRect, quickPush, visibleBlocks, whereIs, type Scene } from "./scene";
 
 export const COLORS = {
@@ -16,11 +16,9 @@ export const COLORS = {
   stuck: "#8d97a3",
   goal: "#d64545",
   target: "rgba(214, 69, 69, 0.14)",
-  targetLine: "rgba(214, 69, 69, 0.45)",
   // Reached goals: a darker, duller red, so the one in play stands out.
   done: "#8e3f3c",
   doneTarget: "rgba(120, 66, 60, 0.10)",
-  doneLine: "rgba(120, 66, 60, 0.32)",
   star: "#f2b632",
   ui: "#1d1d1f",
   wall: "#5f5d57",
@@ -51,7 +49,7 @@ const throbScale = (t: number) => (t <= 0 || t >= 1 ? 1 : 1 + 0.15 * Math.sin(Ma
 export function draw(
   canvas: HTMLCanvasElement,
   scene: Scene,
-  { fullscreen, density, fps = true, sliding, sparkles = [], throb = null, cue = null, ripples = [], shake = null, now = 0 }: {
+  { fullscreen, density, fps = true, sliding, sparkles = [], throb = null, cue = null, ripples = [], shake = null, used = 0, finish = null, now = 0 }: {
     fullscreen: boolean;
     density: number;
     /** Whether the fps counter is showing. */
@@ -67,6 +65,10 @@ export function draw(
     ripples?: { at: { x: number; y: number }; born: number }[];
     /** A block that was tapped but cannot move, shaking since `born`. */
     shake?: { id: string; born: number } | null;
+    /** Moves made on the current goal so far, for its score track. */
+    used?: number;
+    /** The goal just reached, and when: its score track plays the finish. */
+    finish?: { id: string; born: number } | null;
     now?: number;
   },
 ): void {
@@ -84,26 +86,27 @@ export function draw(
   ctx.setTransform(dpr * camera.scale, 0, 0, dpr * camera.scale, dpr * camera.offsetX, dpr * camera.offsetY);
 
   const view = worldRect(camera, { x: 0, y: 0, width, height });
-  // Round dots at the lattice corners, all in one path so they cost one fill.
+  const goal = scene.goal;
+  // Targets, the reached ones and the current one: a pale area a little larger than the red
+  // block, so it still shows around the block on it. Culled like blocks.
+  const inView = latticeRect(scene, borderOnScreen(scene));
+  const targets = [...scene.done, ...(goal ? [goal] : [])]
+    .map((g) => ({ goal: g, cells: targetCells(scene, g) }))
+    .filter((t): t is { goal: Goal; cells: Cells } => !!t.cells && intersects(t.cells, inView));
+  const onTarget = (x: number, y: number) => targets.some(({ cells: c }) => x >= c.x * UNIT - TARGET_MARGIN && x <= (c.x + c.w) * UNIT + TARGET_MARGIN && y >= c.y * UNIT - TARGET_MARGIN && y <= (c.y + c.h) * UNIT + TARGET_MARGIN);
+  // Round dots at the lattice corners (not on targets), all in one path so they cost one fill.
   ctx.fillStyle = COLORS.dot;
   ctx.beginPath();
   for (let x = Math.floor(view.x / UNIT) * UNIT; x < view.x + view.width + UNIT; x += UNIT) {
     for (let y = Math.floor(view.y / UNIT) * UNIT; y < view.y + view.height + UNIT; y += UNIT) {
+      if (onTarget(x, y)) continue;
       ctx.moveTo(x + DOT_SIZE / 2, y);
       ctx.arc(x, y, DOT_SIZE / 2, 0, Math.PI * 2);
     }
   }
   ctx.fill();
-
-  const goal = scene.goal;
-  // Targets, the reached ones and the current one: a pale area with a soft outline, a little
-  // larger than the red block so it still shows around the block on it. Culled like blocks.
-  const inView = latticeRect(scene, borderOnScreen(scene));
-  const targets = [...scene.done, ...(goal ? [goal] : [])]
-    .map((g) => ({ goal: g, cells: targetCells(scene, g) }))
-    .filter((t): t is { goal: Goal; cells: Cells } => !!t.cells && intersects(t.cells, inView));
   // Targets side by side overlap by their margins: each is filled only where no earlier one
-  // was, and outlined only outside the others, so touching targets read as one shape.
+  // was, so touching targets read as one shape.
   const area = (c: Cells, path: Path2D) => path.roundRect(c.x * UNIT - TARGET_MARGIN, c.y * UNIT - TARGET_MARGIN, c.w * UNIT + 2 * TARGET_MARGIN, c.h * UNIT + 2 * TARGET_MARGIN, 12);
   const outside = (others: typeof targets) => {
     const clip = new Path2D();
@@ -120,13 +123,9 @@ export function draw(
     ctx.fillStyle = g === goal ? COLORS.target : COLORS.doneTarget;
     ctx.fill(own);
     ctx.restore();
-    ctx.save();
-    outside(targets.filter((_, j) => j !== i));
-    ctx.strokeStyle = g === goal ? COLORS.targetLine : COLORS.doneLine;
-    ctx.lineWidth = 2;
-    ctx.stroke(own);
-    ctx.restore();
   };
+  const trackRect = (c: Cells) => ({ x: c.x * UNIT - TARGET_MARGIN, y: c.y * UNIT - TARGET_MARGIN, width: c.w * UNIT + 2 * TARGET_MARGIN, height: c.h * UNIT + 2 * TARGET_MARGIN });
+  const fewestOf = (g: Goal) => bestKnown(g) ?? g.solution.length;
   // Reached targets go under the blocks (their red blocks sit on them); the current one goes
   // over them, so it shows even where blocks stand on it.
   targets.forEach((t, i) => t.goal !== goal && drawTarget(i));
@@ -228,11 +227,11 @@ export function draw(
 
   targets.forEach((t, i) => t.goal === goal && drawTarget(i));
 
-  // A reached target keeps a check, above whatever block is on it.
+  // Each target's score track, over the blocks: the current goal's as it is played, a
+  // reached one's finish and then its row of stars.
   for (const { goal: g, cells } of targets) {
-    if (g === goal) continue;
-    goalCheck(ctx, cells.x + cells.w / 2, cells.y + cells.h / 2);
-    goalStars(ctx, g, cells);
+    if (g === goal) drawScoreTrack(ctx, trackRect(cells), fewestOf(g), used, { undone: g.undone });
+    else if (g.used !== undefined) drawScoreTrack(ctx, trackRect(cells), fewestOf(g), g.used, { t: finish?.id === g.id ? now - finish.born : Infinity, undone: g.undone });
   }
   for (const s of sparkles) sparkle(ctx, s, now);
 
@@ -469,82 +468,6 @@ function uploadIcon(ctx: CanvasRenderingContext2D, block: Block): void {
   ctx.lineTo(x + UNIT * 0.27, y + UNIT * 0.74);
   ctx.lineTo(x + UNIT * 0.73, y + UNIT * 0.74);
   ctx.lineTo(x + UNIT * 0.73, y + UNIT * 0.6);
-  ctx.stroke();
-}
-
-/** A reached goal's stars along its long edge: what it was worth (1..5), the earned ones
- * filled in gold. */
-function goalStars(ctx: CanvasRenderingContext2D, g: Goal, cells: Cells): void {
-  const d = g.difficulty;
-  if (!d || g.used === undefined) return;
-  const worth = starsWorth(bestKnown(g)!);
-  const earned = starsEarned(worth, bestKnown(g)!, g.used);
-  const horizontal = cells.w > cells.h;
-  const step = 13, r = 5.2;
-  const long = (horizontal ? cells.w : cells.h) * UNIT;
-  const first = (long - step * (worth - 1)) / 2;
-  for (let i = 0; i < worth; i++) {
-    const along = first + i * step;
-    const x = cells.x * UNIT + (horizontal ? along : cells.w * UNIT - 11);
-    const y = cells.y * UNIT + (horizontal ? cells.h * UNIT - 11 : along);
-    ctx.beginPath();
-    for (let k = 0; k < 10; k++) {
-      const a = -Math.PI / 2 + (k * Math.PI) / 5;
-      const rr = k % 2 ? r * 0.45 : r;
-      ctx.lineTo(x + rr * Math.cos(a), y + rr * Math.sin(a));
-    }
-    ctx.closePath();
-    ctx.fillStyle = i < earned ? COLORS.star : "rgba(255, 255, 255, 0.35)";
-    ctx.fill();
-  }
-  if (medal(g)) goalMedal(ctx, (cells.x + 0.27) * UNIT, (cells.y + 0.4) * UNIT);
-}
-
-/** A gold medal on a red and white ribbon: solved in fewer moves than the game knew. */
-function goalMedal(ctx: CanvasRenderingContext2D, x: number, y: number): void {
-  const r = UNIT * 0.12;
-  ctx.fillStyle = COLORS.icon;
-  ctx.beginPath();
-  ctx.moveTo(x - r * 0.9, y - r * 2.1);
-  ctx.lineTo(x - r * 0.1, y - r * 2.1);
-  ctx.lineTo(x + r * 0.35, y - r * 0.6);
-  ctx.lineTo(x - r * 0.45, y - r * 0.6);
-  ctx.closePath();
-  ctx.fill();
-  ctx.fillStyle = "#c44";
-  ctx.beginPath();
-  ctx.moveTo(x + r * 0.9, y - r * 2.1);
-  ctx.lineTo(x + r * 0.1, y - r * 2.1);
-  ctx.lineTo(x - r * 0.35, y - r * 0.6);
-  ctx.lineTo(x + r * 0.45, y - r * 0.6);
-  ctx.closePath();
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(x, y, r, 0, Math.PI * 2);
-  ctx.fillStyle = COLORS.star;
-  ctx.fill();
-  ctx.strokeStyle = "#b07d12";
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
-}
-
-/** A check on the target, in the middle of the cells the red block covers there: white
- * with a red edge, so it reads on the block and on the pale target alike. */
-function goalCheck(ctx: CanvasRenderingContext2D, x: number, y: number): void {
-  const cx = x * UNIT;
-  const cy = y * UNIT;
-  const s = UNIT * 0.16;
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-  ctx.beginPath();
-  ctx.moveTo(cx - s, cy);
-  ctx.lineTo(cx - s * 0.3, cy + s * 0.7);
-  ctx.lineTo(cx + s, cy - s * 0.6);
-  ctx.strokeStyle = COLORS.done;
-  ctx.lineWidth = UNIT * 0.13;
-  ctx.stroke();
-  ctx.strokeStyle = COLORS.icon;
-  ctx.lineWidth = UNIT * 0.07;
   ctx.stroke();
 }
 

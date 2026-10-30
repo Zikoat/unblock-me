@@ -1,19 +1,19 @@
 import { describe, expect, test } from "bun:test";
-import { MAX_STARS, starsEarned, starsWorth } from "../../src/stars";
+import { medalWon, scoreTrack, starsEarned } from "../../src/stars";
 
 describe("stars", () => {
-  test("a goal is worth a star per three moves of its fewest, 1 to 5", () => {
-    expect([1, 3, 4, 6, 7, 9, 10, 12, 13, 40].map(starsWorth)).toEqual([1, 1, 2, 2, 3, 3, 4, 4, 5, 5]);
-    expect(starsWorth(100)).toBe(MAX_STARS);
+  test("a star is lost every third of the fewest moves (at least 2) past the game's best", () => {
+    expect(scoreTrack(15)).toEqual({ step: 5, lines: [15, 20, 25, 30], end: 35 });
+    expect(scoreTrack(4)).toEqual({ step: 2, lines: [4, 6, 8, 10], end: 12 });
   });
 
-  test("all stars in the fewest moves, at most one lost per extra move, always at least one", () => {
-    expect(starsEarned(4, 10, 10)).toBe(4);
-    expect(starsEarned(4, 10, 11)).toBe(4); // 4 x 10/11 rounds to 4
-    expect(starsEarned(4, 10, 13)).toBe(3);
-    expect(starsEarned(2, 4, 5)).toBe(2);
-    expect(starsEarned(5, 14, 20)).toBe(4);
-    expect(starsEarned(3, 7, 30)).toBe(1);
-    expect(starsEarned(4, 10, 8)).toBe(4); // fewer than the game knew: all stars (and a medal)
+  test("5 stars up to the game's best, one fewer past each line, never fewer than 1", () => {
+    expect([10, 15, 16, 20, 21, 26, 31, 99].map((used) => starsEarned(15, used))).toEqual([5, 5, 4, 4, 3, 2, 1, 1]);
+  });
+
+  test("a medal for beating the game's best, but not after an undo", () => {
+    expect(medalWon(15, 14)).toBe(true);
+    expect(medalWon(15, 15)).toBe(false);
+    expect(medalWon(15, 12, true)).toBe(false);
   });
 });
