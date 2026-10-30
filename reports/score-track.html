@@ -51,10 +51,10 @@
 
 <h2>How it reads</h2>
 <ul>
-  <li>One cell per move, all the same width. Moves used are light, moves left are dark, so the light fill grows to the right.</li>
-  <li>A gap marks the exact point where something is lost: finish before it and you keep the icon above it.</li>
-  <li>The icons sit on their own layer above the gaps, so their width never shifts the cells.</li>
-  <li>🏅 sits just before 15, the shortest solution the game has: beating it beats the game. The hatched cells (13 to 15) are where the real fewest could be.</li>
+  <li>Every move takes the same width of the track. Moves used are light, moves left are dark, so the light fill grows to the right.</li>
+  <li>A line across the track marks the exact point where something is lost: finish before it and you keep the icon on it.</li>
+  <li>The icons sit on the lines, on their own layer, so their width never shifts the track.</li>
+  <li>🏅 sits just before 15, the shortest solution the game has: beating it beats the game. The hatched part (13 to 15) are where the real fewest could be.</li>
   <li>One star every 5 moves (a third of 15). Passed icons turn gray.</li>
   <li>The track ends at 31; past that the fill stays full (1 star).</li>
   <li>After an undo the medal is an outline: it can no longer be won on this goal.</li>
@@ -92,41 +92,36 @@ function starPath(cx, cy, r) {
 }
 
 /** The track: cells of width `w` from x0, its icons above. */
+let clips = 0;
+/** The track: one bar, `w` wide per move, rounded only at its ends; a line through it where
+ * the medal or a star is lost, with the icon centred on the line. */
 function track(g, x0, y0, w, used, undone) {
-  const h = Math.max(6, w * 1.25), gap = Math.max(1.5, w * 0.35);
-  const gaps = new Set(MARKS.map((m) => m.at));
-  // Background layer: one cell per move; a gap after each losing point.
-  let x = x0;
-  const edge = [];
-  for (let k = 1; k <= END; k++) {
-    const fill = k <= used ? C.used : C.left;
-    const r = el("rect", { x, y: y0, width: w, height: h, fill, rx: Math.min(1.5, w / 4) }, g);
-    if (k > used && k >= LOW && k <= FEWEST) el("rect", { x, y: y0, width: w, height: h, fill: "url(#hatch)" }, g);
-    edge[k] = x + w;
-    x += w + (gaps.has(k) ? gap : w * 0.12);
-  }
-  // Foreground layer: an icon centred on each gap.
-  const s = w * 1.7;
-  for (const m of MARKS) {
-    // Neighbouring marks (the medal just before the 5th star) step apart sideways.
-    const near = MARKS.find((o) => o !== m && Math.abs(o.at - m.at) === 1);
-    const cx = edge[m.at] + gap / 2 + (near ? (m.at < near.at ? -1 : 1) * s * 0.5 : 0), cy = y0 - s * 0.95;
-    const lost = used > m.at;
+  const h = w * 2.2, width = END * w, fill = Math.min(used, END) * w;
+  const clip = `track${++clips}`;
+  el("rect", { x: x0, y: y0, width, height: h, rx: h / 2 }, el("clipPath", { id: clip }, g));
+  const bar = el("g", { "clip-path": `url(#${clip})` }, g);
+  el("rect", { x: x0, y: y0, width, height: h, fill: C.left }, bar);
+  const hatchFrom = Math.max(LOW - 1, used);
+  if (hatchFrom < FEWEST) el("rect", { x: x0 + hatchFrom * w, y: y0, width: (FEWEST - hatchFrom) * w, height: h, fill: "url(#hatch)" }, bar);
+  el("rect", { x: x0, y: y0, width: fill, height: h, fill: C.used }, bar);
+  const r = h * 0.36, cy = y0 + h / 2;
+  // The medal last: it sits on top where it meets the 5th star.
+  for (const m of [...MARKS].reverse()) {
+    const cx = x0 + m.at * w, lost = used > m.at;
+    el("line", { x1: cx, x2: cx, y1: y0, y2: y0 + h, stroke: C.bg, "stroke-width": Math.max(1, w * 0.14) }, bar);
     if (m.kind === "star") {
-      el("path", { d: starPath(cx, cy, s * 0.55), fill: lost ? C.gray : C.star, stroke: lost ? "#9a978f" : C.starLine, "stroke-width": Math.max(0.6, w * 0.12), "stroke-linejoin": "round" }, g);
+      el("path", { d: starPath(cx, cy, r * 1.15), fill: lost ? C.gray : C.star, stroke: lost ? "#8f8c84" : C.starLine, "stroke-width": w * 0.07, "stroke-linejoin": "round" }, g);
     } else {
       const faded = undone || lost;
-      el("path", { d: `M${cx - s * 0.3},${cy - s * 0.75}L${cx - s * 0.05},${cy - s * 0.2}M${cx + s * 0.3},${cy - s * 0.75}L${cx + s * 0.05},${cy - s * 0.2}`, stroke: faded ? C.gray : "#3b6fd4", "stroke-width": Math.max(1, w * 0.3), "stroke-linecap": "round", fill: "none" }, g);
-      el("circle", { cx, cy: cy + s * 0.08, r: s * 0.42, fill: undone ? "none" : lost ? C.gray : C.star, stroke: faded ? C.gray : C.starLine, "stroke-width": Math.max(0.8, w * 0.18), "stroke-dasharray": undone ? `${w * 0.5} ${w * 0.35}` : "none" }, g);
+      el("circle", { cx, cy, r, fill: undone ? C.bg : lost ? C.gray : C.star, stroke: faded ? "#8f8c84" : C.starLine, "stroke-width": w * 0.1, "stroke-dasharray": undone ? `${r * 0.5} ${r * 0.35}` : "none" }, g);
+      el("circle", { cx, cy, r: r * 0.5, fill: "none", stroke: faded ? "#8f8c84" : C.starLine, "stroke-width": w * 0.07 }, g);
     }
-    // The gap itself, drawn as a tick so the exact point is clear.
-    el("line", { x1: edge[m.at] + gap / 2, x2: edge[m.at] + gap / 2, y1: y0 - 1, y2: y0 + h + 1, stroke: lost ? "rgba(0,0,0,0.15)" : "rgba(0,0,0,0.35)", "stroke-width": Math.max(0.6, w * 0.08) }, g);
   }
   if (used > END) {
-    const t = el("text", { x: x + w * 0.4, y: y0 + h * 0.85, "font-size": h * 1.05, fill: C.left, "font-family": "system-ui, sans-serif", "font-weight": 600 }, g);
+    const t = el("text", { x: x0 + width + w * 0.6, y: y0 + h * 0.74, "font-size": h * 0.8, fill: C.left, "font-family": "system-ui, sans-serif", "font-weight": 600 }, g);
     t.textContent = `+${used - END}`;
   }
-  return x - x0;
+  return width;
 }
 
 function defs(svg) {
@@ -164,11 +159,9 @@ function drawBoard(used, undone) {
   block(tx + 7, ty - 0, 2, 1, C.red);
   // The track, on the goal: centred over the target, just above it.
   const g = el("g", {}, svg);
-  const w = 7;
-  const width = END * w * 1.12 + 5 * 1.8;
-  const x0 = Math.max(6, tx * CELL + CELL - width / 2);
-  el("rect", { x: x0 - 8, y: ty * CELL - 46, width: width + 16 + (used > END ? 28 : 0), height: 40, rx: 9, fill: "rgba(255,255,255,0.88)" }, g);
-  track(g, x0, ty * CELL - 18, w, used, undone);
+  const w = 8;
+  const x0 = tx * CELL + CELL - (END * w) / 2;
+  track(g, x0, ty * CELL - w * 2.2 - 4, w, used, undone);
   document.getElementById("readout").textContent = `${used} moves: ${verdict(used, undone)}.`;
 }
 
@@ -179,11 +172,11 @@ function drawSteps() {
     const row = document.createElement("div");
     row.className = "step";
     row.innerHTML = `<div class="n">${used} moves</div><div class="t"></div><div class="r">${verdict(used, undone)}${note ? `<br><span style="color:var(--ink-2)">${note}</span>` : ""}</div>`;
-    const svg = el("svg", { viewBox: "0 0 330 40" });
+    const svg = el("svg", { viewBox: "0 0 360 40" });
     svg.style.background = C.bg;
     svg.style.borderRadius = "6px";
     defs(svg);
-    track(el("g", {}, svg), 8, 24, 8.4, used, undone);
+    track(el("g", {}, svg), 6, 9, 10, used, undone);
     row.querySelector(".t").appendChild(svg);
     box.appendChild(row);
   }
