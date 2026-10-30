@@ -56,6 +56,10 @@
 <p class="sub">Pick one in each row to use it everywhere on this page.</p>
 <div id="options"></div>
 
+<h2>Three goals</h2>
+<p class="sub">The same scale for each: every move is the same width, so a longer goal has a longer track. Each shown part way.</p>
+<div class="steps" id="goals"></div>
+
 <h2>As the moves go up</h2>
 <div class="steps" id="steps"></div>
 
@@ -71,15 +75,18 @@
 </ul>
 </main>
 <script>
-const FEWEST = 15, LOW = 13, STEP = 5, END = 31;
-// Where each thing is lost: finishing in `at` moves or fewer keeps it.
-const MARKS = [
-  { at: LOW, kind: "medal" },
-  { at: FEWEST, kind: "star" },
-  { at: FEWEST + STEP, kind: "star" },
-  { at: FEWEST + 2 * STEP, kind: "star" },
-  { at: FEWEST + 3 * STEP, kind: "star" },
-];
+// The goal shown: its lower bound and the shortest solution the game has. One star every
+// third of the fewest moves (at least 2); the track ends one move past the last star that can be lost.
+let FEWEST, LOW, STEP, END, MARKS;
+function setGoal(low, fewest) {
+  [LOW, FEWEST] = [low, fewest];
+  STEP = Math.max(2, Math.round(fewest / 3));
+  END = fewest + 3 * STEP + 1;
+  // Where each thing is lost: finishing in `at` moves or fewer keeps it. When the fewest is
+  // known exactly, the medal takes the 5th star's place.
+  MARKS = [{ at: LOW, kind: "medal" }, ...[0, 1, 2, 3].map((i) => ({ at: FEWEST + i * STEP, kind: "star" })).filter((m) => m.at !== LOW)];
+}
+setGoal(13, 15);
 const C = {
   bg: "#e6e9ec", dot: "#d3d1ca", block: "#4f6d8f", red: "#d64545", target: "rgba(214,69,69,0.14)", targetLine: "rgba(214,69,69,0.45)",
   left: "#eaa49c", used: "#8e3f3c", hatch: "rgba(90, 88, 84, 0.55)", cut: "#ffffff", star: "#fdd835", starLine: "#f4b400", gray: "#b9b6ad", medal: "#c44",
@@ -189,13 +196,13 @@ function defs(svg) {
 }
 
 function stars(used) {
-  const lost = MARKS.filter((m) => m.kind === "star" && used > m.at).length;
+  const lost = MARKS.filter((m) => m.kind === "star" && used > m.at).length + (LOW === FEWEST && used > LOW ? 1 : 0);
   return 5 - lost;
 }
 function verdict(used, undone) {
   const medal = !undone && used <= LOW;
   const n = stars(used);
-  if (medal) return "🏅 medal: the fewest possible, 13";
+  if (medal) return `🏅 medal: the fewest possible, ${LOW}`;
   return `${n} of 5 stars` + (undone && used <= LOW ? " (no medal: undone)" : "");
 }
 
@@ -272,7 +279,31 @@ function drawOptions() {
     box.append(title, row);
   }
 }
+function drawGoals() {
+  const box = document.getElementById("goals");
+  box.replaceChildren();
+  const goals = [
+    { low: 13, fewest: 15, used: 17, name: "This goal", about: "fewest 13 to 15" },
+    { low: 4, fewest: 4, used: 4, name: "A simple goal", about: "fewest exactly 4" },
+    { low: 27, fewest: 33, used: 36, name: "A hard goal", about: "fewest 27 to 33" },
+  ];
+  for (const g of goals) {
+    setGoal(g.low, g.fewest);
+    const row = document.createElement("div");
+    row.className = "step";
+    row.innerHTML = `<div class="n">${g.name}<br>${g.about}</div><div class="t"></div><div class="r">${g.used} moves: ${verdict(g.used, false)}<br><span style="color:var(--ink-2)">a star every ${STEP} moves, ends at ${END}</span></div>`;
+    const svg = el("svg", { viewBox: "0 0 372 22" });
+    svg.style.background = C.bg;
+    svg.style.borderRadius = "6px";
+    defs(svg);
+    track(el("g", {}, svg), 4, 4, 5, g.used, false);
+    row.querySelector(".t").appendChild(svg);
+    box.appendChild(row);
+  }
+  setGoal(13, 15);
+}
 function redraw() {
+  drawGoals();
   drawOptions();
   update();
   document.getElementById("steps").replaceChildren();
