@@ -5,7 +5,8 @@ import { describe, expect, test } from "bun:test";
 import { toScreen, toWorld, type Point } from "../../src/camera";
 import { Gestures } from "../../src/gestures";
 import { borderOnScreen, latticeRect, newScene, restart, visibleBlocks } from "../../src/scene";
-import { fixedLayout, slideRange, UI_BLOCKS, UNIT, type Placed, type Ui } from "../../src/world";
+import { fixedLayout, UI_BLOCKS, UNIT, type Placed, type Ui } from "../../src/layout";
+import { slideRange } from "../../src/rules";
 
 const H = (x: number, y: number, id?: string): Placed => ({ id, x, y, w: 2, h: 1 });
 const V = (x: number, y: number, id?: string): Placed => ({ id, x, y, w: 1, h: 2 });
@@ -157,11 +158,13 @@ describe("taps", () => {
 });
 
 describe("UI blocks", () => {
-  // border at cell (-1,0), reset at (0,0), fullscreen at (1,0).
+  // border at cell (-1,0), reset at (0,0), fullscreen at (1,0), reports at (2,0).
   const ui = () => UI_BLOCKS.map((b) => ({ ...b }));
 
   test("they are 1x1, in a row in the middle", () => {
-    expect(ui().map((b) => [b.id, b.x, b.y, b.w, b.h])).toEqual([["border", -1, 0, 1, 1], ["reset", 0, 0, 1, 1], ["fullscreen", 1, 0, 1, 1]]);
+    expect(ui().map((b) => [b.id, b.x, b.y, b.w, b.h])).toEqual([
+      ["border", -1, 0, 1, 1], ["reset", 0, 0, 1, 1], ["fullscreen", 1, 0, 1, 1], ["reports", 2, 0, 1, 1],
+    ]);
   });
 
   test("a tap on one runs it and does nothing else", () => {
@@ -169,7 +172,8 @@ describe("UI blocks", () => {
     tap(g, cell(-0.5, 0.5));
     tap(g, cell(0.5, 0.5));
     tap(g, cell(1.5, 0.5));
-    expect(events.ui).toEqual(["border", "reset", "fullscreen"]);
+    tap(g, cell(2.5, 0.5));
+    expect(events.ui).toEqual(["border", "reset", "fullscreen", "reports"]);
     expect(events.changes).toBe(0);
     expect(scene.circle).toBeNull();
     expect(scene.tapped.size).toBe(0);
@@ -177,7 +181,7 @@ describe("UI blocks", () => {
 
   test("dragging one pans the board instead of moving it", () => {
     const { scene, g, at, events } = board(...ui());
-    for (const [id, x] of [["border", -0.5], ["reset", 0.5], ["fullscreen", 1.5]] as const) {
+    for (const [id, x] of [["border", -0.5], ["reset", 0.5], ["fullscreen", 1.5], ["reports", 2.5]] as const) {
       const before = scene.camera;
       drag(g, cell(x, 0.5), cell(x + 2, 1.5));
       expect(scene.camera).toEqual({ ...before, offsetX: before.offsetX + 2 * UNIT, offsetY: before.offsetY + UNIT });
@@ -190,9 +194,9 @@ describe("UI blocks", () => {
 
   test("they block other blocks", () => {
     // a in row 0 to the right of the row, b below the reset block, c above the border toggle.
-    const { g, at } = board(...ui(), H(3, 0, "a"), V(0, 2, "b"), V(-1, -3, "c"));
-    drag(g, cell(4, 0.5), cell(-5, 0.5));
-    expect(at("a").x).toBe(2);
+    const { g, at } = board(...ui(), H(4, 0, "a"), V(0, 2, "b"), V(-1, -3, "c"));
+    drag(g, cell(5, 0.5), cell(-5, 0.5));
+    expect(at("a").x).toBe(3);
     drag(g, cell(0.5, 3), cell(0.5, -5));
     expect(at("b").y).toBe(1);
     drag(g, cell(-0.5, -2), cell(-0.5, 5));
@@ -225,7 +229,7 @@ describe("UI blocks", () => {
     expect(scene.border).toBe(false);
     // Centred on the middle of the reset block.
     expect(toScreen(scene.camera, { x: UNIT / 2, y: UNIT / 2 })).toEqual({ x: 600, y: 600 });
-    expect(visibleBlocks(scene).map((b) => b.id).sort()).toEqual(["border", "fullscreen", "new", "reset"]);
+    expect(visibleBlocks(scene).map((b) => b.id).sort()).toEqual(["border", "fullscreen", "new", "reports", "reset"]);
   });
 });
 

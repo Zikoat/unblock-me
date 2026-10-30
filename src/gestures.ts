@@ -1,6 +1,7 @@
 import { pan, pinch, toWorld, zoomAt, type Camera, type Point } from "./camera";
 import { limits, visibleBlocks, type Scene } from "./scene";
-import { blockAt, slideRange, UNIT, type Block, type Ui } from "./world";
+import { UNIT, type Block, type Ui } from "./layout";
+import { blockAt, slideRange } from "./rules";
 
 /** A press that moves less than this many screen pixels is a tap. */
 export const TAP_SLOP = 10;

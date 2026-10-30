@@ -3,7 +3,8 @@ import { describe, expect, test } from "bun:test";
 import { pinch, toScreen, toWorld, zoomAt } from "../../src/camera";
 import { Gestures } from "../../src/gestures";
 import { borderOnScreen, latticeRect, limits, newScene, visibleBlocks } from "../../src/scene";
-import { blocksIn, CHUNK, randomLayout, slideRange, UNIT, type Block, type Layout } from "../../src/world";
+import { CHUNK, randomLayout, UNIT, type Block, type Layout } from "../../src/layout";
+import { blocksIn, slideRange } from "../../src/rules";
 
 const none = { moved: new Map(), tapped: new Set<string>() };
 const AREA = { x: -40, y: -40, width: 80, height: 80 };
@@ -67,9 +68,9 @@ describe("random layout", () => {
       const layout = randomLayout(seed);
       const near = layout.blocksIn({ x: -5, y: -5, width: 10, height: 10 });
       expect(near.filter((b) => b.ui).map((b) => [b.ui, b.x, b.y, b.w, b.h])).toEqual([
-        ["border", -1, 0, 1, 1], ["reset", 0, 0, 1, 1], ["fullscreen", 1, 0, 1, 1],
+        ["border", -1, 0, 1, 1], ["reset", 0, 0, 1, 1], ["fullscreen", 1, 0, 1, 1], ["reports", 2, 0, 1, 1],
       ]);
-      for (const b of near) if (!b.ui) for (const c of cells(b)) expect(["-1,0", "0,0", "1,0"]).not.toContain(c);
+      for (const b of near) if (!b.ui) for (const c of cells(b)) expect(["-1,0", "0,0", "1,0", "2,0"]).not.toContain(c);
     }
   });
 

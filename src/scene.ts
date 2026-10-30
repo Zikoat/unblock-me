@@ -1,5 +1,6 @@
 import { worldRect, type Camera, type Limits, type Point, type Rect } from "./camera";
-import { blocksIn, randomLayout, UNIT, type Block, type Layout } from "./world";
+import { randomLayout, UNIT, type Block, type Layout } from "./layout";
+import { blocksIn } from "./rules";
 
 /** Zoomed out fully, this many world units take a third of the screen width. */
 const MIN_ZOOM_SPAN = 670;

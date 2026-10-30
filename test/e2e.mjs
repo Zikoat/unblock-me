@@ -12,10 +12,12 @@ const shots = new URL("./screenshots/", import.meta.url).pathname;
 await mkdir(shots, { recursive: true });
 
 const server = createServer(async (req, res) => {
-  const path = join(dist, req.url === "/" ? "index.html" : req.url.slice(1));
+  const url = req.url.split("?")[0];
+  const path = join(dist, url.endsWith("/") ? url + "index.html" : url);
   try {
+    const body = await readFile(path);
     res.writeHead(200, { "content-type": extname(path) === ".js" ? "text/javascript" : "text/html" });
-    res.end(await readFile(path));
+    res.end(body);
   } catch {
     res.writeHead(404).end();
   }
@@ -84,13 +86,14 @@ const browser = await chromium.launch();
     { id: "border", x: -1, y: 0, w: 1, h: 1, ui: "border" },
     { id: "reset", x: 0, y: 0, w: 1, h: 1, ui: "reset" },
     { id: "fullscreen", x: 1, y: 0, w: 1, h: 1, ui: "fullscreen" },
+    { id: "reports", x: 2, y: 0, w: 1, h: 1, ui: "reports" },
   ];
 
   // Random layout with the UI blocks in the middle.
   await fresh();
   const text = await page.evaluate(() => document.body.innerText.trim());
   check(/^\d+ fps · \d+[smhd] ago$/.test(text), `only text is the fps counter with the build age ("${text}")`);
-  for (const [x, what] of [[-0.85, "border toggle"], [0.15, "reset"], [1.15, "fullscreen"]]) {
+  for (const [x, what] of [[-0.85, "border toggle"], [0.15, "reset"], [1.15, "fullscreen"], [2.15, "reports"]]) {
     await expectColor(page, cell(x, 0.15), "reset", `the ${what} block is black, in the middle row`);
   }
   const iconPixels = await page.evaluate(() => {
@@ -189,6 +192,14 @@ const browser = await chromium.launch();
   await tap(cell(1.5, 0.5));
   await page.waitForTimeout(300);
   check(await page.evaluate(() => document.fullscreenElement === null), "tapping it again leaves fullscreen");
+
+  // The reports block opens the list of reports, which links back to the game.
+  await fresh();
+  await Promise.all([page.waitForURL("**/reports/"), tap(cell(2.5, 0.5))]);
+  check(page.url().endsWith("/reports/"), `tapping the reports block opens the report list (${page.url()})`);
+  check((await page.textContent("h1")) === "Reports", "which is the report list");
+  await Promise.all([page.waitForURL(url), page.click("a.back")]);
+  check(await page.evaluate(() => typeof unblock === "object"), "and its back link returns to the game");
 
   // Exact boards from here on.
   await fresh();
