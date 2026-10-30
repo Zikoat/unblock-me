@@ -16,6 +16,7 @@
   .sub { color: var(--ink-2); margin: 0 0 20px; }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
   .board { display: block; width: 100%; height: auto; border-radius: 8px; }
+  .boards { display: grid; grid-template-columns: 2.6fr 1fr; gap: 12px; align-items: start; }
   .controls { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; margin-top: 14px; font-size: 14px; }
   .controls input[type=range] { flex: 1 1 220px; }
   .controls output { font-variant-numeric: tabular-nums; min-width: 9ch; font-weight: 600; }
@@ -52,7 +53,10 @@
 <p class="sub">A design for the goal from your upload: fewest 13 to 15, 7 cells away, solved in 22 moves.</p>
 
 <div class="card">
-  <svg class="board" id="board" viewBox="140 98 294 112" role="img" aria-label="The goal on the board with its score track"></svg>
+  <div class="boards">
+    <svg class="board" id="board" viewBox="140 98 294 112" role="img" aria-label="A horizontal goal on the board with its score track"></svg>
+    <svg class="board" id="boardV" viewBox="28 0 168 280" role="img" aria-label="A vertical goal on the board with its score track"></svg>
+  </div>
   <div class="controls">
     <label for="used">Moves</label>
     <input id="used" type="range" min="0" max="40" value="22">
@@ -156,10 +160,12 @@ function rosette(g, cx, cy0, s) {
   el("circle", { cx, cy, r: r * 0.78, fill: C.star, stroke: C.starLine, "stroke-width": r * 0.12 }, g);
 }
 /** An icon group: gray for lost, faint for undone or not yet earned; `pop` scales it up. */
-function iconBox(g, cx, cy, { gray = false, opacity = 1, pop = 1 } = {}) {
+function iconBox(g, cx, cy, { gray = false, opacity = 1, pop = 1, upright = false } = {}) {
   const attrs = { opacity };
   if (gray) attrs.filter = "url(#gray)";
-  if (pop !== 1) attrs.transform = `translate(${cx} ${cy}) scale(${pop}) translate(${-cx} ${-cy})`;
+  // `upright`: the track is turned a quarter left (a vertical goal), so the icon turns back.
+  const turn = upright ? ` rotate(90 ${cx} ${cy})` : "";
+  if (pop !== 1 || upright) attrs.transform = `translate(${cx} ${cy}) scale(${pop}) translate(${-cx} ${-cy})${turn}`;
   return el("g", attrs, g);
 }
 
@@ -182,24 +188,26 @@ let clips = 0;
  * passed) and "hollow" (outlines until the goal, then filled one at a time). `finish` is how
  * far the finish animation is: the stars filled so far (with `pop` for the newest).
  */
-function track(g, x0, y0, used, { undone = false, scale = 1, size = null, style = "now", finish = null, collapse = 0 } = {}) {
+function track(g, x0, y0, used, { undone = false, scale = 1, size = null, style = "now", finish = null, collapse = 0, upright = false, endInside = false } = {}) {
   // `size` (width and height) overrides the look's, e.g. to fit inside the goal's target.
-  const width = size ? size.width : LOOK.width * scale, h = size ? size.height : LOOK.height * scale, w = width / END;
+  const width = size ? size.width : LOOK.width * scale, h = size ? size.height : LOOK.height * scale;
+  // When the track fills a goal, its last star sits just inside the right end, the moves
+  // spread over the rest.
+  const w = (width - (endInside ? h * 0.45 : 0)) / END;
   const at = (m) => x0 + m * w;
   const clip = `track${++clips}`;
   el("rect", { x: x0, y: y0, width, height: h, rx: Math.min(h / 2, h * LOOK.radius) }, el("clipPath", { id: clip }, g));
   // While collapsing (after the finish) the track fades and only the stars stay.
   const bar = el("g", { "clip-path": `url(#${clip})`, opacity: 1 - collapse }, g);
   const done = Math.min(used, END);
-  el("rect", { x: x0, y: y0, width, height: h, fill: C.left }, bar);
   el("rect", { x: x0, y: y0, width: MEDAL * w, height: h, fill: C.zone }, bar);
-  el("rect", { x: x0, y: y0, width: done * w, height: h, fill: C.used, "fill-opacity": 0.78 }, bar); // the zone shows through
+  el("rect", { x: x0, y: y0, width: used >= END ? width : done * w, height: h, fill: C.used, "fill-opacity": 0.78 }, bar); // the zone shows through
   // Icons as big as the look says, but never wider than the gap between two stars.
   const cy = y0 + h / 2, s = Math.min(h * 0.7, STEP * w * 0.95) * LOOK.icons, ms = s * 0.74;
   for (const m of MARKS) if (m.kind === "star") el("line", { x1: at(m.at), x2: at(m.at), y1: y0, y2: y0 + h, stroke: C.line, "stroke-width": Math.max(1, w * 0.14) }, bar);
   // The stars still earned when finishing now, left to right: those not passed along the
   // track, then the last one (on the right end, never lost).
-  const endX = x0 + width;
+  const endX = x0 + END * w;
   const kept = [...MARKS.filter((m) => m.kind === "star" && used <= m.at).map((m) => ({ x: at(m.at), kind: m.kind, m: m.at })), { x: endX, kind: "star", m: Infinity },
     ...MARKS.filter((m) => m.kind === "medal" && used <= m.at && !undone).map((m) => ({ x: at(m.at), kind: m.kind, m: m.at }))]; // the medal last
   // Where the kept ones gather when the track goes: a row in the middle, close together.
@@ -216,7 +224,7 @@ function track(g, x0, y0, used, { undone = false, scale = 1, size = null, style 
   const drawIcon = (x0i, kind, look) => {
     const x = collapse ? gather({ x: x0i, m: look.m }) : x0i;
     if (collapse) look = { ...look, pop: (look.pop ?? 1) * grow, opacity: look.opacity === undefined ? 1 : look.opacity + (0.55 - look.opacity) * collapse };
-    const box = iconBox(g, x, cy, look);
+    const box = iconBox(g, x, cy, { ...look, upright });
     if (kind === "star") star(box, x, cy, s, { outline: look.outline });
     else rosette(box, x, cy, ms);
   };
@@ -235,9 +243,9 @@ function track(g, x0, y0, used, { undone = false, scale = 1, size = null, style 
       else drawIcon(icon.x, icon.kind, { outline: true, gray: lost, opacity: lost ? 0.25 : 1, m: icon.m });
     }
   }
-  if (undone) undoIcon(g, at(MEDAL), y0 + h + ms * 0.75, ms);
+  if (undone && !upright) undoIcon(g, at(MEDAL), y0 + h + ms * 0.75, ms);
   // The move count, white with a shadow, on the left of the track.
-  const count = el("text", { x: x0 + h * 0.35, y: cy, "dominant-baseline": "central", "font-size": Math.min(h * LOOK.number, (MEDAL * w - h * 0.5) / (0.62 * String(used).length)), "font-weight": 700, "font-family": "system-ui, sans-serif", fill: "#ffffff", filter: "url(#shadow)", opacity: 1 - collapse }, g);
+  const count = el("text", { x: x0 + h * 0.35, y: cy, "dominant-baseline": "central", "font-size": Math.min(h * LOOK.number, (MEDAL * w - h * 0.5) / (0.62 * String(used).length)), "font-weight": 700, "font-family": "system-ui, sans-serif", fill: "#ffffff", filter: "url(#shadow)", opacity: 1 - collapse, ...(upright ? { transform: `rotate(90 ${x0 + h * 0.35} ${cy})` } : {}) }, g);
   count.textContent = used;
   return { width: width + s * 0.65, height: h, kept };
 }
@@ -281,12 +289,29 @@ function drawBoard(used, undone) {
   const tx = 6, ty = 5;
   el("rect", { x: tx * CELL + 1, y: ty * CELL + 1, width: 2 * CELL - 2, height: CELL - 2, rx: 7, fill: C.target, stroke: C.targetLine, "stroke-width": 2, "stroke-dasharray": "5 4" }, svg);
   block(tx + 7, ty, 2, 1, C.red);
-  // The track, inside the target.
-  // (The last star sits on the track's right end: leave it room inside the target.)
-  // The look's sliders scale it from its default size (260 by 20), centred in the target.
-  const width = (2 * CELL - 16) * (LOOK.width / 260), height = Math.min(CELL - 4, (CELL - 10) * (LOOK.height / 20));
-  track(el("g", {}, svg), tx * CELL + CELL - width / 2 - 3, ty * CELL + (CELL - height) / 2, used, { undone, size: { width, height } });
+  // The track fills the target; the last star sits just inside its right end.
+  track(el("g", {}, svg), tx * CELL + 1, ty * CELL + 1, used, { undone, size: { width: 2 * CELL - 2, height: CELL - 2 }, endInside: true });
   document.getElementById("readout").textContent = `${used} moves: ${verdict(used, undone)}.`;
+}
+
+// A vertical goal: the red block heading up 6 cells to its target. The track is drawn as
+// for a horizontal goal, turned a quarter left so it runs up the target, icons kept upright.
+function drawBoardVertical(used, undone) {
+  const svg = document.getElementById("boardV");
+  svg.replaceChildren();
+  defs(svg);
+  el("rect", { x: 0, y: 0, width: 8 * CELL, height: 11 * CELL, fill: C.bg }, svg);
+  for (let i = 0; i < 8; i++) for (let j = 0; j < 11; j++) el("circle", { cx: i * CELL + CELL / 2, cy: j * CELL + CELL / 2, r: 1.3, fill: C.dot }, svg);
+  const block = (cx, cy, w, h, fill) => el("rect", { x: cx * CELL + 2, y: cy * CELL + 2, width: w * CELL - 4, height: h * CELL - 4, rx: 6, fill }, svg);
+  [[1, 3, 2, 1], [4, 4, 2, 1], [2, 5, 2, 1], [3, 7, 2, 1], [5, 1, 1, 2], [0, 7, 1, 2], [6, 6, 1, 2], [1, 9, 2, 1], [5, 9, 2, 1], [1, 0, 2, 1]]
+    .forEach(([x, y, w, h]) => block(x, y, w, h, C.block));
+  const tx = 3, ty = 1;
+  el("rect", { x: tx * CELL + 1, y: ty * CELL + 1, width: CELL - 2, height: 2 * CELL - 2, rx: 7, fill: C.target, stroke: C.targetLine, "stroke-width": 2, "stroke-dasharray": "5 4" }, svg);
+  block(tx, ty + 7, 1, 2, C.red);
+  const len = 2 * CELL - 2, thick = CELL - 2;
+  // Local (u, v) on the track goes to (x + v, y + len - u) on the board: u runs up.
+  const g = el("g", { transform: `translate(${tx * CELL + 1} ${ty * CELL + 1 + len}) rotate(-90)` }, svg);
+  track(g, 0, 0, used, { undone, size: { width: len, height: thick }, endInside: true, upright: true });
 }
 
 function row(box, left, svg, right) {
@@ -386,7 +411,7 @@ function redraw() {
 }
 
 const used = document.getElementById("used"), undone = document.getElementById("undone"), out = document.getElementById("usedOut");
-const update = () => { out.textContent = used.value; drawBoard(Number(used.value), undone.checked); };
+const update = () => { out.textContent = used.value; drawBoard(Number(used.value), undone.checked); drawBoardVertical(Number(used.value), undone.checked); };
 used.addEventListener("input", update);
 undone.addEventListener("change", update);
 const finish = document.getElementById("finish");
