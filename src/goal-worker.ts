@@ -8,6 +8,8 @@ export type GoalRequest = {
   job: number;
   seed: number;
   tries: number;
+  /** Whether the debug UI row is on the board (it changes the layout). */
+  debug: boolean;
   /** An exact board instead of the random one (one placed for a test). */
   placed: Placed[] | null;
   near: Point;
@@ -20,8 +22,8 @@ export type GoalRequest = {
 };
 
 self.onmessage = (event: MessageEvent<GoalRequest>) => {
-  const { job, seed, tries, placed, near, moved, level = 1, exclude, avoid } = event.data;
-  const layout = placed ? fixedLayout(placed) : randomLayout(seed, { tries });
+  const { job, seed, tries, debug, placed, near, moved, level = 1, exclude, avoid } = event.data;
+  const layout = placed ? fixedLayout(placed) : randomLayout(seed, { tries, debug });
   // The push search's targets ranked by the difficulty measure (docs/goal-search.md).
   const found = makeGoalHard(layout, near, { moved: new Map(moved), exclude: new Set(exclude), avoid }, level);
   if (!found) {

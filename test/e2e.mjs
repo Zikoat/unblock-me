@@ -88,20 +88,36 @@ const browser = await chromium.launch();
     await touch("touchEnd", []);
   }
   const tap = (p) => gesture([p], [[p[0] + 2, p[1] + 2]], { steps: 1 });
-  const fresh = async () => { await page.goto(url); await page.evaluate(() => unblock.forget()); await page.goto(url); await frame(page); };
+  // A fresh start, with the debug UI on unless asked not to.
+  const fresh = async ({ debug = true } = {}) => { await page.goto(url); await page.evaluate((d) => { unblock.forget(); if (d) localStorage.setItem("unblock-me:debug", "true"); }, debug); await page.goto(url); await frame(page); };
   const place = async (blocks, goal = null) => { await page.evaluate(([b, g]) => unblock.place(b, g), [blocks, goal]); await frame(page); };
   const H = (id, x, y) => ({ id, x, y, w: 2, h: 1 });
   const V = (id, x, y) => ({ id, x, y, w: 1, h: 2 });
   const Wall = (x, y) => ({ id: `wall${x},${y}`, x, y, w: 1, h: 1, wall: true });
   const UI = [
-    { id: "home", x: -1, y: 0, w: 1, h: 1, ui: "home" },
     { id: "reset", x: 0, y: 0, w: 1, h: 1, ui: "reset" },
     { id: "fullscreen", x: 1, y: 0, w: 1, h: 1, ui: "fullscreen" },
     { id: "fps", x: 2, y: 2, w: 1, h: 1, ui: "fps" },
     { id: "reports", x: 3, y: 2, w: 1, h: 1, ui: "reports" },
     { id: "density", x: -1, y: 2, w: 1, h: 1, ui: "density" },
     { id: "border", x: 0, y: 2, w: 1, h: 1, ui: "border" },
+    { id: "home", x: -2, y: 2, w: 1, h: 1, ui: "home" },
   ];
+
+  // Without the debug UI only the game's row is there: reset and fullscreen.
+  await fresh({ debug: false });
+  check((await page.evaluate(() => unblock.visibleBlocks().filter((b) => b.ui).map((b) => b.ui).sort().join())) === "fullscreen,reset", "only reset and fullscreen show at first");
+  // Reset, fullscreen, reset, fullscreen in a row turns the debug UI on (and resets).
+  for (const [i, x] of [0.5, 1.5, 0.5, 1.5].entries()) {
+    const reload = page.waitForEvent("load", { timeout: 3000 }).then(() => true, () => false);
+    await tap(cell(x, 0.5));
+    if (i !== 1) check(await reload, `tap ${i + 1} of the code reloads (a reset)`);
+    else await page.waitForTimeout(200);
+    await frame(page);
+  }
+  await page.waitForTimeout(300);
+  const uis = await page.evaluate(() => [unblock.visibleBlocks().filter((b) => b.ui).length, localStorage.getItem("unblock-me:debug"), localStorage.getItem("unblock-me:debug-code")]);
+  check(uis[0] === 8, `reset, fullscreen, reset, fullscreen turns the debug UI on (${uis})`);
 
   // Random layout with the UI blocks in the middle.
   await fresh();
@@ -116,7 +132,7 @@ const browser = await chromium.launch();
   check(idleFps > 10, `with nothing moving the counter still counts frames (${idleFps} fps)`);
   await tap(cell(2.5, 2.5));
   check(await page.evaluate(() => getComputedStyle(document.querySelector("#fps")).display === "none" && getComputedStyle(document.querySelector("#spin")).display === "none"), "and hides it again");
-  for (const [x, y, what] of [[-0.85, 0.15, "home"], [0.15, 0.15, "reset"], [1.15, 0.15, "fullscreen"], [-0.85, 2.15, "density"], [0.15, 2.15, "border toggle"], [1.15, 2.15, "upload"], [2.15, 2.15, "fps toggle"], [3.15, 2.15, "reports"]]) {
+  for (const [x, y, what] of [[-1.85, 2.15, "home"], [0.15, 0.15, "reset"], [1.15, 0.15, "fullscreen"], [-0.85, 2.15, "density"], [0.15, 2.15, "border toggle"], [1.15, 2.15, "upload"], [2.15, 2.15, "fps toggle"], [3.15, 2.15, "reports"]]) {
     await expectColor(page, cell(x, y), "reset", `the ${what} block is black`);
   }
   check((await colorAt(page, ...cell(0.5, 1.5))) !== "reset", "with an empty row between the game's row and the debug row");
@@ -173,6 +189,8 @@ const browser = await chromium.launch();
   check(JSON.stringify(rest) === JSON.stringify({
     "someone-else": "keep me",
     "unblock-me:border": "false",
+    "unblock-me:debug": "true",
+    "unblock-me:debug-code": "0",
     "unblock-me:fps": "false",
     "unblock-me:tries": "12",
     "unblock-me:v6:history": "[]",
@@ -454,8 +472,8 @@ const browser = await chromium.launch();
   await page.evaluate(() => { unblock.scene.goal = null; unblock.redraw(); });
   const pointer = async () => page.evaluate(() => {
     const c = unblock.scene.camera, s = unblock.scene;
-    // The middle of the UI area (x -1..4, y 0..3), on screen.
-    const ux = 1.5 * 60 * c.scale + c.offsetX, uy = 1.5 * 60 * c.scale + c.offsetY;
+    // The middle of the game's UI row (x 0..2, y 0..1), on screen.
+    const ux = 1 * 60 * c.scale + c.offsetX, uy = 0.5 * 60 * c.scale + c.offsetY;
     const dx = ux - s.width / 2, dy = uy - s.height / 2;
     const k = Math.min(Math.abs((s.width / 2 - 26) / dx || Infinity), Math.abs((s.height / 2 - 26) / dy || Infinity));
     return [s.width / 2 + dx * k, s.height / 2 + dy * k + 10];
@@ -481,7 +499,7 @@ const browser = await chromium.launch();
   const borderArrow = await page.evaluate(() => {
     const c = unblock.scene.camera, s = unblock.scene;
     const v = { x: s.width * 0.1, y: s.height * 0.1, w: s.width * 0.8, h: s.height * 0.8 };
-    const ux = 60 * c.scale + c.offsetX, uy = 90 * c.scale + c.offsetY;
+    const ux = 60 * c.scale + c.offsetX, uy = 30 * c.scale + c.offsetY;
     const cx = v.x + v.w / 2, cy = v.y + v.h / 2, dx = ux - cx, dy = uy - cy;
     const k = Math.min(Math.abs((v.w / 2 - 26) / dx || Infinity), Math.abs((v.h / 2 - 26) / dy || Infinity));
     return [cx + dx * k, cy + dy * k + 10];
@@ -495,11 +513,11 @@ const browser = await chromium.launch();
   // UI blocks on screen but just right of the border count as out of view: the arrow shows.
   await page.evaluate(() => { unblock.scene.camera = { scale: 1, offsetX: 430, offsetY: 370 }; unblock.redraw(); });
   await frame(page);
-  // The UI area (x -1..3) now starts at screen x 370: right of the border (x 40..360).
+  // The game's row (x 0..2) now starts at screen x 430: right of the border (x 40..360).
   const rightArrow = await page.evaluate(() => {
     const c = unblock.scene.camera, s = unblock.scene;
     const v = { x: s.width * 0.1, y: s.height * 0.1, w: s.width * 0.8, h: s.height * 0.8 };
-    const ux = 60 * c.scale + c.offsetX, uy = 90 * c.scale + c.offsetY;
+    const ux = 60 * c.scale + c.offsetX, uy = 30 * c.scale + c.offsetY;
     const cx = v.x + v.w / 2, cy = v.y + v.h / 2, dx = ux - cx, dy = uy - cy;
     const k = Math.min(Math.abs((v.w / 2 - 26) / dx || Infinity), Math.abs((v.h / 2 - 26) / dy || Infinity));
     return [cx + dx * k, cy + dy * k + 10];
@@ -664,7 +682,7 @@ const browser = await chromium.launch();
 
   // The home block goes to the homepage (here the test server's root).
   const home = page.waitForEvent("load", { timeout: 5000 }).then(() => true, () => false);
-  await tap(cell(-0.5, 0.5));
+  await tap(cell(-1.5, 2.5));
   check(await home && new URL(page.url()).pathname === "/", `the home block opens the homepage (${page.url()})`);
 
   // Pinch zooms and pans together; limits hold.

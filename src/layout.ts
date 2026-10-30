@@ -45,20 +45,26 @@ export function fixedLayout(placed: Placed[]): Layout {
   };
 }
 
-/** The UI blocks in the middle of the random layout: the game's own row, then an empty
- * row, then a row of debug blocks. */
-export const UI_BLOCKS: Placed[] = [
-  { id: "home", x: -1, y: 0, w: 1, h: 1, ui: "home" },
+/** The UI blocks in the middle of the random layout: the game's own row; with the debug UI
+ * on, an empty row and then a row of debug blocks (home among them). */
+export const GAME_UI: Placed[] = [
   { id: "reset", x: 0, y: 0, w: 1, h: 1, ui: "reset" },
   { id: "fullscreen", x: 1, y: 0, w: 1, h: 1, ui: "fullscreen" },
+];
+export const DEBUG_UI: Placed[] = [
   { id: "density", x: -1, y: 2, w: 1, h: 1, ui: "density" },
   { id: "border", x: 0, y: 2, w: 1, h: 1, ui: "border" },
   { id: "upload", x: 1, y: 2, w: 1, h: 1, ui: "upload" },
   { id: "fps", x: 2, y: 2, w: 1, h: 1, ui: "fps" },
   { id: "reports", x: 3, y: 2, w: 1, h: 1, ui: "reports" },
+  { id: "home", x: -2, y: 2, w: 1, h: 1, ui: "home" },
 ];
-/** Nothing is generated here: both rows and the gap between them. */
-export const UI_AREA = { x: -1, y: 0, width: 5, height: 3 };
+export const UI_BLOCKS: Placed[] = [...GAME_UI, ...DEBUG_UI];
+/** Where the game's row is (the house pin points here). */
+export const GAME_AREA = { x: 0, y: 0, width: 2, height: 1 };
+/** Nothing is generated here: the game's row, and with the debug UI both rows and the gap
+ * between them. */
+export const uiArea = (debug: boolean) => (debug ? { x: -2, y: 0, width: 6, height: 3 } : GAME_AREA);
 
 /** The lattice is cut into chunks of CHUNK x CHUNK cells. Each chunk tries `tries` random
  * blocks and keeps those that fit, so blocks stay inside their chunk and never overlap.
@@ -90,8 +96,9 @@ function chunkSeed(seed: number, cx: number, cy: number): number {
 }
 
 /** Blocks everywhere, the same for the same seed, with the UI blocks in the middle. */
-export function randomLayout(seed: number, { tries = TRIES }: { tries?: number } = {}): Layout {
-  const ui = UI_BLOCKS.map((p) => toBlock(p, p.id!));
+export function randomLayout(seed: number, { tries = TRIES, debug = false }: { tries?: number; debug?: boolean } = {}): Layout {
+  const ui = (debug ? UI_BLOCKS : GAME_UI).map((p) => toBlock(p, p.id!));
+  const area = uiArea(debug);
   const cache = new Map<string, Block[]>();
 
   function chunk(cx: number, cy: number): Block[] {
@@ -109,7 +116,7 @@ export function randomLayout(seed: number, { tries = TRIES }: { tries?: number }
       const y = cy * CHUNK + Math.floor(next() * (CHUNK - h + 1));
       const cells = horizontal ? [`${x},${y}`, `${x + 1},${y}`] : [`${x},${y}`, `${x},${y + 1}`];
       const candidate = toBlock({ x, y, w, h }, `${cx},${cy},${i}`);
-      if (cells.some((c) => taken.has(c)) || intersects(candidate, UI_AREA)) continue;
+      if (cells.some((c) => taken.has(c)) || intersects(candidate, area)) continue;
       cells.forEach((c) => taken.add(c));
       blocks.push(candidate);
     }

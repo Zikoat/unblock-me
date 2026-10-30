@@ -1,7 +1,7 @@
 // Draws a scene on a canvas. Everything on the board is drawn in world units under one
 // camera transform, so it all zooms and pans together.
 import { worldRect } from "./camera";
-import { intersects, UI_AREA, UNIT, type Block } from "./layout";
+import { GAME_AREA, intersects, UNIT, type Block } from "./layout";
 import { starsEarned, starsWorth } from "./stars";
 import { bestKnown, medal, type Goal } from "./goal";
 import { borderOnScreen, latticeRect, quickPush, visibleBlocks, whereIs, type Scene } from "./scene";
@@ -672,9 +672,10 @@ function drawBand(ctx: CanvasRenderingContext2D, b: Band, dpr: number): void {
   ctx.fillRect(b.x, b.y, b.width, b.height);
 }
 
-/** The arrow to the UI blocks, when none of them are in view (tapping it goes there). */
+/** The arrow to the game's UI row (reset and fullscreen), when it is out of view (tapping it
+ * goes there). */
 export function uiArrow(scene: Scene): EdgeArrow | null {
-  return scene.layout.byId("reset") ? edgeArrow(scene, onScreen(scene, UI_AREA)) : null;
+  return scene.layout.byId("reset") ? edgeArrow(scene, onScreen(scene, GAME_AREA)) : null;
 }
 
 /** A pin: a circle drawn out into a point along `angle`, towards what it marks. The home

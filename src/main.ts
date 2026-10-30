@@ -23,6 +23,11 @@ const TRIES_KEY = "unblock-me:tries";
 const CAMERA_KEY = "unblock-me:camera"; // where the view is, kept across reloads
 const LOG_KEY = "unblock-me:log"; // the play log; kept across resets
 const DEVICE_KEY = "unblock-me:device"; // names this browser's automatic uploads; kept across resets
+const DEBUG_KEY = "unblock-me:debug"; // whether the debug UI row is on; kept across resets
+const CODE_KEY = "unblock-me:debug-code"; // how far into DEBUG_CODE the taps are; kept across resets
+/** Tapping these UI blocks in a row, with no other block tapped or moved between, turns the
+ * debug UI on (for good) and resets, since its blocks change the board. */
+const DEBUG_CODE: Ui[] = ["reset", "fullscreen", "reset", "fullscreen"];
 /** The density slider's track, as a share of its block (see densityIcon). */
 const TRACK = 0.52;
 
@@ -152,11 +157,12 @@ function save(): void {
 
 const seed = load<number>(SEED_KEY, Math.floor(Math.random() * 2 ** 32));
 let tries = load<number>(TRIES_KEY, TRIES);
+const debug = load<boolean>(DEBUG_KEY, false);
 const moved = load<[string, number, number][]>(MOVED_KEY, []);
 const storedGoal = load<{ seed: number; tries: number; goal: Goal | null; done?: Goal[] } | null>(GOAL_KEY, null);
 const goalsFit = storedGoal?.seed === seed && storedGoal.tries === tries;
 const scene = newScene(innerWidth, innerHeight, {
-  layout: randomLayout(seed, { tries }),
+  layout: randomLayout(seed, { tries, debug }),
   moved: new Map(moved.map(([id, x, y]) => [id, { x, y }])),
   history: load<Move[]>(HISTORY_KEY, []),
   border: load<boolean>(BORDER_KEY, false),
@@ -198,7 +204,7 @@ function requestGoal(near: Point = viewCentre(scene.camera, scene.width, scene.h
     showGoal(ahead.ready.goal);
     return;
   }
-  const request: GoalRequest = { job: ++job, seed, tries, placed, near, moved: [...scene.moved], level: 0, exclude, avoid: targetsOf(scene.done) };
+  const request: GoalRequest = { job: ++job, seed, tries, debug, placed, near, moved: [...scene.moved], level: 0, exclude, avoid: targetsOf(scene.done) };
   worker.postMessage(request);
 }
 type Measured = { of: { id: string; target: Point }; difficulty: Difficulty; choices?: number };
@@ -269,7 +275,7 @@ function lookAhead(): void {
   const key = boardKey(moved, exclude, goal.target);
   if (key === ahead.asked || ahead.ready?.key === key) return;
   ahead.asked = key;
-  const request: GoalRequest = { job: ++ahead.job, seed, tries, placed, near: goal.target, moved: [...moved], level: 2, exclude, avoid: targetsOf([...scene.done, goal]) };
+  const request: GoalRequest = { job: ++ahead.job, seed, tries, debug, placed, near: goal.target, moved: [...moved], level: 2, exclude, avoid: targetsOf([...scene.done, goal]) };
   ahead.worker.postMessage(request);
 }
 ahead.worker.onmessage = (event: MessageEvent<Reply>) => {
@@ -357,18 +363,41 @@ function takeBack(): void {
 }
 undoButton.addEventListener("click", takeBack);
 
+/** Count a UI tap towards DEBUG_CODE (any other block tapped or moved starts it over); true
+ * when it completes, which turns the debug UI on. */
+function debugCode(ui: Ui | null): boolean {
+  if (debug) return false;
+  let at = load<number>(CODE_KEY, 0);
+  at = ui === DEBUG_CODE[at] ? at + 1 : ui === DEBUG_CODE[0] ? 1 : 0;
+  const done = at === DEBUG_CODE.length;
+  try {
+    localStorage.setItem(CODE_KEY, JSON.stringify(done ? 0 : at));
+    if (done) localStorage.setItem(DEBUG_KEY, "true");
+  } catch {
+    // No storage: no debug UI.
+  }
+  return done;
+}
+
 const gestures = new Gestures(scene, {
   onChange: () => {
+    debugCode(null);
     save();
     reachGoal(performance.now()); // a drag lands at once; a tap's slide reaches it at its end
   },
-  onPush: animate,
+  onPush: (...args) => {
+    debugCode(null);
+    animate(...args);
+  },
   onStuck: (id) => {
+    debugCode(null);
     shake = { id, born: -1 };
     redraw();
   },
   onUi: (ui) => {
-    if (ui === "reset") {
+    if (debugCode(ui)) {
+      forgetEverything();
+    } else if (ui === "reset") {
       forgetEverything();
     } else if (ui === "border") {
       scene.border = !scene.border;
@@ -396,7 +425,7 @@ const gestures = new Gestures(scene, {
       if (next !== tries) {
         log({ e: "density", from: tries, to: next, goal: scene.goal?.id ?? null });
         tries = next;
-        relayout(scene, randomLayout(seed, { tries }));
+        relayout(scene, randomLayout(seed, { tries, debug }));
         logged = 0; // a new board starts a new history
       }
       if (done && !scene.goal) requestGoal();
@@ -412,11 +441,13 @@ const gestures = new Gestures(scene, {
  * Only our own keys go, since other pages on this origin keep theirs in the same storage. */
 function forgetEverything(): void {
   log({ e: "reset", goal: scene.goal?.id ?? null });
-  const kept = JSON.stringify(playLog);
+  const kept = JSON.stringify(playLog), debugOn = load<boolean>(DEBUG_KEY, false), code = load<number>(CODE_KEY, 0);
   forget();
   try {
     localStorage.setItem(LOG_KEY, kept);
     localStorage.setItem(DEVICE_KEY, device);
+    localStorage.setItem(DEBUG_KEY, JSON.stringify(debugOn));
+    localStorage.setItem(CODE_KEY, JSON.stringify(code));
   } catch {
     // No storage: nothing to keep.
   }
