@@ -409,8 +409,11 @@ const browser = await chromium.launch();
   check(!(await block(page, "a")), "and culled once it has arrived outside the border");
   await page.evaluate(() => { unblock.frames = null; unblock.scene.border = false; });
 
-  // When no UI block is in view, an arrow at the view's edge points the way to them.
+  // When no UI block is in view, an arrow at the view's edge points the way to them. (No
+  // goal here, so its red arrow cannot land on the same spot.)
   await fresh();
+  await page.evaluate(() => unblock.goalReady());
+  await page.evaluate(() => { unblock.scene.goal = null; unblock.redraw(); });
   const pointer = async () => page.evaluate(() => {
     const c = unblock.scene.camera, s = unblock.scene;
     // The middle of the UI area (x -1..3, y 0..3), on screen.
@@ -476,7 +479,8 @@ const browser = await chromium.launch();
   await page.screenshot({ path: shots + "phone-6-goal.png" });
   // Solve one on an exact board: tap the red block to push it onto its target.
   // Row 4, walls at x -4 and 3: r (x -3..-2) can go right to x 1, where the target is.
-  await place([...UI, Wall(-4, 4), H("r", -3, 4), Wall(3, 4)], { id: "r", target: { x: 1, y: 4 }, solution: [] });
+  // n (column 0, rows 6..7) can later be pushed up as the next goal's red block.
+  await place([...UI, Wall(-4, 4), H("r", -3, 4), Wall(3, 4), V("n", 0, 6)], { id: "r", target: { x: 1, y: 4 }, solution: [] });
   // The target is a little larger than the red block, with a soft, solid outline.
   const edge = [];
   for (let y = 4.1; y < 4.9; y += 0.1) edge.push(await rgbAt(page, cell(1, 0)[0] - 3, cell(0, y)[1])); // 3 px outside the cells
@@ -487,7 +491,7 @@ const browser = await chromium.launch();
   // Mid-slide it does not count as reached yet.
   const drawnAt = await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => r(unblock.frames.at(-1)?.x))));
   const checkSpot = [cell(2, 4.5)[0] - 0.3 * 0.16 * 60, cell(0, 4.5)[1] + 0.7 * 0.16 * 60]; // the check's corner
-  check(drawnAt !== undefined && drawnAt < 1 && (await page.evaluate(() => unblock.scene.reached)) === false, `not reached while it is still sliding (drawn at x ${drawnAt?.toFixed(2)})`);
+  check(drawnAt !== undefined && drawnAt < 1 && (await page.evaluate(() => unblock.scene.done.length)) === 0, `not reached while it is still sliding (drawn at x ${drawnAt?.toFixed(2)})`);
   await page.evaluate(() => (unblock.frames = null));
   // On landing: reached, stars fly out of it, and a check shows on the target.
   const starsSeen = await page.evaluate(() => new Promise((resolve) => {
@@ -503,7 +507,13 @@ const browser = await chromium.launch();
     look();
   }));
   check(starsSeen > 20, `stars fly out when it lands (${starsSeen} star pixels at most)`);
-  check(await page.evaluate(() => unblock.scene.reached), "the goal counts as reached");
+  check(await page.evaluate(() => unblock.scene.done.map((g) => g.id).join() === "r"), "the goal counts as reached");
+  // The next goal: a block close to the reached target becomes the red block.
+  await page.evaluate(() => unblock.goalReady());
+  const next = await page.evaluate(() => unblock.scene.goal);
+  check(next?.id === "n", `the next goal's red block is the block next to the reached target (${next?.id}, target ${JSON.stringify(next?.target)})`);
+  await page.waitForTimeout(100);
+  await expectColor(page, cell(0.5, 6.5), "goal", "and it is red now");
   await expectColor(page, checkSpot, "background", "a white check sits on the target, over the red block");
   await page.screenshot({ path: shots + "phone-7-solved.png" });
   // The check stays on the target after the red block leaves, and no stars come again.
@@ -529,7 +539,63 @@ const browser = await chromium.launch();
   await page.evaluate(() => { unblock.scene.border = false; unblock.redraw(); });
   await frame(page);
   const shown = await rgbAt(page, ...spot);
-  check(shown[0] - shown[1] > 10, `and with the border off, the same spot shows it (${shown.join(",")})`);
+  check(Math.abs(shown[0] - 243) + Math.abs(shown[1] - 242) > 30, `and with the border off, the same spot shows it (${shown.join(",")})`);
+  await page.evaluate(() => { unblock.scene.camera = { scale: 1, offsetX: 170, offsetY: 370 }; unblock.redraw(); });
+
+  // Edge markers for an out-of-view goal: a red arrow to the red block and a red glow at the
+  // edge towards the target, on the red block's axis. Tapping either goes there. (Row 3 keeps
+  // the glow clear of the undo button in the corner, which would take the tap.)
+  const redEdge = () => page.evaluate(() => {
+    const ctx = document.querySelector("canvas").getContext("2d"), dpr = devicePixelRatio, x = (unblock.scene.width - 3) * dpr;
+    let red = 0;
+    for (let y = 10; y < unblock.scene.height; y += 20) {
+      const [r, g] = ctx.getImageData(x, y * dpr, 1, 1).data;
+      if (r - g > 80) red++;
+    }
+    return red;
+  });
+  // The red block off the same side as the target: its pin is the way there, and no glow.
+  await place([...UI, H("r", 10, 3)], { id: "r", target: { x: 20, y: 3 }, solution: [] });
+  await frame(page);
+  const behind = await redEdge();
+  check(behind === 0, `no glow while the red block is off the same side (${behind} red spots on the edge)`);
+  await place([...UI, H("r", -7, 3)], { id: "r", target: { x: 20, y: 3 }, solution: [] });
+  await frame(page);
+  const marks = await page.evaluate(() => {
+    const c = unblock.scene.camera, s = unblock.scene;
+    const bx = (-6) * 60 * c.scale + c.offsetX, by = 3.5 * 60 * c.scale + c.offsetY; // the red block's middle
+    const cx = s.width / 2, cy = s.height / 2, dx = bx - cx, dy = by - cy;
+    const k = Math.min(Math.abs((s.width / 2 - 26) / dx || Infinity), Math.abs((s.height / 2 - 26) / dy || Infinity));
+    return { arrow: [cx + dx * k - 8, cy + dy * k], glowEdge: [s.width - 3, 3.5 * 60 + c.offsetY], glowInner: [s.width - 66, 3.5 * 60 + c.offsetY] };
+  });
+  await expectColor(page, marks.arrow, "goal", "a red arrow points to the red block when it is out of view");
+  const glowEdge = await rgbAt(page, ...marks.glowEdge), glowInner = await rgbAt(page, ...marks.glowInner);
+  check(glowEdge[0] - glowEdge[1] > 80 && glowInner[0] - glowInner[1] < glowEdge[0] - glowEdge[1], `and a red glow at the right edge, fading inwards, level with the target (${glowEdge.join(",")} at the edge, ${glowInner.join(",")} further in)`);
+  await page.screenshot({ path: shots + "phone-8-markers.png" });
+  // Off the goal's track (its row half out of view), there's no glow.
+  const camera = await page.evaluate(() => ({ ...unblock.scene.camera }));
+  await page.evaluate(() => { unblock.scene.camera.offsetY = -200; unblock.redraw(); });
+  await frame(page);
+  const offTrack = await redEdge();
+  check(offTrack === 0, `no glow once the target's row is not wholly in view (${offTrack} red spots on the edge)`);
+  await page.evaluate((c) => { unblock.scene.camera = c; unblock.redraw(); }, camera);
+  await frame(page);
+  await tap(marks.glowEdge.map((v, i) => (i === 0 ? v - 10 : v)));
+  await page.waitForTimeout(500);
+  const atTarget = await page.evaluate(() => unblock.scene.camera);
+  check(Math.abs(atTarget.offsetX - (200 - 21 * 60)) < 1 && Math.abs(atTarget.offsetY - (400 - 3.5 * 60)) < 1, `tapping the glow brings the target to the middle (${atTarget.offsetX.toFixed(0)},${atTarget.offsetY.toFixed(0)})`);
+  const back = await page.evaluate(() => {
+    const c = unblock.scene.camera, s = unblock.scene;
+    const bx = -6 * 60 * c.scale + c.offsetX, by = 3.5 * 60 * c.scale + c.offsetY;
+    const cx = s.width / 2, cy = s.height / 2, dx = bx - cx, dy = by - cy;
+    const k = Math.min(Math.abs((s.width / 2 - 26) / dx || Infinity), Math.abs((s.height / 2 - 26) / dy || Infinity));
+    return [cx + dx * k, cy + dy * k];
+  });
+  await tap(back);
+  await page.waitForTimeout(500);
+  const atRed = await page.evaluate(() => unblock.scene.camera);
+  check(Math.abs(atRed.offsetX - (200 + 6 * 60)) < 1, `tapping the red arrow brings the red block to the middle (${atRed.offsetX.toFixed(0)})`);
+  check(await page.evaluate(() => unblock.scene.history.length === 0 && unblock.scene.circle === null), "and the taps did nothing to the board");
   await page.evaluate(() => { unblock.scene.camera = { scale: 1, offsetX: 170, offsetY: 370 }; unblock.redraw(); });
 
   // The home block goes to the homepage (here the test server's root).

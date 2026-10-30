@@ -88,3 +88,19 @@ describe("merge, simplify and solved", () => {
     expect(solved(goal, [{ ...block, x: 3 }])).toBe(false);
   });
 });
+
+describe("the next goal", () => {
+  test("excluded blocks are never picked as the red block", () => {
+    const layout = fixedLayout([H("r", 0, 0), H("s", 0, 2)]);
+    expect(makeGoal(layout, { x: 0, y: 0 }, { effort: 3 })!.id).toBe("r");
+    expect(makeGoal(layout, { x: 0, y: 0 }, { effort: 3, exclude: new Set(["r"]) })!.id).toBe("s");
+  });
+
+  test("it starts from the board as it is, moved blocks included", () => {
+    // r has been moved onto x 4; a goal made near there finds it at x 4.
+    const layout = fixedLayout([H("r", 0, 0), W(-1, 0)]);
+    const goal = makeGoal(layout, { x: 4, y: 0 }, { effort: 2, moved: new Map([["r", { x: 4, y: 0 }]]) })!;
+    expect(goal.id).toBe("r");
+    expect(goal.target).toEqual({ x: 6, y: 0 });
+  });
+});

@@ -5,7 +5,7 @@ import { viewCentre } from "./goal";
 import type { GoalRequest } from "./goal-worker";
 import { Gestures } from "./gestures";
 import { fixedLayout, MAX_TRIES, MIN_TRIES, randomLayout, TRIES, UNIT, type Placed, type Ui } from "./layout";
-import { draw, uiArrow, type Sparkle } from "./render";
+import { draw, goalBand, redArrow, uiArrow, type Sparkle } from "./render";
 import { ease, slideDuration } from "./slide";
 import { blockAt, blocksIn, slideRange, type Move } from "./rules";
 import { borderOnScreen, goalSolved, latticeRect, newScene, relayout, resize, restart, undo, visibleBlocks, whereIs } from "./scene";
@@ -44,18 +44,18 @@ function placeView(): void {
   Object.assign(viewBox.style, { left: `${v.x}px`, top: `${v.y}px`, width: `${v.width}px`, height: `${v.height}px` });
 }
 
-// Tapping the arrow to the UI blocks glides the view back to them, at the same zoom.
-let flight: { from: { scale: number; offsetX: number; offsetY: number }; start: number | null } | null = null;
-function flyHome(): void {
-  flight = { from: { ...scene.camera }, start: null };
+// Tapping an edge marker (the arrows, the target's glow) glides the view there, at the same
+// zoom, putting `to` (lattice units) in the middle.
+let flight: { from: { scale: number; offsetX: number; offsetY: number }; to: Point; start: number | null } | null = null;
+function flyTo(to: Point): void {
+  flight = { from: { ...scene.camera }, to, start: null };
 }
 function flying(now: number): void {
   if (!flight) return;
   flight.start ??= now;
   const t = Math.min(1, (now - flight.start) / 350);
-  // Keep the zoom, and put the reset block in the middle.
   const { scale } = flight.from;
-  const to = { offsetX: scene.width / 2 - (UNIT / 2) * scale, offsetY: scene.height / 2 - (UNIT / 2) * scale };
+  const to = { offsetX: scene.width / 2 - flight.to.x * UNIT * scale, offsetY: scene.height / 2 - flight.to.y * UNIT * scale };
   const e = ease(t);
   scene.camera = {
     scale,
@@ -82,7 +82,7 @@ function save(): void {
     localStorage.setItem(MOVED_KEY, JSON.stringify([...scene.moved].map(([id, p]) => [id, p.x, p.y])));
     localStorage.setItem(HISTORY_KEY, JSON.stringify(scene.history));
     // A goal belongs to one seed and density.
-    localStorage.setItem(GOAL_KEY, JSON.stringify(scene.goal && { seed, tries, goal: scene.goal, reached: scene.reached }));
+    localStorage.setItem(GOAL_KEY, JSON.stringify({ seed, tries, goal: scene.goal, done: scene.done }));
   } catch {
     // Private mode or full storage: changes just don't survive a reload.
   }
@@ -91,14 +91,15 @@ function save(): void {
 const seed = load<number>(SEED_KEY, Math.floor(Math.random() * 2 ** 32));
 let tries = load<number>(TRIES_KEY, TRIES);
 const moved = load<[string, number, number][]>(MOVED_KEY, []);
-const storedGoal = load<{ seed: number; tries: number; goal: Goal; reached?: boolean } | null>(GOAL_KEY, null);
+const storedGoal = load<{ seed: number; tries: number; goal: Goal | null; done?: Goal[] } | null>(GOAL_KEY, null);
+const goalsFit = storedGoal?.seed === seed && storedGoal.tries === tries;
 const scene = newScene(innerWidth, innerHeight, {
   layout: randomLayout(seed, { tries }),
   moved: new Map(moved.map(([id, x, y]) => [id, { x, y }])),
   history: load<Move[]>(HISTORY_KEY, []),
   border: load<boolean>(BORDER_KEY, false),
-  goal: storedGoal?.seed === seed && storedGoal.tries === tries ? storedGoal.goal : null,
-  reached: storedGoal?.seed === seed && storedGoal.tries === tries ? (storedGoal.reached ?? false) : false,
+  goal: goalsFit ? storedGoal.goal : null,
+  done: goalsFit ? (storedGoal.done ?? []) : [],
 });
 restoreCamera();
 // A fresh start (first visit or after a reset) keeps its seed from the first load on.
@@ -108,13 +109,16 @@ if (localStorage.getItem(SEED_KEY) === null) save();
 // newest request counts; a slider drag or reset in between makes older answers stale.
 const worker = new Worker("goal-worker.js");
 let job = 0;
+/** The exact board in play when tests place one; null for the random board. */
+let placed: Placed[] | null = null;
 let goalWaiters: (() => void)[] = [];
-function requestGoal(): void {
+/** Ask for a goal near `near` (the middle of the view by default), never with an earlier
+ * red block. */
+function requestGoal(near: Point = viewCentre(scene.camera, scene.width, scene.height)): void {
   if (shared) return;
-  const near = viewCentre(scene.camera, scene.width, scene.height);
-  // Below the UI rows when the view is on them.
-  const at: Point = near.y >= -1 && near.y <= 0 && near.x >= -2 && near.x <= 2 ? { x: near.x, y: 2 } : near;
-  const request: GoalRequest = { job: ++job, seed, tries, near: at, moved: [...scene.moved], effort: EFFORT };
+  const request: GoalRequest = {
+    job: ++job, seed, tries, placed, near, moved: [...scene.moved], effort: EFFORT, exclude: scene.done.map((g) => g.id),
+  };
   worker.postMessage(request);
 }
 worker.onmessage = (event: MessageEvent<{ job: number; goal: Goal | null }>) => {
@@ -164,8 +168,11 @@ function sliding(now: number): { id: string; x: number; y: number; from: Point; 
 let sparkles: Sparkle[] = [];
 function reachGoal(now: number): void {
   const goal = scene.goal;
-  if (!goal || scene.reached || !goalSolved(scene) || animation?.move.id === goal.id) return;
-  scene.reached = true;
+  if (!goal || !goalSolved(scene) || animation?.move.id === goal.id) return;
+  // Done: its target keeps a check, and the next goal starts from a block close to it.
+  scene.done.push(goal);
+  scene.goal = null;
+  requestGoal(goal.target);
   const red = scene.layout.byId(goal.id)!;
   const at = whereIs(scene, goal.id)!;
   const cx = (at.x + red.w / 2) * UNIT;
@@ -276,6 +283,7 @@ Object.assign(window, {
     /** Replace the random layout with exactly these blocks, and optionally a goal (for tests). */
     place: (blocks: Placed[], goal: Goal | null = null) => {
       job++; // any goal on its way is for the old board
+      placed = blocks;
       restart(scene, fixedLayout(blocks));
       scene.goal = goal;
       redraw();
@@ -415,10 +423,24 @@ canvas.addEventListener("pointerleave", () => (tip.style.display = "none"));
 
 // A press on the arrow to the UI blocks is the arrow's, not the board's.
 let onArrow: number | null = null;
-const hitsArrow = (e: PointerEvent) => {
-  const a = uiArrow(scene);
-  return !!a && Math.hypot(e.offsetX - a.x, e.offsetY - a.y) <= 24;
-};
+/** Where tapping the edge marker under the pointer goes (lattice units), or null. */
+function markerAt(e: PointerEvent): Point | null {
+  const near = (a: { x: number; y: number } | null) => !!a && Math.hypot(e.offsetX - a.x, e.offsetY - a.y) <= 24;
+  // The goal's markers first: when pins overlap, the red one is on top.
+  const goal = scene.goal;
+  const red = goal && scene.layout.byId(goal.id);
+  if (goal && red) {
+    const at = whereIs(scene, goal.id)!;
+    if (near(redArrow(scene))) return { x: at.x + red.w / 2, y: at.y + red.h / 2 };
+    const b = goalBand(scene);
+    if (b && b.alpha > 0.3 && e.offsetX >= b.x - 8 && e.offsetX <= b.x + b.width + 8 && e.offsetY >= b.y - 8 && e.offsetY <= b.y + b.height + 8) {
+      return { x: goal.target.x + red.w / 2, y: goal.target.y + red.h / 2 };
+    }
+  }
+  if (near(uiArrow(scene))) return { x: 0.5, y: 0.5 };
+  return null;
+}
+const hitsArrow = (e: PointerEvent) => markerAt(e) !== null;
 
 canvas.addEventListener("pointerdown", (e) => {
   if (e.pointerType === "mouse" && e.button !== 0) return;
@@ -441,7 +463,8 @@ canvas.addEventListener("pointermove", (e) => {
 canvas.addEventListener("pointerup", (e) => {
   if (e.pointerId === onArrow) {
     onArrow = null;
-    if (hitsArrow(e)) flyHome();
+    const to = markerAt(e);
+    if (to) flyTo(to);
     redraw();
     return;
   }

@@ -24,6 +24,8 @@ export type GoalOptions = {
   perCell?: number;
   /** The board to start from, when blocks have already been moved. */
   moved?: ReadonlyMap<string, Point>;
+  /** Blocks that may not be the red block (earlier red blocks). */
+  exclude?: ReadonlySet<string>;
 };
 
 /** One drag can move a block several cells: merge back-to-back moves of the same block. */
@@ -85,9 +87,9 @@ function push(layout: Layout, moved: Map<string, Point>, red: Block, dir: number
  * push each both ways along its axis, and keep the one that got furthest (fewest moves on a
  * tie). Null when no block nearby can be pushed even one cell.
  */
-export function makeGoal(layout: Layout, near: Point, { effort = 12, perCell = 4, moved: start = new Map() }: GoalOptions = {}): Goal | null {
+export function makeGoal(layout: Layout, near: Point, { effort = 12, perCell = 4, moved: start = new Map(), exclude = new Set() }: GoalOptions = {}): Goal | null {
   const candidates = blocksIn(layout, { x: near.x - 4, y: near.y - 4, width: 8, height: 8 }, { moved: start })
-    .filter((b) => !b.ui && !b.wall)
+    .filter((b) => !b.ui && !b.wall && !exclude.has(b.id))
     .sort((a, b) => Math.hypot(a.x - near.x, a.y - near.y) - Math.hypot(b.x - near.x, b.y - near.y) || (a.id < b.id ? -1 : 1))
     .slice(0, 6);
   let best: (Goal & { distance: number }) | null = null;

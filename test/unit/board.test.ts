@@ -359,11 +359,11 @@ describe("UI blocks", () => {
     expect(visibleBlocks(scene).map((b) => b.id)).toContain("edge");
   });
 
-  test("restart forgets moves, history, the goal and having reached it, the circle and the camera; keeps settings", () => {
+  test("restart forgets moves, history, the goal and the goals reached, the circle and the camera; keeps settings", () => {
     const { scene, g, at } = board(...ui(), H(2, 4, "a"));
     scene.border = false;
     scene.goal = { id: "a", target: { x: 5, y: 4 }, solution: [] };
-    scene.reached = true;
+    scene.done = [{ id: "b", target: { x: 0, y: 6 }, solution: [] }];
     drag(g, cell(3, 4.5), cell(5, 4.5));
     tap(g, cell(-3, 6));
     drag(g, cell(-3, 6), cell(-1, 7)); // pan
@@ -373,7 +373,7 @@ describe("UI blocks", () => {
     expect(scene.moved.size).toBe(0);
     expect(scene.history).toEqual([]);
     expect(scene.goal).toBeNull();
-    expect(scene.reached).toBe(false);
+    expect(scene.done).toEqual([]);
     expect(scene.circle).toBeNull();
     expect(scene.border).toBe(false);
     // Centred on the middle of the reset block.

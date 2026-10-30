@@ -2,7 +2,8 @@
 // camera transform, so it all zooms and pans together.
 import { worldRect } from "./camera";
 import { intersects, UI_AREA, UNIT, type Block } from "./layout";
-import { borderOnScreen, latticeRect, visibleBlocks, type Scene } from "./scene";
+import type { Goal } from "./goal";
+import { borderOnScreen, latticeRect, visibleBlocks, whereIs, type Scene } from "./scene";
 
 export const COLORS = {
   background: "#f3f2ee",
@@ -68,15 +69,15 @@ export function draw(
   ctx.fill();
 
   const goal = scene.goal;
-  const red = goal ? scene.layout.byId(goal.id) : undefined;
-  // The target is culled like a block: drawn only when it reaches into the view.
+  // Targets, the reached ones and the current one: a pale area with a soft outline, a little
+  // larger than the red block so it still shows around the block on it. Culled like blocks.
   const inView = latticeRect(scene, borderOnScreen(scene));
-  const targetInView = !!goal && !!red && intersects({ ...goal.target, w: red.w, h: red.h }, inView);
-  if (goal && red && targetInView) {
-    // The target: a pale area with a soft outline, a little larger than the red block, so it
-    // still shows around the block when the block is on it.
+  const targets = [...scene.done, ...(goal ? [goal] : [])]
+    .map((g) => ({ goal: g, cells: targetCells(scene, g) }))
+    .filter((t): t is { goal: Goal; cells: Cells } => !!t.cells && intersects(t.cells, inView));
+  for (const { cells } of targets) {
     ctx.beginPath();
-    ctx.roundRect(goal.target.x * UNIT - TARGET_MARGIN, goal.target.y * UNIT - TARGET_MARGIN, red.w * UNIT + 2 * TARGET_MARGIN, red.h * UNIT + 2 * TARGET_MARGIN, 12);
+    ctx.roundRect(cells.x * UNIT - TARGET_MARGIN, cells.y * UNIT - TARGET_MARGIN, cells.w * UNIT + 2 * TARGET_MARGIN, cells.h * UNIT + 2 * TARGET_MARGIN, 12);
     ctx.fillStyle = COLORS.target;
     ctx.fill();
     ctx.strokeStyle = COLORS.targetLine;
@@ -112,8 +113,8 @@ export function draw(
     else if (block.ui === "home") homeIcon(ctx, block);
   }
 
-  // Once the goal has been reached, its check stays on the target, above the red block.
-  if (goal && red && targetInView && scene.reached) goalCheck(ctx, goal.target.x + red.w / 2, goal.target.y + red.h / 2);
+  // A reached target keeps a check, above whatever block is on it.
+  for (const { goal: g, cells } of targets) if (g !== goal) goalCheck(ctx, cells.x + cells.w / 2, cells.y + cells.h / 2);
   for (const s of sparkles) sparkle(ctx, s, now);
 
   if (scene.circle) {
@@ -132,7 +133,11 @@ export function draw(
     ctx.strokeRect(border.x + 0.5, border.y + 0.5, border.width - 1, border.height - 1);
   }
   const toUi = uiArrow(scene);
-  if (toUi) drawArrow(ctx, toUi, COLORS.ui, 16, dpr);
+  if (toUi) drawPin(ctx, toUi, COLORS.ui, 16, dpr, true);
+  const toRed = redArrow(scene);
+  if (toRed) drawPin(ctx, toRed, COLORS.goal, 13, dpr);
+  const band = goalBand(scene);
+  if (band) drawBand(ctx, band, dpr);
   // A slide entirely out of view (an undo, say): a small green arrow points to it while it runs.
   if (sliding) {
     const block = scene.layout.byId(sliding.id);
@@ -140,7 +145,7 @@ export function draw(
       const x = Math.min(sliding.from.x, sliding.to.x), y = Math.min(sliding.from.y, sliding.to.y);
       const swept = { x, y, width: Math.max(sliding.from.x, sliding.to.x) + block.w - x, height: Math.max(sliding.from.y, sliding.to.y) + block.h - y };
       const toChange = edgeArrow(scene, onScreen(scene, swept));
-      if (toChange) drawArrow(ctx, toChange, COLORS.moved, 11, dpr);
+      if (toChange) drawPin(ctx, toChange, COLORS.moved, 11, dpr);
     }
   }
 }
@@ -360,29 +365,120 @@ function edgeArrow(scene: Scene, target: ScreenRect): EdgeArrow | null {
   return { x: cx + dx * k, y: cy + dy * k, angle: Math.atan2(dy, dx) };
 }
 
+type Cells = { x: number; y: number; w: number; h: number };
+
+/** The cells a goal's target covers: the red block's size at the target. */
+function targetCells(scene: Scene, goal: Goal): Cells | null {
+  const red = scene.layout.byId(goal.id);
+  return red ? { ...goal.target, w: red.w, h: red.h } : null;
+}
+
+/** The arrow to the red block, when it is out of view (tapping it goes there). */
+export function redArrow(scene: Scene): EdgeArrow | null {
+  const goal = scene.goal;
+  const red = goal && scene.layout.byId(goal.id);
+  const at = goal && whereIs(scene, goal.id);
+  if (!red || !at) return null;
+  return edgeArrow(scene, onScreen(scene, { x: at.x, y: at.y, width: red.w, height: red.h }));
+}
+
+export type Band = { side: "left" | "right" | "top" | "bottom"; x: number; y: number; width: number; height: number; alpha: number };
+const BAND_DEPTH = 70; // px from the view's edge inwards
+
+/** How much of [lo, hi] lies inside [from, to], 0..1. */
+const inside = (lo: number, hi: number, from: number, to: number) => Math.max(0, Math.min(hi, to) - Math.max(lo, from)) / (hi - lo);
+
+/**
+ * When the target is out of view: a red glow at the edge of the view on the target's side,
+ * on the goal's own track (left or right of a horizontal red block's row, above or below a
+ * vertical one's column). Tapping it goes to the target. It fades rather than pops, with how
+ * far the view's edge has moved over things: out as the target comes into view, out as its
+ * track leaves the view, and out as the red block goes off that same side (then the red
+ * block's pin is the way there, and both would clutter the edge).
+ */
+export function goalBand(scene: Scene): Band | null {
+  const goal = scene.goal;
+  const cells = goal && targetCells(scene, goal);
+  const red = goal && scene.layout.byId(goal.id);
+  const at = goal && whereIs(scene, goal.id);
+  if (!goal || !cells || !red || !at) return null;
+  const t = onScreen(scene, { x: cells.x, y: cells.y, width: cells.w, height: cells.h });
+  const r = onScreen(scene, { x: at.x, y: at.y, width: red.w, height: red.h });
+  const v = borderOnScreen(scene);
+  const right = v.x + v.width, bottom = v.y + v.height;
+  let band: Band;
+  if (cells.w > cells.h) {
+    const side = t.right > right ? "right" : t.left < v.x ? "left" : null;
+    if (!side) return null;
+    const y0 = Math.max(t.top, v.y), y1 = Math.min(t.bottom, bottom);
+    if (y1 <= y0) return null;
+    const hidden = 1 - inside(t.left, t.right, v.x, right);
+    const redIn = side === "right" ? inside(r.left, r.right, -Infinity, right) : inside(r.left, r.right, v.x, Infinity);
+    const alpha = hidden * inside(t.top, t.bottom, v.y, bottom) * redIn;
+    band = { side, x: side === "right" ? right - BAND_DEPTH : v.x, y: y0, width: BAND_DEPTH, height: y1 - y0, alpha };
+  } else {
+    const side = t.bottom > bottom ? "bottom" : t.top < v.y ? "top" : null;
+    if (!side) return null;
+    const x0 = Math.max(t.left, v.x), x1 = Math.min(t.right, right);
+    if (x1 <= x0) return null;
+    const hidden = 1 - inside(t.top, t.bottom, v.y, bottom);
+    const redIn = side === "bottom" ? inside(r.top, r.bottom, -Infinity, bottom) : inside(r.top, r.bottom, v.y, Infinity);
+    const alpha = hidden * inside(t.left, t.right, v.x, right) * redIn;
+    band = { side, x: x0, y: side === "bottom" ? bottom - BAND_DEPTH : v.y, width: x1 - x0, height: BAND_DEPTH, alpha };
+  }
+  return band.alpha > 0.01 ? band : null;
+}
+
+/** The glow: clear inside, red at the view's edge. Drawn in screen pixels. */
+function drawBand(ctx: CanvasRenderingContext2D, b: Band, dpr: number): void {
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const [x0, y0, x1, y1] = b.side === "right" ? [b.x, 0, b.x + b.width, 0]
+    : b.side === "left" ? [b.x + b.width, 0, b.x, 0]
+    : b.side === "bottom" ? [0, b.y, 0, b.y + b.height]
+    : [0, b.y + b.height, 0, b.y];
+  const g = ctx.createLinearGradient(x0, y0, x1, y1);
+  g.addColorStop(0, "rgba(255, 110, 90, 0)");
+  g.addColorStop(1, `rgba(255, 110, 90, ${0.85 * b.alpha})`);
+  ctx.fillStyle = g;
+  ctx.fillRect(b.x, b.y, b.width, b.height);
+}
+
 /** The arrow to the UI blocks, when none of them are in view (tapping it goes there). */
 export function uiArrow(scene: Scene): EdgeArrow | null {
   return scene.layout.byId("reset") ? edgeArrow(scene, onScreen(scene, UI_AREA)) : null;
 }
 
-/** A round marker with a chevron pointing along `angle`. Drawn in screen pixels. */
-function drawArrow(ctx: CanvasRenderingContext2D, a: EdgeArrow, fill: string, radius: number, dpr: number): void {
+/** A pin: a circle drawn out into a point along `angle`, towards what it marks. The home
+ * pin carries a house; the others are plain. Drawn in screen pixels. */
+function drawPin(ctx: CanvasRenderingContext2D, a: EdgeArrow, fill: string, radius: number, dpr: number, house = false): void {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const reach = radius * 1.45; // from the circle's middle to the point
+  const spread = Math.acos(radius / reach); // where the sides meet the circle
   ctx.fillStyle = fill;
   ctx.beginPath();
-  ctx.arc(a.x, a.y, radius, 0, Math.PI * 2);
+  ctx.moveTo(a.x + Math.cos(a.angle) * reach, a.y + Math.sin(a.angle) * reach);
+  ctx.arc(a.x, a.y, radius, a.angle + spread, a.angle - spread + Math.PI * 2);
+  ctx.closePath();
   ctx.fill();
-  ctx.translate(a.x, a.y);
-  ctx.rotate(a.angle);
-  const s = radius / 16;
-  ctx.strokeStyle = COLORS.icon;
-  ctx.lineWidth = 2.5 * s;
-  ctx.lineCap = "round";
+  // A round stroke in the same colour blunts the point.
+  ctx.strokeStyle = fill;
+  ctx.lineWidth = 4;
   ctx.lineJoin = "round";
-  ctx.beginPath();
-  ctx.moveTo(-3 * s, -6 * s);
-  ctx.lineTo(4 * s, 0);
-  ctx.lineTo(-3 * s, 6 * s);
   ctx.stroke();
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  if (!house) return;
+  // A small outlined house, like the home block's.
+  const s = radius * 0.5;
+  ctx.strokeStyle = COLORS.icon;
+  ctx.lineWidth = 2;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(a.x - s, a.y - s * 0.1);
+  ctx.lineTo(a.x, a.y - s);
+  ctx.lineTo(a.x + s, a.y - s * 0.1);
+  ctx.moveTo(a.x - s * 0.72, a.y - s * 0.3);
+  ctx.lineTo(a.x - s * 0.72, a.y + s * 0.8);
+  ctx.lineTo(a.x + s * 0.72, a.y + s * 0.8);
+  ctx.lineTo(a.x + s * 0.72, a.y - s * 0.3);
+  ctx.stroke();
 }

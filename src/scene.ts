@@ -24,8 +24,8 @@ export type Scene = {
   history: Move[];
   /** The red block and its target, once one has been made for this layout. */
   goal: Goal | null;
-  /** The red block has been on its target at least once. */
-  reached: boolean;
+  /** Goals already reached, oldest first: their targets keep a check. */
+  done: Goal[];
   /** Where the last tap landed, in world coordinates. */
   circle: Point | null;
   /** A stuck block the finger is on: it cannot move either way, so the drag pans instead. */
@@ -45,10 +45,10 @@ export function newScene(
     history = [] as Move[],
     border = true,
     goal = null as Goal | null,
-    reached = false,
-  }: { layout?: Layout; moved?: Map<string, Point>; history?: Move[]; border?: boolean; goal?: Goal | null; reached?: boolean } = {},
+    done = [] as Goal[],
+  }: { layout?: Layout; moved?: Map<string, Point>; history?: Move[]; border?: boolean; goal?: Goal | null; done?: Goal[] } = {},
 ): Scene {
-  const scene: Scene = { camera: centred(width, height), width, height, layout, moved, history, goal, reached, circle: null, dragging: null, stuckId: null, border };
+  const scene: Scene = { camera: centred(width, height), width, height, layout, moved, history, goal, done, circle: null, dragging: null, stuckId: null, border };
   return resize(scene, width, height);
 }
 
@@ -63,7 +63,7 @@ export function relayout(scene: Scene, layout: Layout): void {
   scene.moved.clear();
   scene.history.length = 0;
   scene.goal = null;
-  scene.reached = false;
+  scene.done = [];
   scene.dragging = null;
 }
 
