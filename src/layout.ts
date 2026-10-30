@@ -51,10 +51,10 @@ export const UI_BLOCKS: Placed[] = [
   { id: "home", x: -1, y: 0, w: 1, h: 1, ui: "home" },
   { id: "reset", x: 0, y: 0, w: 1, h: 1, ui: "reset" },
   { id: "fullscreen", x: 1, y: 0, w: 1, h: 1, ui: "fullscreen" },
-  { id: "reports", x: 2, y: 0, w: 1, h: 1, ui: "reports" },
   { id: "density", x: -1, y: 2, w: 1, h: 1, ui: "density" },
   { id: "border", x: 0, y: 2, w: 1, h: 1, ui: "border" },
   { id: "upload", x: 1, y: 2, w: 1, h: 1, ui: "upload" },
+  { id: "reports", x: 2, y: 2, w: 1, h: 1, ui: "reports" },
 ];
 /** Nothing is generated here: both rows and the gap between them. */
 export const UI_AREA = { x: -1, y: 0, width: 4, height: 3 };

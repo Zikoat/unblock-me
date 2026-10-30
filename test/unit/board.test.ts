@@ -315,16 +315,16 @@ describe("taps on the background", () => {
 
 describe("UI blocks", () => {
   // The game's row: home (-1,0), reset (0,0), fullscreen (1,0), reports (2,0); an empty row;
-  // the debug row: density (-1,2), border (0,2), upload (1,2).
+  // the debug row: density (-1,2), border (0,2), upload (1,2), reports (2,2).
   const ui = () => UI_BLOCKS.map((b) => ({ ...b }));
   const spots = [
-    ["home", -0.5, 0.5], ["reset", 0.5, 0.5], ["fullscreen", 1.5, 0.5], ["reports", 2.5, 0.5], ["border", 0.5, 2.5],
+    ["home", -0.5, 0.5], ["reset", 0.5, 0.5], ["fullscreen", 1.5, 0.5], ["reports", 2.5, 2.5], ["border", 0.5, 2.5],
   ] as const;
 
   test("they are 1x1: a row for the game, a gap, and a row of debug blocks", () => {
     expect(ui().map((b) => [b.id, b.x, b.y, b.w, b.h])).toEqual([
-      ["home", -1, 0, 1, 1], ["reset", 0, 0, 1, 1], ["fullscreen", 1, 0, 1, 1], ["reports", 2, 0, 1, 1],
-      ["density", -1, 2, 1, 1], ["border", 0, 2, 1, 1], ["upload", 1, 2, 1, 1],
+      ["home", -1, 0, 1, 1], ["reset", 0, 0, 1, 1], ["fullscreen", 1, 0, 1, 1],
+      ["density", -1, 2, 1, 1], ["border", 0, 2, 1, 1], ["upload", 1, 2, 1, 1], ["reports", 2, 2, 1, 1],
     ]);
   });
 
@@ -350,13 +350,13 @@ describe("UI blocks", () => {
   });
 
   test("they block other blocks", () => {
-    // a in row 0 right of the game row; b in column 2 below it (through the gap row);
+    // a in row 0 right of the game row; b in column 2 below the debug row;
     // c above the home block.
-    const { g, at } = board(...ui(), H(4, 0, "a"), V(2, 3, "b"), V(-1, -4, "c"));
+    const { g, at } = board(...ui(), H(4, 0, "a"), V(2, 5, "b"), V(-1, -4, "c"));
     drag(g, cell(5, 0.5), cell(-5, 0.5));
-    expect(at("a").x).toBe(3);
-    drag(g, cell(2.5, 4), cell(2.5, -5));
-    expect(at("b").y).toBe(1);
+    expect(at("a").x).toBe(2);
+    drag(g, cell(2.5, 6), cell(2.5, -5));
+    expect(at("b").y).toBe(3);
     drag(g, cell(-0.5, -3), cell(-0.5, 5));
     expect(at("c").y).toBe(-2);
   });

@@ -88,7 +88,7 @@ const browser = await chromium.launch();
     { id: "home", x: -1, y: 0, w: 1, h: 1, ui: "home" },
     { id: "reset", x: 0, y: 0, w: 1, h: 1, ui: "reset" },
     { id: "fullscreen", x: 1, y: 0, w: 1, h: 1, ui: "fullscreen" },
-    { id: "reports", x: 2, y: 0, w: 1, h: 1, ui: "reports" },
+    { id: "reports", x: 2, y: 2, w: 1, h: 1, ui: "reports" },
     { id: "density", x: -1, y: 2, w: 1, h: 1, ui: "density" },
     { id: "border", x: 0, y: 2, w: 1, h: 1, ui: "border" },
   ];
@@ -100,7 +100,7 @@ const browser = await chromium.launch();
   await page.waitForTimeout(1200);
   const idleFps = await page.evaluate(() => parseInt(document.querySelector("#fps").textContent));
   check(idleFps > 10, `with nothing moving the counter still counts frames (${idleFps} fps)`);
-  for (const [x, y, what] of [[-0.85, 0.15, "home"], [0.15, 0.15, "reset"], [1.15, 0.15, "fullscreen"], [2.15, 0.15, "reports"], [-0.85, 2.15, "density"], [0.15, 2.15, "border toggle"]]) {
+  for (const [x, y, what] of [[-0.85, 0.15, "home"], [0.15, 0.15, "reset"], [1.15, 0.15, "fullscreen"], [-0.85, 2.15, "density"], [0.15, 2.15, "border toggle"], [1.15, 2.15, "upload"], [2.15, 2.15, "reports"]]) {
     await expectColor(page, cell(x, y), "reset", `the ${what} block is black`);
   }
   check((await colorAt(page, ...cell(0.5, 1.5))) !== "reset", "with an empty row between the game's row and the debug row");
@@ -272,7 +272,7 @@ const browser = await chromium.launch();
   // The reports block opens the list of reports, which links back to the game.
   await fresh();
   await fresh();
-  await Promise.all([page.waitForURL("**/reports/"), tap(cell(2.5, 0.5))]);
+  await Promise.all([page.waitForURL("**/reports/"), tap(cell(2.5, 2.5))]);
   check(page.url().endsWith("/reports/"), `tapping the reports block opens the report list (${page.url()})`);
   check((await page.textContent("h1")) === "Reports", "which is the report list");
   await Promise.all([page.waitForURL(url), page.click("a.back")]);
