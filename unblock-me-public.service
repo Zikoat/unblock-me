@@ -1,0 +1,13 @@
+[Unit]
+Description=Unblock Me, public: serve public/ (the last committed build) on port 8080
+After=network.target
+
+[Service]
+Type=simple
+User=exedev
+WorkingDirectory=/home/exedev/unblock-me
+ExecStart=/usr/bin/python3 scripts/serve-public.py
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

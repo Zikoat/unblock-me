@@ -405,7 +405,9 @@ const gestures = new Gestures(scene, {
     } else if (ui === "fullscreen") {
       toggleFullscreen();
     } else if (ui === "home") {
-      location.href = "/";
+      // The homepage: the root of the same server, except on the public game (no port),
+      // where it is the private one on :8000.
+      location.href = location.port ? "/" : `${location.protocol}//${location.hostname}:8000/`;
     } else if (ui === "reports") {
       location.href = "reports/";
     } else if (ui === "upload") {
