@@ -207,7 +207,7 @@ let clips = 0;
  * passed) and "hollow" (outlines until the goal, then filled one at a time). `finish` is how
  * far the finish animation is: the stars filled so far (with `pop` for the newest).
  */
-function track(g, x0, y0, used, { undone = false, scale = 1, size = null, style = "now", finish = null, collapse = 0, upright = false, trace = null } = {}) {
+function track(g, x0, y0, used, { undone = false, scale = 1, size = null, style = "now", finish = null, collapse = 0, upright = false, trace = null, medalP = null } = {}) {
   // `size` (width and height) overrides the look's, e.g. to fit inside the goal's target.
   const width = size ? size.width : LOOK.width * scale, h = size ? size.height : LOOK.height * scale;
   const w = width / END;
@@ -242,6 +242,7 @@ function track(g, x0, y0, used, { undone = false, scale = 1, size = null, style 
     const x = collapse ? gather({ x: x0i, m: look.m }) : x0i;
     if (collapse) look = { ...look, pop: (look.pop ?? 1) * grow, opacity: look.opacity === undefined ? 1 : look.opacity + (0.55 - look.opacity) * ease };
     const box = iconBox(g, x, cy, { ...look, upright });
+    if (look.spin) box.setAttribute("transform", `${box.getAttribute("transform") ?? ""} rotate(${look.spin} ${x} ${cy})`);
     trace?.push({ kind, m: look.m, x: x - x0, opacity: look.opacity ?? 1, scale: look.pop ?? 1, outline: !!look.outline, gray: !!look.gray });
     if (kind === "star") star(box, x, cy, s, { outline: look.outline });
     else rosette(box, x, cy, ms);
@@ -255,11 +256,25 @@ function track(g, x0, y0, used, { undone = false, scale = 1, size = null, style 
     if (style === "now") drawIcon(icon.x, icon.kind, { gray: lost, opacity: icon.kind === "medal" && undone ? 0.4 : lost ? 0.85 : 1 });
     else if (style === "hollow") {
       const k = finish === null ? -1 : kept.findIndex((c) => c.m === icon.m);
-      const filled = k >= 0 && k < Math.floor(finish ?? 0);
+      const filled = icon.kind === "star" && k >= 0 && k < Math.floor(finish ?? 0);
       const pop = filled && k === Math.floor(finish) - 1 ? popScale(Math.min(1, (finish % 1) * (STAR_MS / POP_MS))) : 1;
       if (filled) drawIcon(icon.x, icon.kind, { pop, m: icon.m });
-      // The medal is not shown until it fills, after every star.
-      else if (icon.kind === "star") drawIcon(icon.x, icon.kind, { outline: true, gray: lost, opacity: lost ? 0.25 : 1, m: icon.m });
+      // The medal is not shown until its entrance, after every star.
+      else if (icon.kind === "medal" && medalP !== null) {
+        // Drops in from 3.5× with a quarter spin, fading in, overshoots a little and settles;
+        // a gold ring bursts out as it lands.
+        const p = medalP, land = Math.min(1, p / 0.6), settle = Math.max(0, (p - 0.6) / 0.4);
+        const scale = 1 + 2.5 * (1 - land) ** 3 - 0.18 * Math.sin(Math.PI * settle) * (1 - settle);
+        const mx = collapse ? gather({ x: icon.x, m: icon.m }) : icon.x;
+        if (land >= 1) el("circle", { cx: mx, cy, r: ms * (0.6 + 1.8 * settle), fill: "none", stroke: C.star, "stroke-width": ms * 0.25 * (1 - settle), opacity: 1 - settle }, g);
+        // Sparkles fly out as it lands: 12 four-point stars, slowing, twinkling, fading.
+        if (land >= 1 && settle < 1) for (let i = 0; i < 12; i++) {
+          const a = (i / 12) * 2 * Math.PI + (i % 2) * 0.26, dist = ms * (0.7 + (2.2 + (i % 3) * 0.6) * (1 - (1 - settle) ** 2));
+          const sx = mx + Math.cos(a) * dist, sy = cy + Math.sin(a) * dist, r = ms * (0.4 + 0.2 * (i % 2)) * (1 - settle * 0.8) * (0.75 + 0.25 * Math.sin(settle * 18 + i));
+          el("path", { d: `M${sx},${sy - r}Q${sx},${sy} ${sx + r},${sy}Q${sx},${sy} ${sx},${sy + r}Q${sx},${sy} ${sx - r},${sy}Q${sx},${sy} ${sx},${sy - r}Z`, fill: i % 3 ? C.star : "#ffffff", opacity: Math.min(1, (1 - settle) * 1.6) }, g);
+        }
+        drawIcon(icon.x, icon.kind, { pop: scale, opacity: Math.min(1, land * 2), spin: -90 * (1 - land) ** 2, m: icon.m });
+      } else if (icon.kind === "star") drawIcon(icon.x, icon.kind, { outline: true, gray: lost, opacity: lost ? 0.25 : 1, m: icon.m });
     }
   }
   if (undone && !upright) undoIcon(g, at(MEDAL), y0 + h + ms * 0.75, ms);
@@ -374,24 +389,29 @@ function drawGoals() {
 // The finish demo, as a function of time: no animation library, every frame is drawn from
 // the time since Play. Moves tick up to the finish; then each star kept fills (with a pop),
 // a pause, and the track fades while the stars gather in a row.
-const MOVE_MS = 110, STAR_MS = 420, POP_MS = 300, HOLD_MS = 500, GATHER_MS = 900;
+const MOVE_MS = 110, STAR_MS = 420, POP_MS = 300, MEDAL_WAIT_MS = 700, MEDAL_MS = 900, HOLD_MS = 600, GATHER_MS = 900;
 let demo = { t: null, until: 18, playing: false, startAt: 0 };
 
 /** When each part of the finish happens, for finishing in `n` moves. */
 function timeline(n) {
   setGoal(13, 15);
-  const kept = [...MARKS.filter((m) => m.kind === "star" && n <= m.at).map((m) => `★ ${m.at}`), "★ end", ...(n <= MEDAL ? ["medal"] : [])];
+  const stars = [...MARKS.filter((m) => m.kind === "star" && n <= m.at).map((m) => `★ ${m.at}`), "★ end"];
   const movesEnd = n * MOVE_MS;
-  const fills = kept.map((name, i) => ({ name, at: movesEnd + (i + 1) * STAR_MS }));
-  const gather = movesEnd + kept.length * STAR_MS + HOLD_MS;
-  return { movesEnd, fills, gather, end: gather + GATHER_MS, total: gather + GATHER_MS + 300 };
+  const fills = stars.map((name, i) => ({ name, at: movesEnd + (i + 1) * STAR_MS, length: POP_MS }));
+  // The medal waits a moment after the last star, then makes its entrance.
+  const starsEnd = movesEnd + stars.length * STAR_MS + POP_MS;
+  const medalAt = n <= MEDAL ? starsEnd + MEDAL_WAIT_MS : null;
+  if (medalAt !== null) fills.push({ name: "medal", at: medalAt, length: MEDAL_MS });
+  const gather = (medalAt !== null ? medalAt + MEDAL_MS : starsEnd) + HOLD_MS;
+  return { movesEnd, fills, medalAt, gather, end: gather + GATHER_MS, total: gather + GATHER_MS + 300 };
 }
 
 /** What the demo shows at time t (null: before Play). */
 function demoState(t, tl) {
   const n = demo.until;
-  let used = n, finish = null, collapse = 0;
+  let used = n, finish = null, collapse = 0, medal = null;
   if (t !== null) {
+    if (tl.medalAt !== null && t >= tl.medalAt) medal = Math.min(1, (t - tl.medalAt) / MEDAL_MS);
     used = Math.min(n, Math.floor(t / MOVE_MS));
     const after = t - tl.movesEnd;
     if (after >= 0) {
@@ -399,19 +419,21 @@ function demoState(t, tl) {
       collapse = Math.max(0, Math.min(1, (t - tl.gather) / GATHER_MS));
     }
   }
-  return { used, finish, collapse };
+  return { used, finish, collapse, medal };
 }
 
 function drawDemoAt(t) {
   const n = demo.until, tl = timeline(n);
-  const { used, finish, collapse } = demoState(t, tl);
+  const { used, finish, collapse, medal: medalP } = demoState(t, tl);
   let kept = [];
   const trace = [];
-  const svg = trackSvg((g, x, y) => { const r = track(g, x, y, used, { style: "hollow", finish, scale: 1.2, collapse, trace }); kept = r.kept; return r; }, { pad: 14 });
+  const svg = trackSvg((g, x, y) => { const r = track(g, x, y, used, { style: "hollow", finish, scale: 1.2, collapse, trace, medalP }); kept = r.kept; return r; }, { pad: 14 });
+  svg.style.overflow = "visible"; // the medal's entrance and sparkles may reach past it
   document.getElementById("demoHollow").replaceChildren(svg);
   let got = 0, medal = false;
   if (finish !== null) {
-    const counted = kept.slice(0, Math.floor(finish));
+    const counted = kept.filter((k) => k.kind === "star").slice(0, Math.floor(finish));
+    if (medalP !== null) counted.push({ kind: "medal" });
     got = counted.filter((k) => k.kind === "star").length;
     medal = counted.some((k) => k.kind === "medal");
   }
@@ -433,9 +455,9 @@ function samples(tl) {
   if (curveCache.key === key) return curveCache.samples;
   const out = [];
   for (let t = 0; t <= tl.total; t += 20) {
-    const { used, finish, collapse } = demoState(t, tl);
+    const { used, finish, collapse, medal: medalP } = demoState(t, tl);
     const trace = [];
-    track(el("g", {}), 0, 0, used, { style: "hollow", finish, scale: 1.2, collapse, trace });
+    track(el("g", {}), 0, 0, used, { style: "hollow", finish, scale: 1.2, collapse, trace, medalP });
     out.push({ t, trace, track: 1 - collapse });
   }
   curveCache = { key, samples: out };
@@ -497,8 +519,9 @@ function drawTimeline(tl, t, used, collapse, trace) {
   document.getElementById("scrubOut").textContent = `${Math.round(t)} ms`;
   const rows = [
     { name: `Moves 0 → ${demo.until}`, from: 0, to: tl.movesEnd, note: `${MOVE_MS} ms a move` },
-    ...tl.fills.map((f) => ({ name: `${f.name} fills`, from: f.at, to: f.at + POP_MS, note: "damped spring: scale 1 → about 1.25 → just under 1 → 1" })),
-    { name: "Pause", from: tl.fills.at(-1).at, to: tl.gather, note: "" },
+    ...tl.fills.map((f) => ({ name: `${f.name} ${f.name === "medal" ? "lands" : "fills"}`, from: f.at, to: f.at + f.length, note: f.name === "medal" ? "drops in from 3.5× with a spin, fades in; a gold ring and 12 sparkles burst out" : "damped spring: scale 1 → about 1.25 → just under 1 → 1" })),
+    ...(tl.medalAt !== null ? [{ name: "Wait for the medal", from: tl.fills.at(-2).at + POP_MS, to: tl.medalAt, note: "" }] : []),
+    { name: "Pause", from: tl.gather - HOLD_MS, to: tl.gather, note: "" },
     { name: "Track and number fade", from: tl.gather, to: tl.end, note: "opacity 1 → 0" },
     { name: "Stars gather", from: tl.gather, to: tl.end, note: "ease in-out; scale 1 → 1.5; gray ones to opacity 0.55" },
   ];
@@ -514,7 +537,7 @@ function drawTimeline(tl, t, used, collapse, trace) {
   rows.forEach((r, i) => {
     const y = i * rh + 4;
     el("text", { x: 0, y: y + 12, "font-size": 11, fill: ink }, svg).textContent = r.name;
-    el("rect", { x: x(r.from), y: y + 2, width: Math.max(2, x(r.to) - x(r.from)), height: rh - 8, rx: 3, fill: r.name.startsWith("Moves") ? C.used : r.name.includes("fill") ? C.star : r.name === "Pause" ? "#b9bcc1" : "#3b6fd4", "fill-opacity": 0.85 }, svg).append(Object.assign(el("title", {}), { textContent: `${r.name}: ${Math.round(r.from)}–${Math.round(r.to)} ms${r.note ? ` (${r.note})` : ""}` }));
+    el("rect", { x: x(r.from), y: y + 2, width: Math.max(2, x(r.to) - x(r.from)), height: rh - 8, rx: 3, fill: r.name.startsWith("Moves") ? C.used : r.name.includes("fill") || r.name.includes("lands") ? C.star : r.name === "Pause" || r.name.startsWith("Wait") ? "#b9bcc1" : "#3b6fd4", "fill-opacity": 0.85 }, svg).append(Object.assign(el("title", {}), { textContent: `${r.name}: ${Math.round(r.from)}–${Math.round(r.to)} ms${r.note ? ` (${r.note})` : ""}` }));
   });
   el("line", { x1: x(t), x2: x(t), y1: 0, y2: H - 18, stroke: "#d64545", "stroke-width": 2 }, svg);
   svg.onclick = (e) => {
