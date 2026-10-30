@@ -191,6 +191,7 @@ export function draw(
     else if (block.ui === "border") borderIcon(ctx, block, scene.border);
     else if (block.ui === "fullscreen") fullscreenIcon(ctx, block, fullscreen);
     else if (block.ui === "upload") uploadIcon(ctx, block);
+    else if (block.ui === "reports") reportsIcon(ctx, block);
     else if (block.ui === "fps") fpsIcon(ctx, block, fps);
     else if (block.ui === "density") densityIcon(ctx, block, density);
     else if (block.ui === "home") homeIcon(ctx, block);
@@ -409,6 +410,20 @@ function sliderTrack(ctx: CanvasRenderingContext2D, block: Block, at: number): v
   ctx.beginPath();
   ctx.arc(left + (right - left) * at, mid, UNIT * 0.065, 0, Math.PI * 2);
   ctx.fill();
+}
+
+/** Three rising bars on a baseline: the reports. */
+function reportsIcon(ctx: CanvasRenderingContext2D, block: Block): void {
+  const left = (block.x + 0.27) * UNIT;
+  const base = (block.y + 0.72) * UNIT;
+  const bar = UNIT * 0.11;
+  const gap = UNIT * 0.06;
+  ctx.fillStyle = COLORS.icon;
+  [0.18, 0.3, 0.42].forEach((height, i) => {
+    ctx.beginPath();
+    ctx.roundRect(left + i * (bar + gap), base - height * UNIT, bar, height * UNIT, [2, 2, 0, 0]);
+    ctx.fill();
+  });
 }
 
 /** "fps" with a switch under it, like the border toggle's. */

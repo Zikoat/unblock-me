@@ -1,8 +1,10 @@
-// Builds dist/. With --watch, rebuilds whenever something in src/ changes; open pages
+// Builds dist/: the app, and reports/ (Markdown) as pages. With --watch, rebuilds whenever
+// something in src/ or reports/ changes; open pages
 // notice the new build id in dist/build.txt and reload themselves.
 import { watch } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import { buildReports } from "./reports";
 
 const root = join(import.meta.dir, "..");
 const src = join(root, "src");
@@ -32,6 +34,7 @@ async function build(): Promise<void> {
   });
   for (const r of [result, worker]) if (!r.success) throw new Error(r.logs.map((log) => log.message).join("\n"));
   await Bun.write(join(outdir, "index.html"), Bun.file(join(src, "index.html")));
+  await buildReports(join(root, "reports"), join(outdir, "reports"));
   // Written last, so a page only reloads once the new app is complete.
   await Bun.write(join(outdir, "build.txt"), id);
   console.log(`Built ${outdir} (${id})`);
@@ -41,10 +44,12 @@ await build();
 
 if (process.argv.includes("--watch")) {
   let timer: Timer | undefined;
-  watch(src, { recursive: true }, () => {
+  const rebuild = () => {
     // Editors write in several steps; build once they are done.
     clearTimeout(timer);
     timer = setTimeout(() => build().catch((e) => console.error(String(e))), 150);
-  });
-  console.log(`Watching ${src}`);
+  };
+  watch(src, { recursive: true }, rebuild);
+  watch(join(root, "reports"), rebuild);
+  console.log(`Watching ${src} and reports/`);
 }
