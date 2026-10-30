@@ -86,15 +86,30 @@ export function draw(
   const targets = [...scene.done, ...(goal ? [goal] : [])]
     .map((g) => ({ goal: g, cells: targetCells(scene, g) }))
     .filter((t): t is { goal: Goal; cells: Cells } => !!t.cells && intersects(t.cells, inView));
-  for (const { goal: g, cells } of targets) {
-    ctx.beginPath();
-    ctx.roundRect(cells.x * UNIT - TARGET_MARGIN, cells.y * UNIT - TARGET_MARGIN, cells.w * UNIT + 2 * TARGET_MARGIN, cells.h * UNIT + 2 * TARGET_MARGIN, 12);
+  // Targets side by side overlap by their margins: each is filled only where no earlier one
+  // was, and outlined only outside the others, so touching targets read as one shape.
+  const area = (c: Cells, path: Path2D) => path.roundRect(c.x * UNIT - TARGET_MARGIN, c.y * UNIT - TARGET_MARGIN, c.w * UNIT + 2 * TARGET_MARGIN, c.h * UNIT + 2 * TARGET_MARGIN, 12);
+  const outside = (others: typeof targets) => {
+    const clip = new Path2D();
+    clip.rect(view.x - UNIT, view.y - UNIT, view.width + 2 * UNIT, view.height + 2 * UNIT);
+    for (const o of others) area(o.cells, clip);
+    ctx.clip(clip, "evenodd");
+  };
+  targets.forEach(({ goal: g, cells }, i) => {
+    const own = new Path2D();
+    area(cells, own);
+    ctx.save();
+    outside(targets.slice(0, i));
     ctx.fillStyle = g === goal ? COLORS.target : COLORS.doneTarget;
-    ctx.fill();
+    ctx.fill(own);
+    ctx.restore();
+    ctx.save();
+    outside(targets.filter((_, j) => j !== i));
     ctx.strokeStyle = g === goal ? COLORS.targetLine : COLORS.doneLine;
     ctx.lineWidth = 2;
-    ctx.stroke();
-  }
+    ctx.stroke(own);
+    ctx.restore();
+  });
   // The goal's glow goes under the blocks, so it never tints them.
   const band = goalBand(scene);
   if (band) {
