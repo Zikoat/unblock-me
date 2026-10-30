@@ -194,6 +194,13 @@ function defs(svg) {
   el("feDropShadow", { dx: 0, dy: 0.6, stdDeviation: 0.9, "flood-color": "#000", "flood-opacity": 0.55 }, el("filter", { id: "shadow", x: "-50%", y: "-50%", width: "200%", height: "200%" }, d));
 }
 
+/** The fill's pop, from p = 0 to 1: springs in from half size, overshoots a little (to
+ * about 1.15) and settles at 1 (an ease-out-back). */
+function popScale(p) {
+  const c1 = 2.2, c3 = c1 + 1, back = 1 + c3 * (p - 1) ** 3 + c1 * (p - 1) ** 2;
+  return 0.5 + 0.5 * back;
+}
+
 let clips = 0;
 /**
  * The track at (x0, y0), `scale` times the look's size. Styles: "now" (stars gray once
@@ -222,10 +229,10 @@ function track(g, x0, y0, used, { undone = false, scale = 1, size = null, style 
   // Where the kept ones gather when the track goes: a row in the middle, close together.
   const grow = 1 + 0.5 * collapse, gap = s * 1.3 * grow;
   const ease = collapse < 0.5 ? 2 * collapse * collapse : 1 - (-2 * collapse + 2) ** 2 / 2;
-  // The row: the stars not won, the stars won, then the medal (if won); the five stars
-  // together still say how hard the goal was.
+  // The row: the medal (if won) at the start, where it sits on the track, then the stars not
+  // won and the stars won; the five stars together still say how hard the goal was.
   const starsAll = [...MARKS.filter((m) => m.kind === "star").map((m) => m.at), Infinity];
-  const row = [...starsAll.filter((m) => used > m), ...starsAll.filter((m) => used <= m), ...kept.filter((c) => c.kind === "medal").map((c) => c.m)];
+  const row = [...kept.filter((c) => c.kind === "medal").map((c) => c.m), ...starsAll.filter((m) => used > m), ...starsAll.filter((m) => used <= m)];
   const gather = (icon) => {
     const i = row.indexOf(icon.m);
     return i < 0 ? icon.x : icon.x + (x0 + width / 2 + (i - (row.length - 1) / 2) * gap - icon.x) * ease;
@@ -248,9 +255,10 @@ function track(g, x0, y0, used, { undone = false, scale = 1, size = null, style 
     else if (style === "hollow") {
       const k = finish === null ? -1 : kept.findIndex((c) => c.m === icon.m);
       const filled = k >= 0 && k < Math.floor(finish ?? 0);
-      const pop = filled && k === Math.floor(finish) - 1 ? 1 + 0.6 * Math.sin(Math.PI * Math.min(1, (finish % 1) * 1.6)) : 1;
+      const pop = filled && k === Math.floor(finish) - 1 ? popScale(Math.min(1, (finish % 1) * (STAR_MS / POP_MS))) : 1;
       if (filled) drawIcon(icon.x, icon.kind, { pop, m: icon.m });
-      else drawIcon(icon.x, icon.kind, { outline: true, gray: lost, opacity: lost ? 0.25 : 1, m: icon.m });
+      // The medal is not shown until it fills, after every star.
+      else if (icon.kind === "star") drawIcon(icon.x, icon.kind, { outline: true, gray: lost, opacity: lost ? 0.25 : 1, m: icon.m });
     }
   }
   if (undone && !upright) undoIcon(g, at(MEDAL), y0 + h + ms * 0.75, ms);
@@ -365,7 +373,7 @@ function drawGoals() {
 // The finish demo, as a function of time: no animation library, every frame is drawn from
 // the time since Play. Moves tick up to the finish; then each star kept fills (with a pop),
 // a pause, and the track fades while the stars gather in a row.
-const MOVE_MS = 110, STAR_MS = 420, POP_MS = STAR_MS / 1.6, HOLD_MS = 500, GATHER_MS = 900;
+const MOVE_MS = 110, STAR_MS = 420, POP_MS = 300, HOLD_MS = 500, GATHER_MS = 900;
 let demo = { t: null, until: 18, playing: false, startAt: 0 };
 
 /** When each part of the finish happens, for finishing in `n` moves. */
@@ -411,7 +419,7 @@ function drawTimeline(tl, t, used, collapse, trace) {
   document.getElementById("scrubOut").textContent = `${Math.round(t)} ms`;
   const rows = [
     { name: `Moves 0 → ${demo.until}`, from: 0, to: tl.movesEnd, note: `${MOVE_MS} ms a move` },
-    ...tl.fills.map((f) => ({ name: `${f.name} fills`, from: f.at, to: f.at + POP_MS, note: "pop: scale 1 → 1.6 → 1" })),
+    ...tl.fills.map((f) => ({ name: `${f.name} fills`, from: f.at, to: f.at + POP_MS, note: "springs in: scale 0.5 → about 1.15 → 1 (ease-out-back)" })),
     { name: "Pause", from: tl.fills.at(-1).at, to: tl.gather, note: "" },
     { name: "Track and number fade", from: tl.gather, to: tl.end, note: "opacity 1 → 0" },
     { name: "Stars gather", from: tl.gather, to: tl.end, note: "ease in-out; scale 1 → 1.5; gray ones to opacity 0.55" },
