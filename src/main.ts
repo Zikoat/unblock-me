@@ -18,6 +18,7 @@ const MOVED_KEY = "unblock-me:v6:moved";
 const HISTORY_KEY = "unblock-me:v6:history";
 const GOAL_KEY = "unblock-me:v6:goal";
 const BORDER_KEY = "unblock-me:border";
+const FPS_KEY = "unblock-me:fps"; // whether the fps counter shows
 const TRIES_KEY = "unblock-me:tries";
 const CAMERA_KEY = "unblock-me:camera"; // where the view is, kept across reloads
 const LOG_KEY = "unblock-me:log"; // the play log; kept across resets
@@ -136,6 +137,7 @@ function save(): void {
   try {
     localStorage.setItem(SEED_KEY, JSON.stringify(seed));
     localStorage.setItem(BORDER_KEY, JSON.stringify(scene.border));
+    localStorage.setItem(FPS_KEY, JSON.stringify(showingFps));
     localStorage.setItem(TRIES_KEY, JSON.stringify(tries));
     localStorage.setItem(MOVED_KEY, JSON.stringify([...scene.moved].map(([id, p]) => [id, p.x, p.y])));
     localStorage.setItem(HISTORY_KEY, JSON.stringify(scene.history));
@@ -350,6 +352,10 @@ const gestures = new Gestures(scene, {
       location.href = "/";
     } else if (ui === "upload") {
       void sendPlayData();
+    } else if (ui === "fps") {
+      showingFps = !showingFps;
+      showFpsCounter();
+      save();
     }
   },
   // The sliders keep their knob under the finger. Density shows the board at that density
@@ -506,8 +512,7 @@ function ago(ms: number): string {
 // The build id is the build time in base 36.
 const builtAt = parseInt(__BUILD_ID__, 36);
 
-// Frames are only drawn when something changes, so the counter shows 0 fps when idle.
-// Next to it: how long ago the running code was built.
+// The fps counter, with how long ago the running code was built and the density.
 const frames: number[] = [];
 function showFps(now: number): void {
   while (frames.length && frames[0]! <= now - 1000) frames.shift();
@@ -530,6 +535,7 @@ function redraw(): void {
     draw(canvas, scene, {
       fullscreen: document.fullscreenElement !== null,
       density: slider?.ui === "density" ? slider.at : (tries - MIN_TRIES) / (MAX_TRIES - MIN_TRIES),
+      fps: showingFps,
       sliding: moving,
       sparkles,
       throb,
@@ -544,15 +550,31 @@ function redraw(): void {
 }
 
 // Frames are counted here, not in redraw: redraw only runs while something changes, and the
-// counter would drop to 0 whenever the board is still. The spinner keeps frames coming.
+// counter would drop to 0 whenever the board is still. The spinner keeps frames coming,
+// only while the counter shows.
 const spin = document.querySelector<HTMLElement>("#spin")!;
+let showingFps = load<boolean>(FPS_KEY, true);
+let ticking = false;
 function tick(now: number): void {
+  if (!showingFps) {
+    ticking = false;
+    return;
+  }
   spin.style.transform = `rotate(${(now / 4) % 360}deg)`;
   frames.push(now);
   showFps(now);
   requestAnimationFrame(tick);
 }
-requestAnimationFrame(tick);
+function showFpsCounter(): void {
+  fps.style.display = spin.style.display = showingFps ? "" : "none";
+  if (showingFps && !ticking) {
+    ticking = true;
+    frames.length = 0;
+    requestAnimationFrame(tick);
+  }
+  redraw();
+}
+showFpsCounter();
 
 const point = (e: PointerEvent | WheelEvent) => ({ x: e.offsetX, y: e.offsetY });
 
@@ -562,6 +584,7 @@ function tooltip(ui: Ui): string | null {
     case "border": return "Debug: Make the viewport smaller to test frustum culling.";
     case "reset": return "Reset";
     case "reports": return "Reports";
+    case "fps": return "Debug: Show or hide the fps counter";
     case "upload": return "Debug: Send play data to the VM for analysis";
     default: return null;
   }

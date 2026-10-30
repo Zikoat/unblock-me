@@ -1,7 +1,7 @@
 import type { Rect } from "./camera";
 
 /** A 1x1 control on the board: it never slides, a tap runs it. */
-export type Ui = "home" | "reset" | "fullscreen" | "reports" | "density" | "border" | "upload";
+export type Ui = "home" | "reset" | "fullscreen" | "reports" | "density" | "border" | "upload" | "fps";
 
 /** A block on the lattice, in lattice units: 2x1 slides horizontally, 1x2 vertically.
  * UI blocks and walls never slide. */
@@ -55,9 +55,10 @@ export const UI_BLOCKS: Placed[] = [
   { id: "border", x: 0, y: 2, w: 1, h: 1, ui: "border" },
   { id: "upload", x: 1, y: 2, w: 1, h: 1, ui: "upload" },
   { id: "reports", x: 2, y: 2, w: 1, h: 1, ui: "reports" },
+  { id: "fps", x: 3, y: 2, w: 1, h: 1, ui: "fps" },
 ];
 /** Nothing is generated here: both rows and the gap between them. */
-export const UI_AREA = { x: -1, y: 0, width: 4, height: 3 };
+export const UI_AREA = { x: -1, y: 0, width: 5, height: 3 };
 
 /** The lattice is cut into chunks of CHUNK x CHUNK cells. Each chunk tries `tries` random
  * blocks and keeps those that fit, so blocks stay inside their chunk and never overlap.

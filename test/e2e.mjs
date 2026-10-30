@@ -98,6 +98,7 @@ const browser = await chromium.launch();
     { id: "reset", x: 0, y: 0, w: 1, h: 1, ui: "reset" },
     { id: "fullscreen", x: 1, y: 0, w: 1, h: 1, ui: "fullscreen" },
     { id: "reports", x: 2, y: 2, w: 1, h: 1, ui: "reports" },
+    { id: "fps", x: 3, y: 2, w: 1, h: 1, ui: "fps" },
     { id: "density", x: -1, y: 2, w: 1, h: 1, ui: "density" },
     { id: "border", x: 0, y: 2, w: 1, h: 1, ui: "border" },
   ];
@@ -106,10 +107,15 @@ const browser = await chromium.launch();
   await fresh();
   const text = await page.evaluate(() => document.body.innerText.trim());
   check(/^\d+ fps · \d+[smhd] ago · 12 tries$/.test(text), `only text is the debug counter: fps, build age, density ("${text}")`);
+  // The fps toggle hides and shows the counter.
+  await tap(cell(3.5, 2.5));
+  check(await page.evaluate(() => getComputedStyle(document.querySelector("#fps")).display === "none" && getComputedStyle(document.querySelector("#spin")).display === "none"), "the fps toggle hides the counter");
+  await tap(cell(3.5, 2.5));
+  check(await page.evaluate(() => getComputedStyle(document.querySelector("#fps")).display !== "none"), "and shows it again");
   await page.waitForTimeout(1200);
   const idleFps = await page.evaluate(() => parseInt(document.querySelector("#fps").textContent));
   check(idleFps > 10, `with nothing moving the counter still counts frames (${idleFps} fps)`);
-  for (const [x, y, what] of [[-0.85, 0.15, "home"], [0.15, 0.15, "reset"], [1.15, 0.15, "fullscreen"], [-0.85, 2.15, "density"], [0.15, 2.15, "border toggle"], [1.15, 2.15, "upload"], [2.15, 2.15, "reports"]]) {
+  for (const [x, y, what] of [[-0.85, 0.15, "home"], [0.15, 0.15, "reset"], [1.15, 0.15, "fullscreen"], [-0.85, 2.15, "density"], [0.15, 2.15, "border toggle"], [1.15, 2.15, "upload"], [2.15, 2.15, "reports"], [3.15, 2.15, "fps toggle"]]) {
     await expectColor(page, cell(x, y), "reset", `the ${what} block is black`);
   }
   check((await colorAt(page, ...cell(0.5, 1.5))) !== "reset", "with an empty row between the game's row and the debug row");
@@ -166,6 +172,7 @@ const browser = await chromium.launch();
   check(JSON.stringify(rest) === JSON.stringify({
     "someone-else": "keep me",
     "unblock-me:border": "false",
+    "unblock-me:fps": "true",
     "unblock-me:tries": "12",
     "unblock-me:v6:history": "[]",
     "unblock-me:v6:moved": "[]",
@@ -432,8 +439,8 @@ const browser = await chromium.launch();
   await page.evaluate(() => { unblock.scene.goal = null; unblock.redraw(); });
   const pointer = async () => page.evaluate(() => {
     const c = unblock.scene.camera, s = unblock.scene;
-    // The middle of the UI area (x -1..3, y 0..3), on screen.
-    const ux = 1 * 60 * c.scale + c.offsetX, uy = 1.5 * 60 * c.scale + c.offsetY;
+    // The middle of the UI area (x -1..4, y 0..3), on screen.
+    const ux = 1.5 * 60 * c.scale + c.offsetX, uy = 1.5 * 60 * c.scale + c.offsetY;
     const dx = ux - s.width / 2, dy = uy - s.height / 2;
     const k = Math.min(Math.abs((s.width / 2 - 26) / dx || Infinity), Math.abs((s.height / 2 - 26) / dy || Infinity));
     return [s.width / 2 + dx * k, s.height / 2 + dy * k + 10];

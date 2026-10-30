@@ -44,9 +44,11 @@ const throbScale = (t: number) => (t <= 0 || t >= 1 ? 1 : 1 + 0.15 * Math.sin(Ma
 export function draw(
   canvas: HTMLCanvasElement,
   scene: Scene,
-  { fullscreen, density, sliding, sparkles = [], throb = null, now = 0 }: {
+  { fullscreen, density, fps = true, sliding, sparkles = [], throb = null, now = 0 }: {
     fullscreen: boolean;
     density: number;
+    /** Whether the fps counter is showing. */
+    fps?: boolean;
     /** Where the sliding block is drawn now, and where its slide runs from and to. */
     sliding?: { id: string; x: number; y: number; from: { x: number; y: number }; to: { x: number; y: number } } | null;
     sparkles?: Sparkle[];
@@ -169,6 +171,7 @@ export function draw(
     else if (block.ui === "fullscreen") fullscreenIcon(ctx, block, fullscreen);
     else if (block.ui === "reports") reportsIcon(ctx, block);
     else if (block.ui === "upload") uploadIcon(ctx, block);
+    else if (block.ui === "fps") fpsIcon(ctx, block, fps);
     else if (block.ui === "density") densityIcon(ctx, block, density);
     else if (block.ui === "home") homeIcon(ctx, block);
     if (beat !== 1) ctx.restore();
@@ -352,6 +355,15 @@ function sliderTrack(ctx: CanvasRenderingContext2D, block: Block, at: number): v
 }
 
 /** Three rising bars on a baseline: the reports. */
+/** "fps", bright while the counter shows. */
+function fpsIcon(ctx: CanvasRenderingContext2D, block: Block, on: boolean): void {
+  ctx.fillStyle = on ? COLORS.icon : "rgba(243, 242, 238, 0.35)";
+  ctx.font = `600 ${UNIT * 0.26}px ui-monospace, monospace`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("fps", (block.x + 0.5) * UNIT, (block.y + 0.52) * UNIT);
+}
+
 /** An arrow up out of a tray: send the play data. */
 function uploadIcon(ctx: CanvasRenderingContext2D, block: Block): void {
   const x = block.x * UNIT, y = block.y * UNIT;
