@@ -143,3 +143,101 @@ export function smallestFrozen(
   fill(0, 0, 0);
   return best;
 }
+
+export type Move = { id: string; from: { x: number; y: number }; to: { x: number; y: number } };
+
+/**
+ * Moves that free `target`: legal slides, one block at a time, after which the target can
+ * slide at least one cell. Works back from the target: to step into a cell, the block in it
+ * has to slide out of the way, which may need others out of its way first, and a block
+ * moved out of the way must not end up in a cell that is needed. Tries short plans first
+ * (at most `maxMoves`) and each block's nearest positions first; null if none is found.
+ */
+export function planToFree(layout: Layout, target: Block, { maxMoves = 12, reach = 8, budget = 200_000 } = {}): Move[] | null {
+  const moved = new Map<string, { x: number; y: number }>();
+  const changes: Changes = { moved, tapped: new Set() };
+  const plan: Move[] = [];
+  let nodes = 0;
+  const key = (x: number, y: number) => `${x},${y}`;
+  const occupant = (x: number, y: number) => blocksIn(layout, { x, y, width: 1, height: 1 }, changes)[0] ?? null;
+  const cellsOf = (b: { x: number; y: number; w: number; h: number }) => {
+    const out: string[] = [];
+    for (let x = b.x; x < b.x + b.w; x++) for (let y = b.y; y < b.y + b.h; y++) out.push(key(x, y));
+    return out;
+  };
+
+  /** Slide `block` so it covers none of `forbidden`, clearing its path first. */
+  function vacate(block: Block, forbidden: Set<string>, busy: Set<string>, limit: number): boolean {
+    if (fixed(block) || busy.has(block.id) || plan.length >= limit || ++nodes > budget) return false;
+    const horizontal = block.w > block.h;
+    const pos = position(block);
+    const size = horizontal ? block.w : block.h;
+    const at = (p: number) => (horizontal ? { ...block, x: p } : { ...block, y: p });
+    const lane = (p: number) => (horizontal ? { x: p, y: block.y } : { x: block.x, y: p });
+    for (let d = 1; d <= reach; d++) {
+      for (const dir of [1, -1]) {
+        const p = pos + dir * d;
+        if (cellsOf(at(p)).some((c) => forbidden.has(c))) continue;
+        // The cells the block sweeps into on its way, nearest first.
+        const path: { x: number; y: number }[] = [];
+        for (let i = 0; i < d; i++) path.push(lane(dir > 0 ? pos + size + i : pos - 1 - i));
+        const keep = { plan: plan.length, moved: new Map(moved) };
+        const inner = new Set([...forbidden, ...path.map((c) => key(c.x, c.y))]);
+        let clear = true;
+        busy.add(block.id);
+        for (const c of path) {
+          const other = occupant(c.x, c.y);
+          if (other && other.id !== block.id && !vacate(other, inner, busy, limit - 1)) {
+            clear = false;
+            break;
+          }
+        }
+        busy.delete(block.id);
+        if (clear && plan.length < limit) {
+          const from = { x: block.x, y: block.y };
+          const to = lane(p);
+          moved.set(block.id, to);
+          plan.push({ id: block.id, from, to });
+          return true;
+        }
+        plan.length = keep.plan;
+        moved.clear();
+        for (const [id, p] of keep.moved) moved.set(id, p);
+      }
+    }
+    return false;
+  }
+
+  const horizontal = target.w > target.h;
+  for (let limit = 0; limit <= maxMoves; limit++) {
+    for (const dir of [1, -1]) {
+      // The cell the target steps into when it moves one cell this way.
+      const cell = horizontal
+        ? { x: dir > 0 ? target.x + target.w : target.x - 1, y: target.y }
+        : { x: target.x, y: dir > 0 ? target.y + target.h : target.y - 1 };
+      const other = occupant(cell.x, cell.y);
+      if (!other) return [];
+      plan.length = 0;
+      moved.clear();
+      if (vacate(other, new Set([key(cell.x, cell.y)]), new Set([target.id]), limit)) return [...plan];
+    }
+    if (nodes > budget) break;
+  }
+  return null;
+}
+
+/** Play `moves` with the game's rules: each must be a legal slide when it is made. Returns
+ * the changes, or null at the first illegal move. */
+export function replay(layout: Layout, moves: Move[]): Changes | null {
+  const moved = new Map<string, { x: number; y: number }>();
+  const changes: Changes = { moved, tapped: new Set() };
+  for (const m of moves) {
+    const block = blocksIn(layout, { x: m.from.x, y: m.from.y, width: 1, height: 1 }, changes).find((b) => b.id === m.id);
+    if (!block || fixed(block)) return null;
+    const { lo, hi } = slide(layout, block, changes);
+    const to = block.w > block.h ? m.to.x : m.to.y;
+    if ((block.w > block.h ? m.to.y !== block.y : m.to.x !== block.x) || to < lo || to > hi) return null;
+    moved.set(m.id, m.to);
+  }
+  return changes;
+}

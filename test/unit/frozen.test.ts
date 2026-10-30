@@ -1,7 +1,9 @@
 // Jams and frozen structures: exact boards for the rules, random boards for the claims.
 import { describe, expect, test } from "bun:test";
-import { frozen, lockDepths, smallestFrozen } from "../../src/frozen";
-import { fixedLayout, randomLayout, type Placed } from "../../src/layout";
+import { frozen, lockDepths, planToFree, replay, type Move } from "../../src/frozen";
+import { smallestFrozen } from "../../src/frozen";
+import { fixedLayout, randomLayout, type Layout, type Placed } from "../../src/layout";
+import { blocksIn, slide } from "../../src/rules";
 
 const H = (id: string, x: number, y: number): Placed => ({ id, x, y, w: 2, h: 1 });
 const V = (id: string, x: number, y: number): Placed => ({ id, x, y, w: 1, h: 2 });
@@ -86,5 +88,72 @@ describe("smallestFrozen", () => {
     const placed = found.map((b, i) => ({ ...b, id: String(i) }));
     const sliders = placed.filter((b) => !b.wall).map((b) => b.id).sort();
     expect([...frozen(fixedLayout(placed), AREA)].sort()).toEqual(sliders);
+  });
+});
+
+/** After `moves`, can the block with this id slide? */
+function freed(layout: Layout, moves: Move[], id: string): boolean {
+  const changes = replay(layout, moves);
+  if (!changes) return false;
+  const home = layout.byId(id)!;
+  const b = blocksIn(layout, { x: home.x - 50, y: home.y - 50, width: 100, height: 100 }, changes).find((x) => x.id === id)!;
+  const s = slide(layout, b, changes);
+  return s.hi > s.lo;
+}
+
+describe("planToFree", () => {
+  test("a block that can move needs no moves", () => {
+    const layout = fixedLayout([H("a", 0, 0)]);
+    expect(planToFree(layout, layout.byId("a")!)).toEqual([]);
+  });
+
+  test("a vertical blocker moves one cell, not just 'away': down 1 still leaves its top in the lane", () => {
+    // a is held between a wall and v (rows 0..1); v has a wall above, room below.
+    // v down 1 covers rows 1..2 and frees row 0.
+    const layout = fixedLayout([W(-1, 0), H("a", 0, 0), V("v", 2, 0), W(2, -1)]);
+    const plan = planToFree(layout, layout.byId("a")!)!;
+    expect(plan).toEqual([{ id: "v", from: { x: 2, y: 0 }, to: { x: 2, y: 1 } }]);
+    expect(freed(layout, plan, "a")).toBe(true);
+  });
+
+  test("a 1-cell move is not enough when the blocker is 2 long in the lane: it must move 2", () => {
+    // a is held by b in its own row; b can only go right, by 2 to clear... it only needs 1:
+    // the cell a steps into is b's first cell, and b moving 1 right leaves it.
+    const layout = fixedLayout([W(-1, 0), H("a", 0, 0), H("b", 2, 0)]);
+    const plan = planToFree(layout, layout.byId("a")!)!;
+    expect(plan).toEqual([{ id: "b", from: { x: 2, y: 0 }, to: { x: 3, y: 0 } }]);
+    expect(freed(layout, plan, "a")).toBe(true);
+  });
+
+  test("it clears a path through several blocks, in an order the rules allow", () => {
+    // a waits on v (column 2); v is held from below by h, which can slide right.
+    const layout = fixedLayout([W(-1, 0), H("a", 0, 0), V("v", 2, 0), W(2, -1), H("h", 2, 2), W(1, 2)]);
+    const plan = planToFree(layout, layout.byId("a")!)!;
+    expect(plan.map((m) => m.id)).toEqual(["h", "v"]);
+    expect(freed(layout, plan, "a")).toBe(true);
+  });
+
+  test("it gives up on a frozen block", () => {
+    const layout = fixedLayout(PINWHEEL);
+    expect(planToFree(layout, layout.byId("a")!)).toBeNull();
+  });
+
+  test("replay refuses an illegal move", () => {
+    const layout = fixedLayout([W(-1, 0), H("a", 0, 0), H("b", 2, 0)]);
+    expect(replay(layout, [{ id: "a", from: { x: 0, y: 0 }, to: { x: 1, y: 0 } }])).toBeNull();
+  });
+
+  test("on random dense boards every stuck block it plans for is freed by the plan", () => {
+    const layout = randomLayout(4, { tries: 30 });
+    const { depth } = lockDepths(layout, { x: 40, y: 40, width: 20, height: 20 });
+    let planned = 0;
+    for (const [id, d] of depth) {
+      if (d === 0) continue;
+      const plan = planToFree(layout, layout.byId(id)!, { maxMoves: 6 });
+      if (!plan) continue;
+      planned++;
+      expect(freed(layout, plan, id)).toBe(true);
+    }
+    expect(planned).toBeGreaterThan(20);
   });
 });
