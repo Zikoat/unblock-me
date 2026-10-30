@@ -24,12 +24,23 @@
   .step { display: grid; grid-template-columns: 4.5rem 1fr 9rem; gap: 12px; align-items: center; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
   .step .n { font-variant-numeric: tabular-nums; color: var(--ink-2); font-size: 14px; }
   .step .r { font-size: 14px; }
-  .step svg { width: 100%; height: auto; display: block; }
+  .step svg { max-width: 100%; height: auto; display: block; }
   .variants { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-bottom: 12px; }
   .variant { background: var(--card); border: 2px solid var(--line); border-radius: 10px; padding: 8px; cursor: pointer; font: inherit; color: inherit; text-align: left; }
   .variant[aria-pressed=true] { border-color: #3b6fd4; }
   .variant svg { width: 100%; height: auto; display: block; border-radius: 6px; }
   .variant span { display: block; font-size: 13px; margin-top: 4px; color: var(--ink-2); }
+  .look { position: sticky; top: 0; z-index: 2; margin-top: 12px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 8px 16px 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.06); }
+  .look .controls { margin-top: 6px; }
+  .look .controls input[type=range] { flex: 1 1 100px; }
+  .look .controls output { min-width: 4ch; }
+  .look label { min-width: 7.5em; }
+  .demo { margin-bottom: 16px; }
+  .demo-title { font-weight: 600; }
+  .demo-sub { font-size: 14px; color: var(--ink-2); margin-bottom: 8px; max-width: 68ch; }
+  .demo-score { font-size: 14px; min-height: 1.5em; margin-top: 4px; }
+  .demo svg { display: block; max-width: 100%; height: auto; }
+  .play { font: inherit; font-size: 14px; padding: 6px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); cursor: pointer; }
   ul { padding-left: 20px; }
   li { margin: 4px 0; max-width: 68ch; }
   @media (max-width: 560px) { .step { grid-template-columns: 1fr; gap: 4px; } }
@@ -44,20 +55,30 @@
   <svg class="board" id="board" viewBox="0 0 448 252" role="img" aria-label="The goal on the board with its score track"></svg>
   <div class="controls">
     <label for="used">Moves</label>
-    <input id="used" type="range" min="0" max="36" value="22">
+    <input id="used" type="range" min="0" max="40" value="22">
     <output id="usedOut">22</output>
     <label><input id="undone" type="checkbox"> Undone once</label>
-  </div>
-  <div class="controls">
-    <label for="compact">Compactness</label>
-    <input id="compact" type="range" min="0" max="70" value="0">
-    <output id="compactOut">0%</output>
   </div>
   <div class="readout" id="readout"></div>
 </div>
 
+<div class="look" id="look"></div>
+
+<h2>Finishing</h2>
+<p class="sub">Two ways to make stars feel earned, played from the first move to the goal. Pick where it finishes, then play.</p>
+<div class="card">
+  <div class="demo"><div class="demo-title">Stars earned at the end</div><div class="demo-sub">During play the stars are outlines, still in reach. At the goal they fill in, one at a time, from the last star back to where you finished.</div><div id="demoHollow"></div><div class="demo-score" id="scoreHollow"></div></div>
+  <div class="demo"><div class="demo-title">Fuel gauge</div><div class="demo-sub">The track holds the moves you have left. At the goal the fuel left drains towards the end, collecting each star it passes.</div><div id="demoFuel"></div><div class="demo-score" id="scoreFuel"></div></div>
+  <div class="controls">
+    <label for="finish">Finish at</label>
+    <input id="finish" type="range" min="10" max="38" value="18">
+    <output id="finishOut">18</output>
+    <button id="play" class="play">▶ Play</button>
+  </div>
+</div>
+
 <h2>Three goals</h2>
-<p class="sub">The same scale for each: every move is the same width, so a longer goal has a longer track. Each finished in a different number of moves, from a medal to 1 star.</p>
+<p class="sub">Every track has the same width, so the moves of a longer goal are packed tighter. Each finished in a different number of moves, from a medal to 1 star.</p>
 <div class="steps" id="goals"></div>
 
 <h2>As the moves go up</h2>
@@ -65,32 +86,45 @@
 
 <h2>How it reads</h2>
 <ul>
-  <li>Every move takes the same width of the track. Moves used are dark, moves left are light, so the dark fill grows to the right.</li>
+  <li>Every move takes the same width of a track, and every track has the same total width. Moves used are dark, moves left are light, so the dark fill grows to the right.</li>
   <li>A line across the track marks the exact point where a star is lost: finish before it and you keep the star on it. The medal has no line: its part of the track has its own colour.</li>
   <li>The icons sit on the lines, on their own layer, so their width never shifts the track.</li>
   <li>The rosette sits at 13, the lower bound: no solution is shorter, so finishing there is a perfect solve (and beats the game's own 15).</li>
   <li>One star every 5 moves (a third of 15). Passed icons turn gray.</li>
-  <li>The track ends at 31. The last star sits outside it: it is never lost.</li>
+  <li>The track ends at 35, a step past the last star you can lose, square on the right: its edge is the last star's line, and that star is never lost. Past 35 the track stays full.</li>
   <li>After an undo the medal is gray and faint, with an undo arrow under it: it can no longer be won on this goal.</li>
 </ul>
 </main>
 <script>
 // The goal shown: its lower bound and the shortest solution the game has. One star every
-// third of the fewest moves (at least 2); the track ends one move past the last star that can be lost.
+// third of the fewest moves (at least 2); the track ends a step past the last star that can
+// be lost, with the star that is never lost on its edge.
 let FEWEST, LOW, STEP, END, MARKS;
 function setGoal(low, fewest) {
   [LOW, FEWEST] = [low, fewest];
   STEP = Math.max(2, Math.round(fewest / 3));
-  END = fewest + 3 * STEP + 1;
+  END = fewest + 4 * STEP; // the last star sits on the right edge, a step past the 4th
   // Where each thing is lost: finishing in `at` moves or fewer keeps it. When the fewest is
   // known exactly, the medal takes the 5th star's place.
   MARKS = [{ at: LOW, kind: "medal" }, ...[0, 1, 2, 3].map((i) => ({ at: FEWEST + i * STEP, kind: "star" })).filter((m) => m.at !== LOW)];
 }
 setGoal(13, 15);
+
 const C = {
   bg: "#e6e9ec", dot: "#d3d1ca", block: "#4f6d8f", red: "#d64545", target: "rgba(214,69,69,0.14)", targetLine: "rgba(214,69,69,0.45)",
-  left: "#eaa49c", used: "#8e3f3c", hatch: "rgba(90, 88, 84, 0.55)", cut: "#ffffff", star: "#fdd835", starLine: "#f4b400", gray: "#b9b6ad", medal: "#c44",
+  left: "#eaa49c", used: "#8e3f3c", zone: "#d9dbde", line: "rgba(80, 82, 86, 0.25)", star: "#fdd835", starLine: "#e07b00", fuel: "#f2b632",
 };
+/** The look, from the sliders: total track width and height (in the rows' units), icon
+ * size and corner radius (shares of the height), and the move count's size. */
+const LOOK = { width: 260, height: 20, icons: 1, radius: 0.2, number: 0.45 };
+const SLIDERS = [
+  ["width", "Track width", 80, 330, 1, (v) => v],
+  ["height", "Track height", 8, 36, 1, (v) => v],
+  ["icons", "Icon size", 0.4, 1.4, 0.05, (v) => `${Math.round(v * 100)}%`],
+  ["radius", "Corner radius", 0, 0.5, 0.05, (v) => `${Math.round(v * 100)}%`],
+  ["number", "Number size", 0.25, 0.8, 0.05, (v) => `${Math.round(v * 100)}%`],
+];
+
 const NS = "http://www.w3.org/2000/svg";
 const el = (name, attrs, parent) => {
   const e = document.createElementNS(NS, name);
@@ -108,62 +142,26 @@ function starPath(cx, cy, r) {
   return d + "Z";
 }
 
-/** Medal designs, centred on (cx, cy) with the disc about `s` across. */
-const MEDALS = {
-  rosette: { name: "Rosette", draw: (g, cx, cy0, s) => {
-    const r = s / 2, cy = cy0 - r * 0.335; // the rosette with its tails, centred on cy0
-    el("path", { d: `M${cx - r * 0.5},${cy}L${cx - r * 0.9},${cy + r * 1.9}L${cx - r * 0.45},${cy + r * 1.6}L${cx - r * 0.1},${cy + r * 1.95}L${cx},${cy}Z`, fill: "#2f5bb3" }, g);
-    el("path", { d: `M${cx + r * 0.5},${cy}L${cx + r * 0.9},${cy + r * 1.9}L${cx + r * 0.45},${cy + r * 1.6}L${cx + r * 0.1},${cy + r * 1.95}L${cx},${cy}Z`, fill: "#264a94" }, g);
-    let d = "";
-    for (let i = 0; i < 24; i++) { const a = (i * Math.PI) / 12, rr = i % 2 ? r * 1.05 : r * 1.28; d += `${i ? "L" : "M"}${cx + rr * Math.cos(a)},${cy + rr * Math.sin(a)}`; }
-    el("path", { d: d + "Z", fill: "#3b6fd4" }, g);
-    el("circle", { cx, cy, r: r * 0.78, fill: C.star, stroke: C.starLine, "stroke-width": r * 0.12 }, g);
-  } },
-};
-const STARS = {
-  drawn: { name: "Drawn ⭐", draw: (g, cx, cy, s) => el("path", { d: starPath(cx, cy + s * 0.057, s * 0.6), fill: C.star, stroke: LOOK.starLine, "stroke-width": s * 0.06, "stroke-linejoin": "round" }, g) },
-};
-const LOOK = { zone: "#d9dbde", line: "rgba(80, 82, 86, 0.25)", starLine: "#e07b00" };
-const pick = { medal: "rosette", star: "drawn" };
-
-/** An icon in one state: kept (colour), lost (gray) or undone (gray and faint). */
-function icon(g, set, key, cx, cy, s, state) {
-  const box = el("g", state === "kept" ? {} : { filter: "url(#gray)", opacity: state === "undone" ? 0.4 : 0.85 }, g);
-  set[key].draw(box, cx, cy, s);
+/** A star about `s` across, centred on (cx, cy): filled, or only its outline. */
+function star(g, cx, cy, s, { outline = false } = {}) {
+  el("path", { d: starPath(cx, cy + s * 0.057, s * 0.6), fill: outline ? "rgba(255,255,255,0.25)" : C.star, stroke: C.starLine, "stroke-width": s * (outline ? 0.09 : 0.06), "stroke-linejoin": "round" }, g);
 }
-
-/** The track: cells of width `w` from x0, its icons above. */
-let clips = 0;
-/** The track: one bar, `w` wide per move, rounded only at its ends; a line through it where
- * the medal or a star is lost, with the icon centred on the line. */
-/** How much narrower every track is drawn (the compactness slider): the height and icons
- * stay, the width per move shrinks. */
-let SCALE = 1;
-function track(g, x0, y0, w0, used, undone) {
-  const h = w0 * 2.2, w = w0 * SCALE, width = END * w, fill = Math.min(used, END) * w;
-  const clip = `track${++clips}`;
-  el("rect", { x: x0, y: y0, width, height: h, rx: h * 0.2 }, el("clipPath", { id: clip }, g));
-  const bar = el("g", { "clip-path": `url(#${clip})` }, g);
-  el("rect", { x: x0, y: y0, width, height: h, fill: C.left }, bar);
-  el("rect", { x: x0, y: y0, width: LOW * w, height: h, fill: LOOK.zone }, bar);
-  el("rect", { x: x0, y: y0, width: fill, height: h, fill: C.used, "fill-opacity": 0.78 }, bar); // the zone shows through
-  const r = h * 0.25, cy = y0 + h / 2;
-  // The move count, on the left of the track (before the medal).
-  const count = el("text", { x: x0 + h * 0.35, y: cy, "dominant-baseline": "central", "font-size": h * 0.45, "font-weight": 700, "font-family": "system-ui, sans-serif", fill: used > 0 ? "#ffffff" : "#6b6e73" }, g);
-  count.textContent = used;
-  // The medal last: it sits on top where it meets the 5th star.
-  for (const m of [...MARKS].reverse()) {
-    const cx = x0 + m.at * w, lost = used > m.at;
-    if (m.kind === "star") el("line", { x1: cx, x2: cx, y1: y0, y2: y0 + h, stroke: LOOK.line, "stroke-width": Math.max(1, w * 0.14) }, bar);
-    if (m.kind === "star") icon(g, STARS, pick.star, cx, cy, r * 2.8, lost ? "lost" : "kept");
-    else {
-      icon(g, MEDALS, pick.medal, cx, cy, r * 2.08, undone ? "undone" : lost ? "lost" : "kept");
-      if (undone) undoIcon(g, cx, y0 + h + r * 1.5, r * 2);
-    }
-  }
-  // The last star, outside the track: it is never lost.
-  icon(g, STARS, pick.star, x0 + width + r * 2, cy, r * 2.8, "kept");
-  return width;
+/** The rosette, the disc about `s` across, with its tails, centred on (cx, cy). */
+function rosette(g, cx, cy0, s) {
+  const r = s / 2, cy = cy0 - r * 0.335;
+  el("path", { d: `M${cx - r * 0.5},${cy}L${cx - r * 0.9},${cy + r * 1.9}L${cx - r * 0.45},${cy + r * 1.6}L${cx - r * 0.1},${cy + r * 1.95}L${cx},${cy}Z`, fill: "#2f5bb3" }, g);
+  el("path", { d: `M${cx + r * 0.5},${cy}L${cx + r * 0.9},${cy + r * 1.9}L${cx + r * 0.45},${cy + r * 1.6}L${cx + r * 0.1},${cy + r * 1.95}L${cx},${cy}Z`, fill: "#264a94" }, g);
+  let d = "";
+  for (let i = 0; i < 24; i++) { const a = (i * Math.PI) / 12, rr = i % 2 ? r * 1.05 : r * 1.28; d += `${i ? "L" : "M"}${cx + rr * Math.cos(a)},${cy + rr * Math.sin(a)}`; }
+  el("path", { d: d + "Z", fill: "#3b6fd4" }, g);
+  el("circle", { cx, cy, r: r * 0.78, fill: C.star, stroke: C.starLine, "stroke-width": r * 0.12 }, g);
+}
+/** An icon group: gray for lost, faint for undone or not yet earned; `pop` scales it up. */
+function iconBox(g, cx, cy, { gray = false, opacity = 1, pop = 1 } = {}) {
+  const attrs = { opacity };
+  if (gray) attrs.filter = "url(#gray)";
+  if (pop !== 1) attrs.transform = `translate(${cx} ${cy}) scale(${pop}) translate(${-cx} ${-cy})`;
+  return el("g", attrs, g);
 }
 
 /** The undo arrow (a curve turning back left), about `s` across. */
@@ -175,9 +173,70 @@ function undoIcon(g, cx, cy, s) {
 
 function defs(svg) {
   const d = el("defs", {}, svg);
-  const p = el("pattern", { id: "hatch", width: 4, height: 4, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, d);
-  el("rect", { width: 1.8, height: 4, fill: C.hatch }, p);
   el("feColorMatrix", { type: "saturate", values: 0 }, el("filter", { id: "gray" }, d));
+  el("feDropShadow", { dx: 0, dy: 0.6, stdDeviation: 0.9, "flood-color": "#000", "flood-opacity": 0.55 }, el("filter", { id: "shadow", x: "-50%", y: "-50%", width: "200%", height: "200%" }, d));
+}
+
+let clips = 0;
+/**
+ * The track at (x0, y0), `scale` times the look's size. Styles: "now" (stars gray once
+ * passed), "hollow" (outlines until the goal, then filled one at a time) and "fuel" (the
+ * fill is the moves left). `finish` is how far the finish animation is: for "hollow" the
+ * stars filled so far (with `pop` for the newest), for "fuel" the move the drain has got to.
+ */
+function track(g, x0, y0, used, { undone = false, scale = 1, style = "now", finish = null } = {}) {
+  const width = LOOK.width * scale, h = LOOK.height * scale, w = width / END;
+  const at = (m) => x0 + m * w;
+  const clip = `track${++clips}`;
+  // Rounded on the left only: the right end is the last star's line.
+  const rr = Math.min(h / 2, h * LOOK.radius);
+  el("path", { d: `M${x0 + rr},${y0}H${x0 + width}V${y0 + h}H${x0 + rr}A${rr},${rr} 0 0 1 ${x0},${y0 + h - rr}V${y0 + rr}A${rr},${rr} 0 0 1 ${x0 + rr},${y0}Z` }, el("clipPath", { id: clip }, g));
+  const bar = el("g", { "clip-path": `url(#${clip})` }, g);
+  const done = Math.min(used, END);
+  if (style === "fuel") {
+    // Empty where moves are spent; fuel from there to the end (or to where the drain is).
+    el("rect", { x: x0, y: y0, width, height: h, fill: C.zone }, bar);
+    const from = finish === null ? done : Math.max(done, finish);
+    el("rect", { x: at(from), y: y0, width: Math.max(0, width - (from) * w), height: h, fill: C.fuel }, bar);
+  } else {
+    el("rect", { x: x0, y: y0, width, height: h, fill: C.left }, bar);
+    el("rect", { x: x0, y: y0, width: LOW * w, height: h, fill: C.zone }, bar);
+    el("rect", { x: x0, y: y0, width: done * w, height: h, fill: C.used, "fill-opacity": 0.78 }, bar); // the zone shows through
+  }
+  const cy = y0 + h / 2, s = h * 0.7 * LOOK.icons, ms = h * 0.52 * LOOK.icons;
+  for (const m of MARKS) if (m.kind === "star") el("line", { x1: at(m.at), x2: at(m.at), y1: y0, y2: y0 + h, stroke: C.line, "stroke-width": Math.max(1, w * 0.14) }, bar);
+  el("line", { x1: x0 + width, x2: x0 + width, y1: y0, y2: y0 + h, stroke: C.line, "stroke-width": Math.max(1, w * 0.14) }, g);
+  // The stars still earned when finishing now, in the order they are counted: the last star
+  // (on the track's right edge, never lost), then back along the track.
+  const endX = x0 + width;
+  const kept = [{ x: endX, kind: "star", m: Infinity }, ...[...MARKS].reverse().filter((m) => used <= m.at && !(m.kind === "medal" && undone)).map((m) => ({ x: at(m.at), kind: m.kind, m: m.at }))];
+  const drawIcon = (x, kind, look) => {
+    const box = iconBox(g, x, cy, look);
+    if (kind === "star") star(box, x, cy, s, { outline: look.outline });
+    else rosette(box, x, cy, ms);
+  };
+  const all = [...[...MARKS].reverse().map((m) => ({ x: at(m.at), kind: m.kind, m: m.at })), { x: endX, kind: "star", m: Infinity }];
+  for (const icon of all) {
+    const lost = used > icon.m || (icon.kind === "medal" && undone);
+    if (style === "now") drawIcon(icon.x, icon.kind, { gray: lost, opacity: icon.kind === "medal" && undone ? 0.4 : lost ? 0.85 : 1 });
+    else if (style === "hollow") {
+      const k = finish === null ? -1 : kept.findIndex((c) => c.m === icon.m);
+      const filled = k >= 0 && k < Math.floor(finish ?? 0);
+      const pop = filled && k === Math.floor(finish) - 1 ? 1 + 0.6 * Math.sin(Math.PI * Math.min(1, (finish % 1) * 1.6)) : 1;
+      if (filled) drawIcon(icon.x, icon.kind, { pop });
+      else drawIcon(icon.x, icon.kind, { outline: true, gray: icon.kind === "medal", opacity: lost ? 0.25 : icon.kind === "medal" ? 0.45 : 1 });
+    } else {
+      // Fuel: an icon in the fuel is kept; the drain collects it with a pop.
+      const m = Math.min(icon.m, END), reached = finish !== null && finish >= m;
+      const pop = reached && finish - m < 1.2 ? 1 + 0.6 * Math.sin((Math.PI * (finish - m)) / 1.2) : 1;
+      drawIcon(icon.x, icon.kind, { gray: lost, opacity: lost ? 0.6 : 1, pop });
+    }
+    if (icon.kind === "medal" && undone) undoIcon(g, icon.x, y0 + h + ms * 0.75, ms);
+  }
+  // The move count, white with a shadow, on the left of the track.
+  const count = el("text", { x: x0 + h * 0.35, y: cy, "dominant-baseline": "central", "font-size": h * LOOK.number, "font-weight": 700, "font-family": "system-ui, sans-serif", fill: "#ffffff", filter: "url(#shadow)" }, g);
+  count.textContent = used;
+  return { width: width + s * 0.65, height: h, kept };
 }
 
 function stars(used) {
@@ -191,6 +250,20 @@ function verdict(used, undone) {
   return `${n} of 5 stars` + (undone && used <= LOW ? " (no medal: undone)" : "");
 }
 
+/** An svg just big enough for a track of the look's size, drawn by `draw(g, x0, y0)`. */
+function trackSvg(draw, { pad = 6, below = 0 } = {}) {
+  const svg = el("svg", {});
+  svg.style.background = C.bg;
+  svg.style.borderRadius = "6px";
+  defs(svg);
+  const { width, height } = draw(el("g", {}, svg), pad, pad);
+  const vw = width + pad * 2, vh = height + pad * 2 + below;
+  svg.setAttribute("viewBox", `0 0 ${vw} ${vh}`);
+  svg.setAttribute("width", vw);
+  svg.setAttribute("height", vh);
+  return svg;
+}
+
 // The goal in place: a slice of the board, the red block heading left 7 cells to its target.
 const CELL = 28;
 function drawBoard(used, undone) {
@@ -200,35 +273,32 @@ function drawBoard(used, undone) {
   el("rect", { x: 0, y: 0, width: 448, height: 252, fill: C.bg }, svg);
   for (let i = 0; i < 16; i++) for (let j = 0; j < 9; j++) el("circle", { cx: i * CELL + CELL / 2, cy: j * CELL + CELL / 2, r: 1.3, fill: C.dot }, svg);
   const block = (cx, cy, w, h, fill) => el("rect", { x: cx * CELL + 2, y: cy * CELL + 2, width: w * CELL - 4, height: h * CELL - 4, rx: 6, fill }, svg);
-  // Blockers in the way and around.
   [[8, 4, 1, 2], [10, 5, 1, 2], [11, 0, 1, 2], [12, 6, 1, 2], [7, 6, 2, 1], [3, 1, 2, 1], [13, 1, 2, 1], [15, 4, 1, 2], [4, 4, 1, 2], [10, 7, 2, 1], [1, 6, 2, 1], [6, 1, 2, 1], [2, 3, 1, 2]]
     .forEach(([x, y, w, h]) => block(x, y, w, h, C.block));
-  // Target (2x1 at column 2, row 5) and the red block 7 cells to its right.
   const tx = 6, ty = 5;
   el("rect", { x: tx * CELL + 1, y: ty * CELL + 1, width: 2 * CELL - 2, height: CELL - 2, rx: 7, fill: C.target, stroke: C.targetLine, "stroke-width": 2, "stroke-dasharray": "5 4" }, svg);
-  block(tx + 7, ty - 0, 2, 1, C.red);
-  // The track, on the goal: centred over the target, just above it.
-  const g = el("g", {}, svg);
-  const w = 8;
-  const x0 = tx * CELL + CELL - (END * w * SCALE) / 2;
-  track(g, x0, ty * CELL - w * 2.2 - 4, w, used, undone);
+  block(tx + 7, ty, 2, 1, C.red);
+  // The track, centred over the target, just above it.
+  const scale = 0.85;
+  track(el("g", {}, svg), tx * CELL + CELL - (LOOK.width * scale) / 2, ty * CELL - LOOK.height * scale - 4, used, { undone, scale });
   document.getElementById("readout").textContent = `${used} moves: ${verdict(used, undone)}.`;
+}
+
+function row(box, left, svg, right) {
+  const r = document.createElement("div");
+  r.className = "step";
+  r.innerHTML = `<div class="n">${left}</div><div class="t"></div><div class="r">${right}</div>`;
+  r.querySelector(".t").appendChild(svg);
+  box.appendChild(r);
 }
 
 function drawSteps() {
   const box = document.getElementById("steps");
-  const rows = [[0, false, "start"], [9, false, ""], [13, false, "last move for 🏅"], [14, false, "medal gone"], [15, false, ""], [16, false, ""], [22, false, "your finish"], [31, false, "end of the track"], [34, false, "past the end"], [12, true, "undone once: no medal"]];
+  box.replaceChildren();
+  const rows = [[0, false, "start"], [9, false, ""], [13, false, "last move for 🏅"], [14, false, "medal gone"], [15, false, ""], [16, false, ""], [22, false, "your finish"], [35, false, "end of the track"], [38, false, "past the end"], [12, true, "undone once: no medal"]];
   for (const [used, undone, note] of rows) {
-    const row = document.createElement("div");
-    row.className = "step";
-    row.innerHTML = `<div class="n">${used} moves</div><div class="t"></div><div class="r">${verdict(used, undone)}${note ? `<br><span style="color:var(--ink-2)">${note}</span>` : ""}</div>`;
-    const svg = el("svg", { viewBox: "0 0 360 50" });
-    svg.style.background = C.bg;
-    svg.style.borderRadius = "6px";
-    defs(svg);
-    track(el("g", {}, svg), 6, 9, 10, used, undone);
-    row.querySelector(".t").appendChild(svg);
-    box.appendChild(row);
+    const svg = trackSvg((g, x, y) => track(g, x, y, used, { undone }), { below: undone ? LOOK.height * 0.5 : 0 });
+    row(box, `${used} moves`, svg, `${verdict(used, undone)}${note ? `<br><span style="color:var(--ink-2)">${note}</span>` : ""}`);
   }
 }
 
@@ -241,40 +311,86 @@ function drawGoals() {
     { low: 13, fewest: 15, used: 15, name: "This goal", about: "fewest 13 to 15" },
     { low: 13, fewest: 15, used: 27, name: "This goal", about: "fewest 13 to 15" },
     { low: 27, fewest: 33, used: 40, name: "A hard goal", about: "fewest 27 to 33" },
-    { low: 27, fewest: 33, used: 70, name: "A hard goal", about: "fewest 27 to 33" },
+    { low: 27, fewest: 33, used: 80, name: "A hard goal", about: "fewest 27 to 33" },
   ];
-  for (const g of goals) {
-    setGoal(g.low, g.fewest);
-    const row = document.createElement("div");
-    row.className = "step";
-    row.innerHTML = `<div class="n">${g.name}<br>${g.about}</div><div class="t"></div><div class="r">${g.used} moves: ${verdict(g.used, false)}<br><span style="color:var(--ink-2)">a star every ${STEP} moves, ends at ${END}</span></div>`;
-    const svg = el("svg", { viewBox: "0 0 372 22" });
-    svg.style.background = C.bg;
-    svg.style.borderRadius = "6px";
-    defs(svg);
-    track(el("g", {}, svg), 4, 4, 5, g.used, false);
-    row.querySelector(".t").appendChild(svg);
-    box.appendChild(row);
+  for (const goal of goals) {
+    setGoal(goal.low, goal.fewest);
+    const svg = trackSvg((g, x, y) => track(g, x, y, goal.used));
+    row(box, `${goal.name}<br>${goal.about}`, svg, `${goal.used} moves: ${verdict(goal.used, false)}<br><span style="color:var(--ink-2)">a star every ${STEP} moves, ends at ${END}</span>`);
   }
   setGoal(13, 15);
 }
+
+// The finish demos: moves tick up to the finish, then each style's finish plays.
+const MOVE_MS = 110, STAR_MS = 420, DRAIN_MS = 70;
+let demo = { start: null, until: 18 };
+function drawDemos(now) {
+  const n = demo.until;
+  let used = n, hollow = null, fuel = null;
+  if (demo.start !== null) {
+    const t = now - demo.start;
+    used = Math.min(n, Math.floor(t / MOVE_MS));
+    const after = t - n * MOVE_MS;
+    if (after >= 0) {
+      hollow = after / STAR_MS;
+      fuel = n + after / DRAIN_MS;
+    }
+  }
+  for (const [id, style, finish, scoreId] of [["demoHollow", "hollow", hollow, "scoreHollow"], ["demoFuel", "fuel", fuel, "scoreFuel"]]) {
+    let kept = [];
+    const svg = trackSvg((g, x, y) => { const r = track(g, x, y, used, { style, finish, scale: 1.2 }); kept = r.kept; return r; }, { pad: 14 });
+    document.getElementById(id).replaceChildren(svg);
+    // The count so far: stars filled (or collected) and the medal.
+    let got = 0, medal = false;
+    if (finish !== null) {
+      const counted = style === "hollow" ? kept.slice(0, Math.floor(finish)) : kept.filter((k) => finish >= Math.min(k.m, END));
+      got = counted.filter((k) => k.kind === "star").length;
+      medal = counted.some((k) => k.kind === "medal");
+    }
+    document.getElementById(scoreId).textContent = finish === null ? `${used} moves` : `${used} moves: ${"★".repeat(got)}${"☆".repeat(5 - got)}${medal ? " + medal" : ""}`;
+  }
+  const total = n * MOVE_MS + Math.max(6 * STAR_MS, (END + 3 - n) * DRAIN_MS) + 600;
+  if (demo.start !== null && now - demo.start < total) requestAnimationFrame(drawDemos);
+}
+
+function drawLook() {
+  const box = document.getElementById("look");
+  box.replaceChildren();
+  for (const [key, name, min, max, step, show] of SLIDERS) {
+    const c = document.createElement("div");
+    c.className = "controls";
+    c.innerHTML = `<label for="look-${key}">${name}</label><input id="look-${key}" type="range" min="${min}" max="${max}" step="${step}" value="${LOOK[key]}"><output>${show(LOOK[key])}</output>`;
+    c.querySelector("input").addEventListener("input", (e) => {
+      LOOK[key] = Number(e.target.value);
+      c.querySelector("output").textContent = show(LOOK[key]);
+      redraw();
+    });
+    box.append(c);
+  }
+}
+
 function redraw() {
-  drawGoals();
   update();
-  document.getElementById("steps").replaceChildren();
+  drawGoals();
   drawSteps();
+  drawDemos(performance.now());
 }
 
 const used = document.getElementById("used"), undone = document.getElementById("undone"), out = document.getElementById("usedOut");
 const update = () => { out.textContent = used.value; drawBoard(Number(used.value), undone.checked); };
 used.addEventListener("input", update);
 undone.addEventListener("change", update);
-const compact = document.getElementById("compact");
-compact.addEventListener("input", () => {
-  SCALE = 1 - compact.value / 100;
-  document.getElementById("compactOut").textContent = `${compact.value}%`;
-  redraw();
+const finish = document.getElementById("finish");
+finish.addEventListener("input", () => {
+  demo = { start: null, until: Number(finish.value) };
+  document.getElementById("finishOut").textContent = finish.value;
+  drawDemos(performance.now());
 });
+document.getElementById("play").addEventListener("click", () => {
+  demo = { start: performance.now(), until: Number(finish.value) };
+  requestAnimationFrame(drawDemos);
+});
+drawLook();
 redraw();
 </script>
 </body>
