@@ -20,43 +20,47 @@ What the game needs from goal generation, stated without the rest of the game. C
 ## Input
 
 - The board (layout + `moved`).
-- `near`: a cell (the previous target, or the middle of the view).
+- `near`: a cell (the previous target, or the middle of the view). The goal should be near
+  it, so the player doesn't have to travel; which block becomes the red block is free.
 - `exclude`: blocks that may not be chosen (earlier red blocks), and no block on the same
   track (same row for a horizontal block, same column for a vertical one) as an excluded one.
 - `avoid`: rectangles (earlier targets) the new target may not overlap.
 
 ## Output
 
-A goal: a red block R (a sliding block within a few cells of `near`), a target position T
-for it on its own line, and a solution: a sequence of legal moves from the current board that
-ends with R on T. The solution is proof the goal is reachable; it need not be optimal, but
-shorter is nicer (it is an upper bound shown as difficulty).
+A goal: a red block R near `near`, a target position T for it on its own line, and a
+solution: a sequence of legal moves from the current board that ends with R on T. The
+solution proves the goal is reachable.
 
 ## What makes a good goal
 
-- Reachable (always; the solution proves it).
-- Far: |T - R| along R's axis as large as possible, up to a cap (`effort`, 12 cells).
-- Not trivial: ideally R cannot just slide there in one move; it should need other blocks
-  moved first. (Today this is not enforced: distance is maximised, ties broken by fewer
-  moves.)
-- Near `near`, so the next goal is close to where the player is.
+A good goal is a hard one: it takes many moves, and finding them means choosing among many
+options. Distance is not the aim; a short trip that needs a long, branching solution is
+better than a long free slide.
+
+A first difficulty measure is in `src/difficulty.ts`: the fewest moves M (one move = one
+block sliding any distance), found by A* in a window around the goal, and the average number
+of moves to choose from on the way (branching b). Difficulty = log2(b^M), the size of the
+tree of move sequences as long as the shortest solution. It is a proposal, not settled:
+improving the measure itself (so it tracks what makes a puzzle hard for a person) is part of
+the problem. It is also slow on dense boards (seconds, often capped at a lower bound).
 
 ## Requirements
 
-- Runs in a Web Worker, so it does not block the UI, but the player waits for it after
-  each goal. Target: under 100 ms at default density, under 1 s at the densest, on a phone.
-  Today it is ~100 ms at default density and 10-25 s on dense boards (tries 15, effort
-  12-24); players have seen ~20 s waits.
-- Memory: a few tens of MB at most.
-- Deterministic for the same input (so a goal made ahead of time matches).
+- Scaling, not a fixed time limit: the aim is an approach that, given more time, finds
+  harder goals (more moves, more branching), and that stays fast across densities (tries
+  1..30) and long sessions.
+- The time is there: goals can be made in a Web Worker while the player solves the current
+  one, or several goals ahead; only a goal the player is waiting for has to be quick.
+- Memory: a few tens of MB.
+- Deterministic for the same input.
+- Every goal's solution must replay legally from the board it was made for.
 
-## Current approach (for reference, not a constraint)
+## Current approach (for reference only)
 
-For up to 6 candidate blocks nearest `near`, both directions: push R one cell at a time;
-for each next cell, `clearCell` searches (iterative deepening, up to 4 moves per cell,
-200k-node budget) for moves that empty that cell without moving R or undoing cells needed.
-Keep the candidate that got furthest; `simplify` then merges and drops redundant moves.
-
-Known costs: every cell lookup (`blocksIn` on a 1x1 area) scans the whole `moved` map, so
-it slows as play goes on; failed `clearCell` calls exhaust their budget; up to 12
-push attempts each with up to 12 cell clears.
+`makeGoalFast` in `src/goal-fast.ts`: for the blocks nearest `near`, push the block one cell
+at a time, clearing each next cell with a bounded backwards search (`clearCellOn`), on a
+cell-indexed board (`src/board.ts`), with pruning. It maximises distance, not difficulty,
+and takes milliseconds. Its solutions are often short (1-3 moves at default density).
+Benchmark cases: `test/experiments/bench-cases.ts`; the difficulty measure on them:
+`test/experiments/difficulty.ts`.
