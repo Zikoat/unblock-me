@@ -3,6 +3,7 @@
 import { join } from "node:path";
 import { randomLayout, TRIES } from "../src/layout";
 import { summarize, type Summary } from "../src/stats";
+import { reportPage } from "./report-page";
 import { reportsDir, writeReportsIndex } from "./reports-index";
 
 const SWEEP = [1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 17, 20, 24, 30]; // tries per chunk
@@ -37,38 +38,10 @@ const made = new Date();
 const stamp = made.toISOString().slice(0, 16).replace("T", "-").replace(":", "");
 const description = `${SWEEP.length} densities, ${sampled.toLocaleString("en")} blocks sampled`;
 
-const html = `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Density report</title>
-<meta name="description" content="${description}">
-<style>
-  .viz-root {
-    color-scheme: light;
-    --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
-    --grid: #e1e0d9; --axis: #c3c2b7; --ring: rgba(11,11,11,0.10);
-    --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root:where(:not([data-theme="light"])) .viz-root {
-      color-scheme: dark;
-      --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
-      --grid: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,0.10);
-      --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
-    }
-  }
-  * { box-sizing: border-box; }
-  body { margin: 0; }
-  .viz-root { min-height: 100vh; background: var(--page); color: var(--ink); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  main { max-width: 860px; margin: 0 auto; padding: 24px 16px 56px; }
-  .back { color: var(--ink-2); text-decoration: none; font-size: 14px; }
-  h1 { font-size: 24px; margin: 8px 0 4px; }
-  .lede { color: var(--ink-2); margin: 0 0 20px; max-width: 64ch; }
-  .card { background: var(--surface); border: 1px solid var(--ring); border-radius: 12px; padding: 16px 16px 8px; margin-bottom: 14px; }
-  h2 { font-size: 16px; margin: 0; }
-  .sub { color: var(--ink-2); font-size: 13px; margin: 2px 0 8px; }
+const html = reportPage({
+  title: "Density report",
+  description,
+  css: `
   .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13px; color: var(--ink-2); margin: 4px 0 4px; }
   .legend span::before { content: ""; display: inline-block; width: 14px; height: 2px; border-radius: 1px; background: var(--key); vertical-align: middle; margin-right: 6px; }
   svg { display: block; width: 100%; overflow: visible; touch-action: pan-y; }
@@ -83,19 +56,8 @@ const html = `<!doctype html>
   .tip .row span { color: var(--ink-2); }
   details { margin-top: 18px; }
   summary { cursor: pointer; color: var(--ink-2); }
-  .table-wrap { overflow-x: auto; }
-  table { border-collapse: collapse; font-size: 13px; margin-top: 10px; font-variant-numeric: tabular-nums; }
-  th, td { padding: 4px 10px; text-align: right; border-bottom: 1px solid var(--grid); white-space: nowrap; }
-  th { color: var(--ink-2); font-weight: 600; }
-  tr.app td { font-weight: 600; }
-  .notes { color: var(--ink-2); font-size: 13px; margin-top: 18px; }
-  .notes li { margin-bottom: 4px; }
-</style>
-</head>
-<body>
-<div class="viz-root">
-<main>
-  <a class="back" href="./">← All reports</a>
+  tr.app td { font-weight: 600; }`,
+  body: `
   <h1>Density report</h1>
   <p class="lede">How stuck blocks get as boards fill up. Each density is ${SEEDS.length} random boards of
   ${AREA.width}×${AREA.height} cells; the x axis is the share of cells covered by blocks. The vertical line
@@ -130,10 +92,11 @@ const html = `<!doctype html>
     <li>"Steps" counts how many cells a block could move along its axis before touching another block, both directions added up, capped at 400 by the game's search reach.</li>
     <li>${sampled.toLocaleString("en")} blocks sampled in total.</li>
   </ul>
-</main>
+
 <div class="tip" id="tip" role="status"></div>
 </div>
-<script>
+`,
+  script: `
 const ROWS = ${JSON.stringify(rows)};
 const APP_TRIES = ${TRIES};
 const MOVES = [
@@ -295,10 +258,8 @@ for (const r of ROWS) {
 render();
 addEventListener("resize", render);
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", render);
-</script>
-</body>
-</html>
-`;
+`,
+});
 
 const file = `density-${stamp}.html`;
 await Bun.write(join(reportsDir, file), html);
