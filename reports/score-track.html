@@ -77,8 +77,8 @@
   </div>
 </div>
 
-<h2>Three goals</h2>
-<p class="sub">Every track has the same width, so the moves of a longer goal are packed tighter. Each finished in a different number of moves, from a medal to 1 star.</p>
+<h2>Goals from play</h2>
+<p class="sub">Six goals you reached (from the uploaded play data), from the easiest to the hardest. Every track has the same width, so a harder goal packs its moves tighter. Of the 21 goals in the data, under this rule 4 would get the medal, 3 get 5 stars, 10 get 4, 2 get 3, none get 2 and 1 gets 1: harder goals space their stars wider, so they mostly give 4 or 5.</p>
 <div class="steps" id="goals"></div>
 
 <h2>As the moves go up</h2>
@@ -91,7 +91,7 @@
   <li>The icons sit on the lines, on their own layer, so their width never shifts the track.</li>
   <li>The rosette sits at 13, the lower bound: no solution is shorter, so finishing there is a perfect solve (and beats the game's own 15).</li>
   <li>One star every 5 moves (a third of 15). Passed icons turn gray.</li>
-  <li>The track ends at 35, a step past the last star you can lose, square on the right: its edge is the last star's line, and that star is never lost. Past 35 the track stays full.</li>
+  <li>The track ends at 35, a step past the last star you can lose, with the star that is never lost on its right end. Past 35 the track stays full.</li>
   <li>After an undo the medal is gray and faint, with an undo arrow under it: it can no longer be won on this goal.</li>
 </ul>
 </main>
@@ -188,9 +188,7 @@ function track(g, x0, y0, used, { undone = false, scale = 1, style = "now", fini
   const width = LOOK.width * scale, h = LOOK.height * scale, w = width / END;
   const at = (m) => x0 + m * w;
   const clip = `track${++clips}`;
-  // Rounded on the left only: the right end is the last star's line.
-  const rr = Math.min(h / 2, h * LOOK.radius);
-  el("path", { d: `M${x0 + rr},${y0}H${x0 + width}V${y0 + h}H${x0 + rr}A${rr},${rr} 0 0 1 ${x0},${y0 + h - rr}V${y0 + rr}A${rr},${rr} 0 0 1 ${x0 + rr},${y0}Z` }, el("clipPath", { id: clip }, g));
+  el("rect", { x: x0, y: y0, width, height: h, rx: Math.min(h / 2, h * LOOK.radius) }, el("clipPath", { id: clip }, g));
   const bar = el("g", { "clip-path": `url(#${clip})` }, g);
   const done = Math.min(used, END);
   if (style === "fuel") {
@@ -205,7 +203,6 @@ function track(g, x0, y0, used, { undone = false, scale = 1, style = "now", fini
   }
   const cy = y0 + h / 2, s = h * 0.7 * LOOK.icons, ms = h * 0.52 * LOOK.icons;
   for (const m of MARKS) if (m.kind === "star") el("line", { x1: at(m.at), x2: at(m.at), y1: y0, y2: y0 + h, stroke: C.line, "stroke-width": Math.max(1, w * 0.14) }, bar);
-  el("line", { x1: x0 + width, x2: x0 + width, y1: y0, y2: y0 + h, stroke: C.line, "stroke-width": Math.max(1, w * 0.14) }, g);
   // The stars still earned when finishing now, in the order they are counted: the last star
   // (on the track's right edge, never lost), then back along the track.
   const endX = x0 + width;
@@ -305,18 +302,19 @@ function drawSteps() {
 function drawGoals() {
   const box = document.getElementById("goals");
   box.replaceChildren();
+  // Goals from play (the uploaded play data): lower bound, fewest known, moves used.
   const goals = [
-    { low: 4, fewest: 4, used: 4, name: "A simple goal", about: "fewest exactly 4" },
-    { low: 4, fewest: 4, used: 7, name: "A simple goal", about: "fewest exactly 4" },
-    { low: 13, fewest: 15, used: 15, name: "This goal", about: "fewest 13 to 15" },
-    { low: 13, fewest: 15, used: 27, name: "This goal", about: "fewest 13 to 15" },
-    { low: 27, fewest: 33, used: 40, name: "A hard goal", about: "fewest 27 to 33" },
-    { low: 27, fewest: 33, used: 80, name: "A hard goal", about: "fewest 27 to 33" },
+    { low: 5, fewest: 5, used: 5 },
+    { low: 6, fewest: 6, used: 13 },
+    { low: 8, fewest: 8, used: 13 },
+    { low: 13, fewest: 15, used: 22 },
+    { low: 15, fewest: 26, used: 31 },
+    { low: 14, fewest: 28, used: 22 },
   ];
   for (const goal of goals) {
     setGoal(goal.low, goal.fewest);
     const svg = trackSvg((g, x, y) => track(g, x, y, goal.used));
-    row(box, `${goal.name}<br>${goal.about}`, svg, `${goal.used} moves: ${verdict(goal.used, false)}<br><span style="color:var(--ink-2)">a star every ${STEP} moves, ends at ${END}</span>`);
+    row(box, `Fewest ${goal.low === goal.fewest ? goal.low : `${goal.low} to ${goal.fewest}`}`, svg, `${goal.used} moves: ${verdict(goal.used, false)}<br><span style="color:var(--ink-2)">a star every ${STEP} moves, ends at ${END}</span>`);
   }
   setGoal(13, 15);
 }
