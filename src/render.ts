@@ -84,6 +84,12 @@ export function draw(
     ctx.lineWidth = 2;
     ctx.stroke();
   }
+  // The goal's glow goes under the blocks, so it never tints them.
+  const band = goalBand(scene);
+  if (band) {
+    drawBand(ctx, band, dpr);
+    ctx.setTransform(dpr * camera.scale, 0, 0, dpr * camera.scale, dpr * camera.offsetX, dpr * camera.offsetY);
+  }
 
   // The sliding block is drawn until its slide ends, even when it ends outside the view and
   // culling would leave it out.
@@ -136,8 +142,6 @@ export function draw(
   if (toUi) drawPin(ctx, toUi, COLORS.ui, 16, dpr, true);
   const toRed = redArrow(scene);
   if (toRed) drawPin(ctx, toRed, COLORS.goal, 13, dpr);
-  const band = goalBand(scene);
-  if (band) drawBand(ctx, band, dpr);
   // A slide entirely out of view (an undo, say): a small green arrow points to it while it runs.
   if (sliding) {
     const block = scene.layout.byId(sliding.id);
