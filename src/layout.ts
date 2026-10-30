@@ -1,7 +1,7 @@
 import type { Rect } from "./camera";
 
 /** A 1x1 control on the board: it never slides, a tap runs it. */
-export type Ui = "density" | "border" | "reset" | "fullscreen" | "reports";
+export type Ui = "density" | "border" | "reset" | "fullscreen" | "reports" | "home" | "undo" | "tapmode";
 
 /** A block on the lattice, in lattice units: 2x1 slides horizontally, 1x2 vertically.
  * UI blocks and walls never slide. */
@@ -15,7 +15,6 @@ export type Block = {
   /** An immovable block that only blocks. */
   wall: boolean;
   moved: boolean;
-  tapped: boolean;
 };
 export type Placed = { id?: string; x: number; y: number; w: number; h: number; ui?: Ui; wall?: boolean };
 
@@ -34,7 +33,7 @@ export const intersects = (b: { x: number; y: number; w: number; h: number }, r:
   b.x < r.x + r.width && b.x + b.w > r.x && b.y < r.y + r.height && b.y + b.h > r.y;
 
 const toBlock = (p: Placed, id: string): Block =>
-  ({ id, x: p.x, y: p.y, w: p.w, h: p.h, ui: p.ui ?? null, wall: p.wall ?? false, moved: false, tapped: false });
+  ({ id, x: p.x, y: p.y, w: p.w, h: p.h, ui: p.ui ?? null, wall: p.wall ?? false, moved: false });
 
 /** Exactly these blocks and nothing else. */
 export function fixedLayout(placed: Placed[]): Layout {
@@ -46,15 +45,19 @@ export function fixedLayout(placed: Placed[]): Layout {
   };
 }
 
-/** The UI blocks in the middle of the random layout, left to right. */
+/** The UI blocks in the middle of the random layout: two rows, left to right. */
 export const UI_BLOCKS: Placed[] = [
+  { id: "home", x: -1, y: -1, w: 1, h: 1, ui: "home" },
+  { id: "undo", x: 0, y: -1, w: 1, h: 1, ui: "undo" },
+  { id: "tapmode", x: 1, y: -1, w: 1, h: 1, ui: "tapmode" },
   { id: "density", x: -2, y: 0, w: 1, h: 1, ui: "density" },
   { id: "border", x: -1, y: 0, w: 1, h: 1, ui: "border" },
   { id: "reset", x: 0, y: 0, w: 1, h: 1, ui: "reset" },
   { id: "fullscreen", x: 1, y: 0, w: 1, h: 1, ui: "fullscreen" },
   { id: "reports", x: 2, y: 0, w: 1, h: 1, ui: "reports" },
 ];
-const UI_AREA = { x: -2, y: 0, width: UI_BLOCKS.length, height: 1 };
+// Nothing is generated in the rectangle around them.
+const UI_AREA = { x: -2, y: -1, width: 5, height: 2 };
 
 /** The lattice is cut into chunks of CHUNK x CHUNK cells. Each chunk tries `tries` random
  * blocks and keeps those that fit, so blocks stay inside their chunk and never overlap.

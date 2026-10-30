@@ -6,7 +6,7 @@ import { borderOnScreen, latticeRect, limits, newScene, visibleBlocks } from "..
 import { CHUNK, randomLayout, UNIT, type Block, type Layout } from "../../src/layout";
 import { blocksIn, slideRange } from "../../src/rules";
 
-const none = { moved: new Map(), tapped: new Set<string>() };
+const none = { moved: new Map() };
 const AREA = { x: -40, y: -40, width: 80, height: 80 };
 const cells = (b: Block) => {
   const out = [];
@@ -68,9 +68,14 @@ describe("random layout", () => {
       const layout = randomLayout(seed);
       const near = layout.blocksIn({ x: -5, y: -5, width: 10, height: 10 });
       expect(near.filter((b) => b.ui).map((b) => [b.ui, b.x, b.y, b.w, b.h])).toEqual([
+        ["home", -1, -1, 1, 1], ["undo", 0, -1, 1, 1], ["tapmode", 1, -1, 1, 1],
         ["density", -2, 0, 1, 1], ["border", -1, 0, 1, 1], ["reset", 0, 0, 1, 1], ["fullscreen", 1, 0, 1, 1], ["reports", 2, 0, 1, 1],
       ]);
-      for (const b of near) if (!b.ui) for (const c of cells(b)) expect(["-2,0", "-1,0", "0,0", "1,0", "2,0"]).not.toContain(c);
+      // Nothing is generated in the rectangle around both rows.
+      for (const b of near) if (!b.ui) for (const c of cells(b)) {
+        const [x, y] = c.split(",").map(Number) as [number, number];
+        expect(x >= -2 && x <= 2 && y >= -1 && y <= 0).toBe(false);
+      }
     }
   });
 
@@ -90,7 +95,7 @@ describe("random layout", () => {
   test("a moved block shows at its new place even when its home is far out of view", () => {
     const layout = randomLayout(3);
     const home = layout.blocksIn({ x: 4, y: 4, width: 4, height: 4 }).find((b) => !b.ui)!;
-    const changes = { moved: new Map([[home.id, { x: 500, y: 500 }]]), tapped: new Set<string>() };
+    const changes = { moved: new Map([[home.id, { x: 500, y: 500 }]]) };
     expect(blocksIn(layout, { x: home.x, y: home.y, width: home.w, height: home.h }, changes).map((b) => b.id)).not.toContain(home.id);
     expect(blocksIn(layout, { x: 500, y: 500, width: 1, height: 1 }, changes)).toContainEqual({ ...home, x: 500, y: 500, moved: true });
   });

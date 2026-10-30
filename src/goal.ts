@@ -22,6 +22,8 @@ export type GoalOptions = {
   /** Moves the planner may use to clear one cell. 4 keeps a goal under ~2 s and ~170 MB
    * even on the densest boards; 6 can take over 25 s. */
   perCell?: number;
+  /** The board to start from, when blocks have already been moved. */
+  moved?: ReadonlyMap<string, Point>;
 };
 
 /** One drag can move a block several cells: merge back-to-back moves of the same block. */
@@ -38,7 +40,7 @@ export function merge(moves: Move[]): Move[] {
 /** Fewer moves for the same end: a block's move is dropped and folded into its next move
  * whenever the whole sequence still plays legally (e.g. the red block steps once, a blocker
  * clears, the red block steps again: one red move after the blocker does). */
-export function simplify(layout: Layout, moves: Move[]): Move[] {
+export function simplify(layout: Layout, moves: Move[], start: ReadonlyMap<string, Point> = new Map()): Move[] {
   let out = merge(moves);
   for (let changed = true; changed; ) {
     changed = false;
@@ -46,7 +48,7 @@ export function simplify(layout: Layout, moves: Move[]): Move[] {
       const j = out.findIndex((m, k) => k > i && m.id === out[i]!.id);
       if (j < 0) continue;
       const tried = merge([...out.slice(0, i), ...out.slice(i + 1, j), { ...out[j]!, from: out[i]!.from }, ...out.slice(j + 1)]);
-      if (replay(layout, tried)) {
+      if (replay(layout, tried, start)) {
         out = tried;
         changed = true;
       }
@@ -59,7 +61,7 @@ export function simplify(layout: Layout, moves: Move[]): Move[] {
  * steps into, up to `effort` cells or until a cell cannot be cleared. Moves are applied to
  * `moved`. */
 function push(layout: Layout, moved: Map<string, Point>, red: Block, dir: number, effort: number, perCell: number): Move[] {
-  const changes: Changes = { moved, tapped: new Set() };
+  const changes: Changes = { moved };
   const keep = new Set([red.id]);
   const moves: Move[] = [];
   const now = () => blocksIn(layout, { x: red.x - effort - 2, y: red.y - effort - 2, width: 2 * effort + 6, height: 2 * effort + 6 }, changes).find((b) => b.id === red.id)!;
@@ -83,8 +85,8 @@ function push(layout: Layout, moved: Map<string, Point>, red: Block, dir: number
  * push each both ways along its axis, and keep the one that got furthest (fewest moves on a
  * tie). Null when no block nearby can be pushed even one cell.
  */
-export function makeGoal(layout: Layout, near: Point, { effort = 12, perCell = 4 }: GoalOptions = {}): Goal | null {
-  const candidates = blocksIn(layout, { x: near.x - 4, y: near.y - 4, width: 8, height: 8 }, { moved: new Map(), tapped: new Set() })
+export function makeGoal(layout: Layout, near: Point, { effort = 12, perCell = 4, moved: start = new Map() }: GoalOptions = {}): Goal | null {
+  const candidates = blocksIn(layout, { x: near.x - 4, y: near.y - 4, width: 8, height: 8 }, { moved: start })
     .filter((b) => !b.ui && !b.wall)
     .sort((a, b) => Math.hypot(a.x - near.x, a.y - near.y) - Math.hypot(b.x - near.x, b.y - near.y) || (a.id < b.id ? -1 : 1))
     .slice(0, 6);
@@ -93,8 +95,8 @@ export function makeGoal(layout: Layout, near: Point, { effort = 12, perCell = 4
     for (const dir of [1, -1]) {
       // (Pushing it the other way first and starting there was tried: that push clears the
       // lane behind it, so the way back is always one drag.)
-      const moved = new Map<string, Point>();
-      const solution = simplify(layout, push(layout, moved, red, dir, effort, perCell));
+      const moved = new Map(start);
+      const solution = simplify(layout, push(layout, moved, red, dir, effort, perCell), start);
       const end = moved.get(red.id) ?? { x: red.x, y: red.y };
       const distance = Math.abs(end.x - red.x) + Math.abs(end.y - red.y);
       if (distance === 0) continue;

@@ -83,7 +83,7 @@ describe("merge, simplify and solved", () => {
 
   test("solved when the red block's top-left is on the target", () => {
     const goal = { id: "r", target: { x: 4, y: 0 }, solution: [] };
-    const block = { id: "r", x: 4, y: 0, w: 2, h: 1, ui: null, wall: false, moved: true, tapped: false };
+    const block = { id: "r", x: 4, y: 0, w: 2, h: 1, ui: null, wall: false, moved: true };
     expect(solved(goal, [block])).toBe(true);
     expect(solved(goal, [{ ...block, x: 3 }])).toBe(false);
   });

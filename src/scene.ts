@@ -1,11 +1,19 @@
 import { worldRect, type Camera, type Limits, type Point, type Rect } from "./camera";
+import type { Goal } from "./goal";
 import { randomLayout, UNIT, type Block, type Layout } from "./layout";
-import { blocksIn } from "./rules";
+import { blocksIn, isHorizontal, position, slide, type Move } from "./rules";
 
 /** Zoomed out fully, this many world units take a third of the screen width. */
 const MIN_ZOOM_SPAN = 670;
 /** The culling border is this share of the screen, centred. */
 export const BORDER = 0.8;
+
+/** What a tap on a block does: slide it to the nearer end of its room, or always up (a
+ * vertical block) or right (a horizontal one). Either way a block already against that end
+ * goes the other way. */
+export type TapMode = "nearest" | "topright";
+/** How far a tap sends a block when nothing stops it on that side. */
+export const QUICK_PUSH_MAX = 8;
 
 export type Scene = {
   camera: Camera;
@@ -14,10 +22,13 @@ export type Scene = {
   height: number;
   /** Where the blocks start. */
   layout: Layout;
-  /** Blocks that were dragged: id -> lattice position. The rest are where the layout put them. */
+  /** Blocks that were moved: id -> lattice position. The rest are where the layout put them. */
   moved: Map<string, Point>;
-  /** Blocks that were tapped. */
-  tapped: Set<string>;
+  /** Every move since the board was laid out, oldest first, for undo. */
+  history: Move[];
+  tapMode: TapMode;
+  /** The red block and its target, once one has been made for this layout. */
+  goal: Goal | null;
   /** Where the last tap landed, in world coordinates. */
   circle: Point | null;
   /** The block being dragged and where it is right now, in (fractional) lattice units. */
@@ -32,11 +43,13 @@ export function newScene(
   {
     layout = randomLayout(1),
     moved = new Map<string, Point>(),
-    tapped = new Set<string>(),
+    history = [] as Move[],
     border = true,
-  }: { layout?: Layout; moved?: Map<string, Point>; tapped?: Set<string>; border?: boolean } = {},
+    tapMode = "topright" as TapMode,
+    goal = null as Goal | null,
+  }: { layout?: Layout; moved?: Map<string, Point>; history?: Move[]; border?: boolean; tapMode?: TapMode; goal?: Goal | null } = {},
 ): Scene {
-  const scene: Scene = { camera: centred(width, height), width, height, layout, moved, tapped, circle: null, dragging: null, border };
+  const scene: Scene = { camera: centred(width, height), width, height, layout, moved, history, tapMode, goal, circle: null, dragging: null, border };
   return resize(scene, width, height);
 }
 
@@ -45,15 +58,75 @@ export function centred(width: number, height: number): Camera {
   return { scale: 1, offsetX: width / 2 - UNIT / 2, offsetY: height / 2 - UNIT / 2 };
 }
 
-/** Swap in another layout where the view is; moves and marks belong to the old one. */
+/** Swap in another layout where the view is; moves and the goal belong to the old one. */
 export function relayout(scene: Scene, layout: Layout): void {
   scene.layout = layout;
   scene.moved.clear();
-  scene.tapped.clear();
+  scene.history.length = 0;
+  scene.goal = null;
   scene.dragging = null;
 }
 
-/** Start over with a new layout: every move, mark and the circle are forgotten. */
+/** Put a block at `to`; a block back on its start position has nothing stored. */
+function put(scene: Scene, id: string, to: Point): void {
+  const start = scene.layout.byId(id)!;
+  if (to.x === start.x && to.y === start.y) scene.moved.delete(id);
+  else scene.moved.set(id, to);
+}
+
+/** Make a move (already checked legal) and remember it for undo. */
+export function record(scene: Scene, move: Move): void {
+  put(scene, move.id, move.to);
+  scene.history.push(move);
+}
+
+/** Take back the last move. Always legal: nothing else moved since, so the cells it came
+ * from are still free. Returns the move undone, or null when there is none. */
+export function undo(scene: Scene): Move | null {
+  const move = scene.history.pop() ?? null;
+  if (move) put(scene, move.id, move.from);
+  return move;
+}
+
+/**
+ * Where a tap sends a block: all the way to one end of its room. Against a block on one end,
+ * it goes to the other end. Otherwise "nearest" picks the end with less room (up or right on
+ * a tie) and "topright" always goes up (vertical blocks) or right (horizontal ones). An end
+ * with nothing in reach counts as far away and stops after QUICK_PUSH_MAX cells. Null when
+ * it cannot move.
+ */
+export function quickPush(scene: Scene, block: Block): Point | null {
+  const s = slide(scene.layout, block, scene);
+  const pos = position(block);
+  const lo = s.before ? s.lo : Math.max(s.lo, pos - QUICK_PUSH_MAX);
+  const hi = s.after ? s.hi : Math.min(s.hi, pos + QUICK_PUSH_MAX);
+  if (lo === pos && hi === pos) return null;
+  const back = s.before ? pos - lo : Infinity;
+  const ahead = s.after ? hi - pos : Infinity;
+  // Up is towards lower y, right towards higher x.
+  const preferLow = !isHorizontal(block);
+  const toLow = lo === pos ? false
+    : hi === pos ? true
+    : scene.tapMode === "topright" || back === ahead ? preferLow
+    : back < ahead;
+  const to = toLow ? lo : hi;
+  return isHorizontal(block) ? { x: to, y: block.y } : { x: block.x, y: to };
+}
+
+/** Where a block is now (it may be off screen). */
+export function whereIs(scene: Scene, id: string): Point | null {
+  const home = scene.layout.byId(id);
+  return scene.moved.get(id) ?? (home ? { x: home.x, y: home.y } : null);
+}
+
+/** Is the red block on its target? */
+export function goalSolved(scene: Scene): boolean {
+  const goal = scene.goal;
+  const at = goal && whereIs(scene, goal.id);
+  return !!goal && !!at && at.x === goal.target.x && at.y === goal.target.y;
+}
+
+/** Start over with a new layout: every move, the goal and the circle are forgotten. */
 export function restart(scene: Scene, layout: Layout): void {
   relayout(scene, layout);
   scene.circle = null;

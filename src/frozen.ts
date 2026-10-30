@@ -1,7 +1,9 @@
 // Jams: blocks that are stuck, what they wait on, and structures that can never move.
 import type { Rect } from "./camera";
 import type { Block, Layout, Placed } from "./layout";
-import { blocksIn, NO_CHANGES, position, slide, type Changes } from "./rules";
+import { blocksIn, NO_CHANGES, position, slide, type Changes, type Move } from "./rules";
+
+export type { Move };
 
 /** Walls and UI blocks never move, so they stop a block for good. */
 const fixed = (b: Block) => b.wall || b.ui !== null;
@@ -144,7 +146,6 @@ export function smallestFrozen(
   return best;
 }
 
-export type Move = { id: string; from: { x: number; y: number }; to: { x: number; y: number } };
 type Cell = { x: number; y: number };
 type Moved = Map<string, Cell>;
 
@@ -163,7 +164,7 @@ export function clearCell(
   keep: ReadonlySet<string>,
   { maxMoves = 12, reach = 8, budget = 200_000 } = {},
 ): Move[] | null {
-  const changes: Changes = { moved, tapped: new Set() };
+  const changes: Changes = { moved };
   const original = new Map(moved);
   const plan: Move[] = [];
   let nodes = 0;
@@ -249,7 +250,7 @@ export function planToFree(layout: Layout, target: Block, options: { maxMoves?: 
  * the changes, or null at the first illegal move. */
 export function replay(layout: Layout, moves: Move[], start: ReadonlyMap<string, Cell> = new Map()): Changes | null {
   const moved = new Map(start);
-  const changes: Changes = { moved, tapped: new Set() };
+  const changes: Changes = { moved };
   for (const m of moves) {
     const block = blocksIn(layout, { x: m.from.x, y: m.from.y, width: 1, height: 1 }, changes).find((b) => b.id === m.id);
     if (!block || fixed(block)) return null;

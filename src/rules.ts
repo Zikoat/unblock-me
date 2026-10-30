@@ -1,9 +1,12 @@
 import type { Point, Rect } from "./camera";
 import { intersects, type Block, type Layout } from "./layout";
 
-/** The changes made by playing: dragged blocks (id -> lattice position) and tapped blocks. */
-export type Changes = { moved: ReadonlyMap<string, Point>; tapped: ReadonlySet<string> };
-export const NO_CHANGES: Changes = { moved: new Map(), tapped: new Set() };
+/** The changes made by playing: moved blocks, id -> lattice position. */
+export type Changes = { moved: ReadonlyMap<string, Point> };
+export const NO_CHANGES: Changes = { moved: new Map() };
+
+/** One block slid from one lattice position to another. */
+export type Move = { id: string; from: Point; to: Point };
 
 /** How far (in cells) a drag looks for blocks in the way. */
 export const REACH = 200;
@@ -16,12 +19,12 @@ export const REACH = 200;
 export function blocksIn(layout: Layout, area: Rect, changes: Changes): Block[] {
   const found: Block[] = [];
   for (const b of layout.blocksIn(area)) {
-    if (!changes.moved.has(b.id)) found.push({ ...b, tapped: changes.tapped.has(b.id) });
+    if (!changes.moved.has(b.id)) found.push(b);
   }
   for (const [id, at] of changes.moved) {
     const home = layout.byId(id);
     if (!home) continue;
-    const b = { ...home, ...at, moved: true, tapped: changes.tapped.has(id) };
+    const b = { ...home, ...at, moved: true };
     if (intersects(b, area)) found.push(b);
   }
   return found;
