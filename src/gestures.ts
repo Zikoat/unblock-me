@@ -5,6 +5,8 @@ import { blockAt, slideRange } from "./rules";
 
 /** A press that moves less than this many screen pixels is a tap. */
 export const TAP_SLOP = 10;
+/** Screen pixels of sideways drag per step of the density slider. */
+export const ADJUST_STEP = 12;
 
 type Mode =
   | { kind: "idle" }
@@ -13,13 +15,17 @@ type Mode =
   | { kind: "panning"; id: number; last: Point }
   /** `grab` is where the finger went down, `lo`..`hi` how far the block can slide. */
   | { kind: "dragging"; id: number; block: Block; grab: Point; lo: number; hi: number }
+  /** Dragging sideways on the density block. */
+  | { kind: "adjusting"; id: number; start: Point; steps: number }
   | { kind: "pinching"; ids: [number, number]; from: [Point, Point]; start: Camera };
 
 /**
  * Turns pointer events (screen coordinates) into scene changes: a tap on the background
  * moves the circle and a tap on a block marks it, one finger pans the background or slides
  * a block along its long axis until it hits another block, two fingers pinch-zoom and pan.
- * UI blocks never move: dragging one pans, tapping one calls `onUi` with its kind.
+ * UI blocks and walls never move: dragging one pans, tapping a UI block calls `onUi` with
+ * its kind. The density block is a slider instead: dragging on it calls `onAdjust` with the
+ * steps moved since the press (12 px each), and once more with `done` when it ends.
  * `onChange` runs when a block was moved or tapped, to store it.
  */
 export class Gestures {
@@ -28,14 +34,20 @@ export class Gestures {
 
   constructor(
     private readonly scene: Scene,
-    { onChange = () => {}, onUi = () => {} }: { onChange?: () => void; onUi?: (ui: Ui) => void } = {},
+    {
+      onChange = () => {},
+      onUi = () => {},
+      onAdjust = () => {},
+    }: { onChange?: () => void; onUi?: (ui: Ui) => void; onAdjust?: (steps: number, done: boolean) => void } = {},
   ) {
     this.onChange = onChange;
     this.onUi = onUi;
+    this.onAdjust = onAdjust;
   }
 
   private readonly onChange: () => void;
   private readonly onUi: (ui: Ui) => void;
+  private readonly onAdjust: (steps: number, done: boolean) => void;
 
   down(id: number, at: Point): void {
     this.pointers.set(id, at);
@@ -54,7 +66,9 @@ export class Gestures {
     const mode = this.mode;
     if (mode.kind === "pressed" && mode.id === id) {
       if (Math.hypot(at.x - mode.start.x, at.y - mode.start.y) < TAP_SLOP) return;
-      if (mode.block === null || mode.block.ui) {
+      if (mode.block?.ui === "density") {
+        this.mode = { kind: "adjusting", id, start: mode.start, steps: 0 };
+      } else if (mode.block === null || mode.block.ui || mode.block.wall) {
         this.mode = { kind: "panning", id, last: mode.start };
       } else {
         const { lo, hi } = slideRange(this.scene.layout, mode.block, this.scene);
@@ -72,7 +86,7 @@ export class Gestures {
         this.scene.circle = toWorld(this.scene.camera, mode.start);
       } else if (mode.block.ui) {
         this.onUi(mode.block.ui);
-      } else {
+      } else if (!mode.block.wall) {
         // Tapping a block toggles its mark.
         if (!this.scene.tapped.delete(mode.block.id)) this.scene.tapped.add(mode.block.id);
         this.onChange();
@@ -108,6 +122,9 @@ export class Gestures {
       this.scene.dragging = block.w > block.h
         ? { id: block.id, x: clamp(block.x + now.x - grab.x), y: block.y }
         : { id: block.id, x: block.x, y: clamp(block.y + now.y - grab.y) };
+    } else if (mode.kind === "adjusting" && mode.id === id) {
+      mode.steps = Math.round((at.x - mode.start.x) / ADJUST_STEP);
+      this.onAdjust(mode.steps, false);
     } else if (mode.kind === "pinching" && mode.ids.includes(id)) {
       const now = mode.ids.map((p) => this.pointers.get(p)!) as [Point, Point];
       this.scene.camera = pinch(mode.start, mode.from, now, limits(this.scene));
@@ -117,6 +134,7 @@ export class Gestures {
   private startPinch(): void {
     // A block being dragged is dropped where it is; the second finger moves the map.
     this.drop();
+    this.finishAdjust();
     const ids = [...this.pointers.keys()] as [number, number];
     const from = ids.map((p) => this.pointers.get(p)!) as [Point, Point];
     this.mode = { kind: "pinching", ids, from, start: this.scene.camera };
@@ -137,11 +155,18 @@ export class Gestures {
     this.onChange();
   }
 
+  private finishAdjust(): void {
+    const mode = this.mode;
+    if (mode.kind !== "adjusting") return;
+    this.onAdjust(mode.steps, true);
+  }
+
   private end(id: number): void {
     const mode = this.mode;
     const involved = "ids" in mode ? mode.ids.includes(id) : "id" in mode && mode.id === id;
     if (!involved) return;
     this.drop();
+    this.finishAdjust();
     // Lifting one finger of a pinch keeps panning with the other, never a tap.
     const [rest] = [...this.pointers];
     if (mode.kind === "pinching" && rest) {

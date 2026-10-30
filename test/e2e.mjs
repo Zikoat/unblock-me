@@ -28,7 +28,7 @@ const UNIT = 60;
 const COLORS = {
   background: [243, 242, 238], dot: [211, 209, 202], border: [185, 182, 173],
   block: [79, 109, 143], moved: [63, 154, 122], tapped: [139, 95, 191], dragging: [224, 130, 61],
-  circle: [214, 69, 69], reset: [29, 29, 31],
+  circle: [214, 69, 69], reset: [29, 29, 31], wall: [95, 93, 87],
 };
 let failures = 0;
 const check = (ok, what) => {
@@ -83,6 +83,7 @@ const browser = await chromium.launch();
   const H = (id, x, y) => ({ id, x, y, w: 2, h: 1 });
   const V = (id, x, y) => ({ id, x, y, w: 1, h: 2 });
   const UI = [
+    { id: "density", x: -2, y: 0, w: 1, h: 1, ui: "density" },
     { id: "border", x: -1, y: 0, w: 1, h: 1, ui: "border" },
     { id: "reset", x: 0, y: 0, w: 1, h: 1, ui: "reset" },
     { id: "fullscreen", x: 1, y: 0, w: 1, h: 1, ui: "fullscreen" },
@@ -92,8 +93,8 @@ const browser = await chromium.launch();
   // Random layout with the UI blocks in the middle.
   await fresh();
   const text = await page.evaluate(() => document.body.innerText.trim());
-  check(/^\d+ fps · \d+[smhd] ago$/.test(text), `only text is the fps counter with the build age ("${text}")`);
-  for (const [x, what] of [[-0.85, "border toggle"], [0.15, "reset"], [1.15, "fullscreen"], [2.15, "reports"]]) {
+  check(/^\d+ fps · \d+[smhd] ago · 7 tries$/.test(text), `only text is the debug counter: fps, build age, density ("${text}")`);
+  for (const [x, what] of [[-1.85, "density"], [-0.85, "border toggle"], [0.15, "reset"], [1.15, "fullscreen"], [2.15, "reports"]]) {
     await expectColor(page, cell(x, 0.15), "reset", `the ${what} block is black, in the middle row`);
   }
   const iconPixels = await page.evaluate(() => {
@@ -143,6 +144,7 @@ const browser = await chromium.launch();
   check(JSON.stringify(stored) === JSON.stringify({
     "someone-else": "keep me",
     "unblock-me:border": "false",
+    "unblock-me:tries": "7",
     "unblock-me:v4:moved": "[]",
     "unblock-me:v4:seed": String(seedAfter),
     "unblock-me:v4:tapped": "[]",
@@ -193,8 +195,31 @@ const browser = await chromium.launch();
   await page.waitForTimeout(300);
   check(await page.evaluate(() => document.fullscreenElement === null), "tapping it again leaves fullscreen");
 
+  // The density slider: drag sideways on it to lay the same seed out denser or sparser.
+  await fresh();
+  const sparse = (await page.evaluate(() => unblock.visibleBlocks())).length;
+  const knob = cell(-1.5, 0.5);
+  await gesture([knob], [[knob[0] + 12 * 8 + 3, knob[1]]]);
+  check(await page.evaluate(() => unblock.tries() === 15), `dragging the density slider 8 steps right sets 15 tries (${await page.evaluate(() => unblock.tries())})`);
+  const dense = (await page.evaluate(() => unblock.visibleBlocks())).length;
+  check(dense > sparse, `and the board fills up (${sparse} -> ${dense} blocks)`);
+  check(await page.evaluate(() => unblock.scene.camera.offsetX === 170), "without panning");
+  await page.screenshot({ path: shots + "phone-2d-dense.png" });
+  await page.reload();
+  await frame(page);
+  check(await page.evaluate(() => unblock.tries() === 15), "the density survives a reload");
+  await gesture([knob], [[knob[0] - 12 * 40, knob[1]]]);
+  check(await page.evaluate(() => unblock.tries() === 1), "and stops at 1 try at the left end");
+
+  // Walls are drawn grey and do not move.
+  await place([{ id: "w", x: -1, y: 2, w: 1, h: 1, wall: true }]);
+  await expectColor(page, cell(-0.5, 2.5), "wall", "a wall is grey");
+  await gesture([cell(-0.5, 2.5)], [cell(1.5, 2.5)]);
+  check((await block(page, "w")).x === -1, "dragging a wall moves the view, not the wall");
+
   // The reports block opens the list of reports, which links back to the game.
   await fresh();
+  await page.evaluate(() => unblock.scene.camera = { scale: 1, offsetX: 170, offsetY: 370 });
   await Promise.all([page.waitForURL("**/reports/"), tap(cell(2.5, 0.5))]);
   check(page.url().endsWith("/reports/"), `tapping the reports block opens the report list (${page.url()})`);
   check((await page.textContent("h1")) === "Reports", "which is the report list");

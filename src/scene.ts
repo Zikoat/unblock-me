@@ -45,13 +45,18 @@ export function centred(width: number, height: number): Camera {
   return { scale: 1, offsetX: width / 2 - UNIT / 2, offsetY: height / 2 - UNIT / 2 };
 }
 
-/** Start over with a new layout: every move, mark and the circle are forgotten. */
-export function restart(scene: Scene, layout: Layout): void {
+/** Swap in another layout where the view is; moves and marks belong to the old one. */
+export function relayout(scene: Scene, layout: Layout): void {
   scene.layout = layout;
   scene.moved.clear();
   scene.tapped.clear();
-  scene.circle = null;
   scene.dragging = null;
+}
+
+/** Start over with a new layout: every move, mark and the circle are forgotten. */
+export function restart(scene: Scene, layout: Layout): void {
+  relayout(scene, layout);
+  scene.circle = null;
   scene.camera = centred(scene.width, scene.height);
   resize(scene, scene.width, scene.height);
 }

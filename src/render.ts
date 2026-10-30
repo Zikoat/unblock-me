@@ -14,12 +14,14 @@ export const COLORS = {
   dragging: "#e0823d",
   circle: "#d64545",
   ui: "#1d1d1f",
+  wall: "#5f5d57",
   icon: "#f3f2ee",
 };
 const DOT_SIZE = 4; // world units, one dot per lattice corner
 const GAP = 3; // world units between a block's edge and its lattice cells
 
-export function draw(canvas: HTMLCanvasElement, scene: Scene, { fullscreen }: { fullscreen: boolean }): void {
+/** `density` is the slider's position, 0..1. */
+export function draw(canvas: HTMLCanvasElement, scene: Scene, { fullscreen, density }: { fullscreen: boolean; density: number }): void {
   const ctx = canvas.getContext("2d")!;
   const dpr = devicePixelRatio || 1;
   const { width, height, camera } = scene;
@@ -43,17 +45,19 @@ export function draw(canvas: HTMLCanvasElement, scene: Scene, { fullscreen }: { 
 
   for (const block of visibleBlocks(scene)) {
     ctx.fillStyle = block.ui ? COLORS.ui
+      : block.wall ? COLORS.wall
       : block.id === scene.dragging?.id ? COLORS.dragging
       : block.tapped ? COLORS.tapped
       : block.moved ? COLORS.moved
       : COLORS.block;
     ctx.beginPath();
-    ctx.roundRect(block.x * UNIT + GAP, block.y * UNIT + GAP, block.w * UNIT - 2 * GAP, block.h * UNIT - 2 * GAP, 8);
+    ctx.roundRect(block.x * UNIT + GAP, block.y * UNIT + GAP, block.w * UNIT - 2 * GAP, block.h * UNIT - 2 * GAP, block.wall ? 3 : 8);
     ctx.fill();
     if (block.ui === "reset") resetIcon(ctx, block);
     else if (block.ui === "border") borderIcon(ctx, block, scene.border);
     else if (block.ui === "fullscreen") fullscreenIcon(ctx, block, fullscreen);
     else if (block.ui === "reports") reportsIcon(ctx, block);
+    else if (block.ui === "density") densityIcon(ctx, block, density);
   }
 
   if (scene.circle) {
@@ -143,6 +147,43 @@ function fullscreenIcon(ctx: CanvasRenderingContext2D, block: Block, active: boo
     ctx.lineTo(at.x, at.y + dir * sy * arm);
     ctx.stroke();
   }
+}
+
+/** Six little blocks that fill up with density, above a slider showing where it is. */
+function densityIcon(ctx: CanvasRenderingContext2D, block: Block, density: number): void {
+  const x = block.x * UNIT;
+  const y = block.y * UNIT;
+  const size = UNIT * 0.1;
+  const gap = UNIT * 0.05;
+  const filled = Math.round(density * 6);
+  ctx.lineWidth = 1.5;
+  for (let i = 0; i < 6; i++) {
+    const left = x + UNIT * 0.275 + (i % 3) * (size + gap);
+    const top = y + UNIT * 0.22 + Math.floor(i / 3) * (size + gap);
+    ctx.beginPath();
+    ctx.roundRect(left, top, size, size, 1.5);
+    if (i < filled) {
+      ctx.fillStyle = COLORS.icon;
+      ctx.fill();
+    } else {
+      ctx.strokeStyle = COLORS.icon;
+      ctx.stroke();
+    }
+  }
+  const left = x + UNIT * 0.24;
+  const right = x + UNIT * 0.76;
+  const mid = y + UNIT * 0.7;
+  ctx.strokeStyle = COLORS.icon;
+  ctx.lineWidth = 2;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(left, mid);
+  ctx.lineTo(right, mid);
+  ctx.stroke();
+  ctx.fillStyle = COLORS.icon;
+  ctx.beginPath();
+  ctx.arc(left + (right - left) * density, mid, UNIT * 0.065, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 /** Three rising bars on a baseline: the reports. */

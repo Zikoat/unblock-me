@@ -1,15 +1,16 @@
 // The app: wires the canvas, the gestures, storage and live reload together.
 import { Gestures } from "./gestures";
-import { fixedLayout, randomLayout, type Placed } from "./layout";
+import { fixedLayout, MAX_TRIES, MIN_TRIES, randomLayout, TRIES, type Placed } from "./layout";
 import { draw } from "./render";
 import { blocksIn, slideRange } from "./rules";
-import { latticeRect, newScene, resize, restart, visibleBlocks } from "./scene";
+import { latticeRect, newScene, relayout, resize, restart, visibleBlocks } from "./scene";
 
 // v4: a row of 1x1 UI blocks; v3 had one 2x2 reset block, v2 no seed, v1 free positions.
 const SEED_KEY = "unblock-me:v4:seed";
 const MOVED_KEY = "unblock-me:v4:moved";
 const TAPPED_KEY = "unblock-me:v4:tapped";
 const BORDER_KEY = "unblock-me:border";
+const TRIES_KEY = "unblock-me:tries";
 const CAMERA_KEY = "unblock-me:camera"; // carried over a live reload only
 
 declare const __BUILD_ID__: string;
@@ -29,6 +30,7 @@ function save(): void {
   try {
     localStorage.setItem(SEED_KEY, JSON.stringify(seed));
     localStorage.setItem(BORDER_KEY, JSON.stringify(scene.border));
+    localStorage.setItem(TRIES_KEY, JSON.stringify(tries));
     localStorage.setItem(MOVED_KEY, JSON.stringify([...scene.moved].map(([id, p]) => [id, p.x, p.y])));
     localStorage.setItem(TAPPED_KEY, JSON.stringify([...scene.tapped]));
   } catch {
@@ -37,9 +39,10 @@ function save(): void {
 }
 
 const seed = load<number>(SEED_KEY, Math.floor(Math.random() * 2 ** 32));
+let tries = load<number>(TRIES_KEY, TRIES);
 const moved = load<[string, number, number][]>(MOVED_KEY, []);
 const scene = newScene(innerWidth, innerHeight, {
-  layout: randomLayout(seed),
+  layout: randomLayout(seed, { tries }),
   moved: new Map(moved.map(([id, x, y]) => [id, { x, y }])),
   tapped: new Set(load<string[]>(TAPPED_KEY, [])),
   border: load<boolean>(BORDER_KEY, false),
@@ -58,11 +61,25 @@ const gestures = new Gestures(scene, {
       save();
     } else if (ui === "fullscreen") {
       toggleFullscreen();
-    } else {
+    } else if (ui === "reports") {
       location.href = "reports/";
     }
   },
+  // The density slider: the same seed laid out with more or fewer tries per chunk, live.
+  onAdjust: (steps, done) => {
+    adjustFrom ??= tries;
+    const next = Math.min(MAX_TRIES, Math.max(MIN_TRIES, adjustFrom + steps));
+    if (next !== tries) {
+      tries = next;
+      relayout(scene, randomLayout(seed, { tries }));
+    }
+    if (done) {
+      adjustFrom = null;
+      save();
+    }
+  },
 });
+let adjustFrom: number | null = null;
 
 /** Delete everything Unblock Me stored and reload: a new seed, default settings, centred.
  * Only our own keys go, since other pages on this origin keep theirs in the same storage. */
@@ -89,6 +106,7 @@ Object.assign(window, {
   unblock: {
     scene,
     seed: () => seed,
+    tries: () => tries,
     visibleBlocks: () => visibleBlocks(scene),
     onScreen: () => blocksIn(scene.layout, latticeRect(scene, { x: 0, y: 0, width: scene.width, height: scene.height }), scene),
     slideRange: (id: string) => slideRange(scene.layout, visibleBlocks(scene).find((b) => b.id === id)!, scene),
@@ -148,7 +166,7 @@ const builtAt = parseInt(__BUILD_ID__, 36);
 const frames: number[] = [];
 function showFps(now: number): void {
   while (frames.length && frames[0]! <= now - 1000) frames.shift();
-  fps.textContent = `${frames.length} fps · ${ago(Date.now() - builtAt)}`;
+  fps.textContent = `${frames.length} fps · ${ago(Date.now() - builtAt)} · ${tries} tries`;
 }
 setInterval(() => showFps(performance.now()), 500);
 
@@ -158,7 +176,7 @@ function redraw(): void {
   queued = true;
   requestAnimationFrame((now) => {
     queued = false;
-    draw(canvas, scene, { fullscreen: document.fullscreenElement !== null });
+    draw(canvas, scene, { fullscreen: document.fullscreenElement !== null, density: (tries - MIN_TRIES) / (MAX_TRIES - MIN_TRIES) });
     frames.push(now);
     showFps(now);
   });

@@ -1,10 +1,10 @@
 import type { Rect } from "./camera";
 
 /** A 1x1 control on the board: it never slides, a tap runs it. */
-export type Ui = "border" | "reset" | "fullscreen" | "reports";
+export type Ui = "density" | "border" | "reset" | "fullscreen" | "reports";
 
 /** A block on the lattice, in lattice units: 2x1 slides horizontally, 1x2 vertically.
- * UI blocks never slide. */
+ * UI blocks and walls never slide. */
 export type Block = {
   id: string;
   x: number;
@@ -12,10 +12,12 @@ export type Block = {
   w: number;
   h: number;
   ui: Ui | null;
+  /** An immovable block that only blocks. */
+  wall: boolean;
   moved: boolean;
   tapped: boolean;
 };
-export type Placed = { id?: string; x: number; y: number; w: number; h: number; ui?: Ui };
+export type Placed = { id?: string; x: number; y: number; w: number; h: number; ui?: Ui; wall?: boolean };
 
 /** Where the blocks start. The app uses a random layout; tests place blocks exactly. */
 export interface Layout {
@@ -32,7 +34,7 @@ export const intersects = (b: { x: number; y: number; w: number; h: number }, r:
   b.x < r.x + r.width && b.x + b.w > r.x && b.y < r.y + r.height && b.y + b.h > r.y;
 
 const toBlock = (p: Placed, id: string): Block =>
-  ({ id, x: p.x, y: p.y, w: p.w, h: p.h, ui: p.ui ?? null, moved: false, tapped: false });
+  ({ id, x: p.x, y: p.y, w: p.w, h: p.h, ui: p.ui ?? null, wall: p.wall ?? false, moved: false, tapped: false });
 
 /** Exactly these blocks and nothing else. */
 export function fixedLayout(placed: Placed[]): Layout {
@@ -46,18 +48,22 @@ export function fixedLayout(placed: Placed[]): Layout {
 
 /** The UI blocks in the middle of the random layout, left to right. */
 export const UI_BLOCKS: Placed[] = [
+  { id: "density", x: -2, y: 0, w: 1, h: 1, ui: "density" },
   { id: "border", x: -1, y: 0, w: 1, h: 1, ui: "border" },
   { id: "reset", x: 0, y: 0, w: 1, h: 1, ui: "reset" },
   { id: "fullscreen", x: 1, y: 0, w: 1, h: 1, ui: "fullscreen" },
   { id: "reports", x: 2, y: 0, w: 1, h: 1, ui: "reports" },
 ];
-const UI_AREA = { x: -1, y: 0, width: UI_BLOCKS.length, height: 1 };
+const UI_AREA = { x: -2, y: 0, width: UI_BLOCKS.length, height: 1 };
 
 /** The lattice is cut into chunks of CHUNK x CHUNK cells. Each chunk tries `tries` random
  * blocks and keeps those that fit, so blocks stay inside their chunk and never overlap.
  * More tries, denser board. */
 export const CHUNK = 4;
 export const TRIES = 7;
+/** The range the density slider covers. */
+export const MIN_TRIES = 1;
+export const MAX_TRIES = 30;
 
 /** mulberry32. */
 function random(seed: number): () => number {

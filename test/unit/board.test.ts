@@ -14,8 +14,12 @@ const V = (x: number, y: number, id?: string): Placed => ({ id, x, y, w: 1, h: 2
 function board(...placed: Placed[]) {
   const scene = newScene(1200, 1200, { layout: fixedLayout(placed) });
   scene.camera = { scale: 1, offsetX: 600, offsetY: 600 };
-  const events = { changes: 0, ui: [] as Ui[] };
-  const g = new Gestures(scene, { onChange: () => events.changes++, onUi: (ui) => events.ui.push(ui) });
+  const events = { changes: 0, ui: [] as Ui[], adjust: [] as [number, boolean][] };
+  const g = new Gestures(scene, {
+    onChange: () => events.changes++,
+    onUi: (ui) => events.ui.push(ui),
+    onAdjust: (steps, done) => events.adjust.push([steps, done]),
+  });
   const at = (id: string) => visibleBlocks(scene).find((b) => b.id === id)!;
   return { scene, g, events, at };
 }
@@ -128,6 +132,55 @@ describe("sliding", () => {
   });
 });
 
+describe("walls", () => {
+  const W = (x: number, y: number, id?: string): Placed => ({ id, x, y, w: 1, h: 1, wall: true });
+
+  test("a wall blocks sliding blocks", () => {
+    const { g, at } = board(H(0, 0, "a"), W(4, 0), V(0, 2, "v"), W(0, -1));
+    drag(g, cell(1, 0.5), cell(9, 0.5));
+    expect(at("a").x).toBe(2);
+    // a has moved out of column 0, so v slides up to the wall.
+    drag(g, cell(0.5, 3), cell(0.5, -6));
+    expect(at("v").y).toBe(0);
+  });
+
+  test("dragging a wall pans and tapping it does nothing", () => {
+    const { scene, g, at, events } = board(W(0, 0, "w"));
+    const before = scene.camera;
+    drag(g, cell(0.5, 0.5), cell(2.5, 0.5));
+    expect(scene.camera.offsetX).toBe(before.offsetX + 2 * UNIT);
+    scene.camera = before;
+    tap(g, cell(0.5, 0.5));
+    expect(at("w")).toMatchObject({ x: 0, moved: false, tapped: false });
+    expect(scene.circle).toBeNull();
+    expect(events).toMatchObject({ changes: 0, ui: [] });
+  });
+});
+
+describe("density slider", () => {
+  const density = (): Placed => ({ id: "density", x: -2, y: 0, w: 1, h: 1, ui: "density" });
+
+  test("dragging sideways on it reports steps of 12 px instead of panning, then done", () => {
+    const { scene, g, events } = board(density());
+    const before = scene.camera;
+    g.down(1, cell(-1.5, 0.5));
+    g.move(1, { x: cell(-1.5, 0.5).x + 13, y: cell(-1.5, 0.5).y });
+    g.move(1, { x: cell(-1.5, 0.5).x + 37, y: cell(-1.5, 0.5).y + 20 });
+    g.move(1, { x: cell(-1.5, 0.5).x - 36, y: cell(-1.5, 0.5).y });
+    g.up(1, { x: cell(-1.5, 0.5).x - 36, y: cell(-1.5, 0.5).y });
+    expect(events.adjust).toEqual([[1, false], [3, false], [-3, false], [-3, true]]);
+    expect(scene.camera).toEqual(before);
+    expect(events.ui).toEqual([]);
+  });
+
+  test("a tap on it is just a tap on a UI block", () => {
+    const { g, events } = board(density());
+    tap(g, cell(-1.5, 0.5));
+    expect(events.ui).toEqual(["density"]);
+    expect(events.adjust).toEqual([]);
+  });
+});
+
 describe("taps", () => {
   test("a tap on a block toggles its mark and moves nothing", () => {
     const { scene, g, at, events } = board(H(0, 0, "a"));
@@ -158,12 +211,12 @@ describe("taps", () => {
 });
 
 describe("UI blocks", () => {
-  // border at cell (-1,0), reset at (0,0), fullscreen at (1,0), reports at (2,0).
+  // density at cell (-2,0), border at (-1,0), reset at (0,0), fullscreen at (1,0), reports at (2,0).
   const ui = () => UI_BLOCKS.map((b) => ({ ...b }));
 
   test("they are 1x1, in a row in the middle", () => {
     expect(ui().map((b) => [b.id, b.x, b.y, b.w, b.h])).toEqual([
-      ["border", -1, 0, 1, 1], ["reset", 0, 0, 1, 1], ["fullscreen", 1, 0, 1, 1], ["reports", 2, 0, 1, 1],
+      ["density", -2, 0, 1, 1], ["border", -1, 0, 1, 1], ["reset", 0, 0, 1, 1], ["fullscreen", 1, 0, 1, 1], ["reports", 2, 0, 1, 1],
     ]);
   });
 
@@ -229,7 +282,7 @@ describe("UI blocks", () => {
     expect(scene.border).toBe(false);
     // Centred on the middle of the reset block.
     expect(toScreen(scene.camera, { x: UNIT / 2, y: UNIT / 2 })).toEqual({ x: 600, y: 600 });
-    expect(visibleBlocks(scene).map((b) => b.id).sort()).toEqual(["border", "fullscreen", "new", "reports", "reset"]);
+    expect(visibleBlocks(scene).map((b) => b.id).sort()).toEqual(["border", "density", "fullscreen", "new", "reports", "reset"]);
   });
 });
 
