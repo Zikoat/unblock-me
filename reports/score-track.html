@@ -164,7 +164,7 @@ function track(g, x0, y0, w, used, undone) {
   const bar = el("g", { "clip-path": `url(#${clip})` }, g);
   el("rect", { x: x0, y: y0, width, height: h, fill: C.left }, bar);
   if (opt("zone").color) el("rect", { x: x0, y: y0, width: LOW * w, height: h, fill: opt("zone").color }, bar);
-  el("rect", { x: x0, y: y0, width: fill, height: h, fill: C.used }, bar);
+  el("rect", { x: x0, y: y0, width: fill, height: h, fill: C.used, "fill-opacity": 0.78 }, bar); // the zone shows through
   const r = h * 0.25, cy = y0 + h / 2;
   // The medal last: it sits on top where it meets the 5th star.
   for (const m of [...MARKS].reverse()) {
