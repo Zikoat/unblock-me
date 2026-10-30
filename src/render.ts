@@ -2,7 +2,7 @@
 // camera transform, so it all zooms and pans together.
 import { worldRect } from "./camera";
 import { UNIT, type Block } from "./layout";
-import { borderOnScreen, visibleBlocks, type Scene } from "./scene";
+import { borderOnScreen, goalSolved, visibleBlocks, type Scene } from "./scene";
 
 export const COLORS = {
   background: "#f3f2ee",
@@ -10,9 +10,10 @@ export const COLORS = {
   border: "#b9b6ad",
   block: "#4f6d8f",
   moved: "#3f9a7a",
-  tapped: "#8b5fbf",
   dragging: "#e0823d",
-  circle: "#d64545",
+  goal: "#d64545",
+  target: "rgba(214, 69, 69, 0.14)",
+  circle: "#3a3936",
   ui: "#1d1d1f",
   wall: "#5f5d57",
   icon: "#f3f2ee",
@@ -43,11 +44,30 @@ export function draw(canvas: HTMLCanvasElement, scene: Scene, { fullscreen, dens
     }
   }
 
+  const goal = scene.goal;
+  const solved = goalSolved(scene);
+  if (goal) {
+    // The target: the red block's outline where it has to go, filled in once it is there.
+    const red = scene.layout.byId(goal.id)!;
+    const x = goal.target.x * UNIT + GAP;
+    const y = goal.target.y * UNIT + GAP;
+    ctx.beginPath();
+    ctx.roundRect(x, y, red.w * UNIT - 2 * GAP, red.h * UNIT - 2 * GAP, 8);
+    ctx.fillStyle = COLORS.target;
+    ctx.fill();
+    ctx.strokeStyle = COLORS.goal;
+    ctx.lineWidth = 3;
+    ctx.setLineDash(solved ? [] : [8, 6]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
   for (const block of visibleBlocks(scene)) {
+    const isGoal = block.id === goal?.id;
     ctx.fillStyle = block.ui ? COLORS.ui
       : block.wall ? COLORS.wall
       : block.id === scene.dragging?.id ? COLORS.dragging
-      : block.tapped ? COLORS.tapped
+      : isGoal ? COLORS.goal
       : block.moved ? COLORS.moved
       : COLORS.block;
     ctx.beginPath();
@@ -58,6 +78,10 @@ export function draw(canvas: HTMLCanvasElement, scene: Scene, { fullscreen, dens
     else if (block.ui === "fullscreen") fullscreenIcon(ctx, block, fullscreen);
     else if (block.ui === "reports") reportsIcon(ctx, block);
     else if (block.ui === "density") densityIcon(ctx, block, density);
+    else if (block.ui === "home") homeIcon(ctx, block);
+    else if (block.ui === "undo") undoIcon(ctx, block);
+    else if (block.ui === "tapmode") tapModeIcon(ctx, block, scene.tapMode === "topright");
+    if (isGoal && solved) checkIcon(ctx, block);
   }
 
   if (scene.circle) {
@@ -184,6 +208,114 @@ function densityIcon(ctx: CanvasRenderingContext2D, block: Block, density: numbe
   ctx.beginPath();
   ctx.arc(left + (right - left) * density, mid, UNIT * 0.065, 0, Math.PI * 2);
   ctx.fill();
+}
+
+/** A house: the homepage. */
+function homeIcon(ctx: CanvasRenderingContext2D, block: Block): void {
+  const x = block.x * UNIT;
+  const y = block.y * UNIT;
+  ctx.fillStyle = COLORS.icon;
+  ctx.beginPath();
+  ctx.moveTo(x + UNIT * 0.5, y + UNIT * 0.24);
+  ctx.lineTo(x + UNIT * 0.76, y + UNIT * 0.48);
+  ctx.lineTo(x + UNIT * 0.69, y + UNIT * 0.48);
+  ctx.lineTo(x + UNIT * 0.69, y + UNIT * 0.74);
+  ctx.lineTo(x + UNIT * 0.56, y + UNIT * 0.74);
+  ctx.lineTo(x + UNIT * 0.56, y + UNIT * 0.6);
+  ctx.lineTo(x + UNIT * 0.44, y + UNIT * 0.6);
+  ctx.lineTo(x + UNIT * 0.44, y + UNIT * 0.74);
+  ctx.lineTo(x + UNIT * 0.31, y + UNIT * 0.74);
+  ctx.lineTo(x + UNIT * 0.31, y + UNIT * 0.48);
+  ctx.lineTo(x + UNIT * 0.24, y + UNIT * 0.48);
+  ctx.closePath();
+  ctx.fill();
+}
+
+/** An arrow curving back to the left: undo the last move. */
+function undoIcon(ctx: CanvasRenderingContext2D, block: Block): void {
+  const cx = (block.x + 0.53) * UNIT;
+  const cy = (block.y + 0.56) * UNIT;
+  const r = UNIT * 0.17;
+  ctx.strokeStyle = COLORS.icon;
+  ctx.fillStyle = COLORS.icon;
+  ctx.lineWidth = UNIT * 0.06;
+  ctx.lineCap = "round";
+  // The upper half of a circle, from its right side over the top to its left side.
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI, true);
+  ctx.stroke();
+  // Arrowhead at the left end, pointing down.
+  const size = UNIT * 0.1;
+  ctx.beginPath();
+  ctx.moveTo(cx - r - size, cy - size * 0.2);
+  ctx.lineTo(cx - r + size, cy - size * 0.2);
+  ctx.lineTo(cx - r, cy + size * 0.9);
+  ctx.closePath();
+  ctx.fill();
+}
+
+/** A switch with an arrow above it: ↔ slides a tapped block to its nearer end, ↗ (switch
+ * on) always up or right. */
+function tapModeIcon(ctx: CanvasRenderingContext2D, block: Block, topRight: boolean): void {
+  const x = block.x * UNIT;
+  const y = block.y * UNIT;
+  ctx.strokeStyle = COLORS.icon;
+  ctx.fillStyle = COLORS.icon;
+  ctx.lineWidth = 2;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  const cx = x + UNIT * 0.5;
+  const cy = y + UNIT * 0.34;
+  const a = UNIT * 0.13;
+  const head = UNIT * 0.06;
+  ctx.beginPath();
+  if (topRight) {
+    ctx.moveTo(cx - a * 0.7, cy + a * 0.7);
+    ctx.lineTo(cx + a * 0.7, cy - a * 0.7);
+    ctx.moveTo(cx + a * 0.7 - head * 1.4, cy - a * 0.7);
+    ctx.lineTo(cx + a * 0.7, cy - a * 0.7);
+    ctx.lineTo(cx + a * 0.7, cy - a * 0.7 + head * 1.4);
+  } else {
+    ctx.moveTo(cx - a, cy);
+    ctx.lineTo(cx + a, cy);
+    ctx.moveTo(cx - a + head, cy - head);
+    ctx.lineTo(cx - a, cy);
+    ctx.lineTo(cx - a + head, cy + head);
+    ctx.moveTo(cx + a - head, cy - head);
+    ctx.lineTo(cx + a, cy);
+    ctx.lineTo(cx + a - head, cy + head);
+  }
+  ctx.stroke();
+  const w = UNIT * 0.36;
+  const h = UNIT * 0.18;
+  const left = x + (UNIT - w) / 2;
+  const top = y + UNIT * 0.56;
+  ctx.beginPath();
+  ctx.roundRect(left, top, w, h, h / 2);
+  ctx.fillStyle = topRight ? COLORS.icon : COLORS.ui;
+  ctx.fill();
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(topRight ? left + w - h / 2 : left + h / 2, top + h / 2, h / 2 - 2.5, 0, Math.PI * 2);
+  ctx.fillStyle = topRight ? COLORS.ui : COLORS.icon;
+  ctx.fill();
+}
+
+/** A white check on the red block once it is home. */
+function checkIcon(ctx: CanvasRenderingContext2D, block: Block): void {
+  const cx = (block.x + block.w / 2) * UNIT;
+  const cy = (block.y + block.h / 2) * UNIT;
+  const s = UNIT * 0.14;
+  ctx.strokeStyle = COLORS.icon;
+  ctx.lineWidth = UNIT * 0.07;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.beginPath();
+  ctx.moveTo(cx - s, cy);
+  ctx.lineTo(cx - s * 0.3, cy + s * 0.7);
+  ctx.lineTo(cx + s, cy - s * 0.6);
+  ctx.stroke();
 }
 
 /** Three rising bars on a baseline: the reports. */

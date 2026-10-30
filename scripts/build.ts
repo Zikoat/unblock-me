@@ -20,7 +20,14 @@ async function build(): Promise<void> {
     minify: true,
     define: { __BUILD_ID__: JSON.stringify(id) },
   });
-  if (!result.success) throw new Error(result.logs.map((log) => log.message).join("\n"));
+  const worker = await Bun.build({
+    entrypoints: [join(src, "goal-worker.ts")],
+    outdir,
+    target: "browser",
+    naming: "goal-worker.js",
+    minify: true,
+  });
+  for (const r of [result, worker]) if (!r.success) throw new Error(r.logs.map((log) => log.message).join("\n"));
   await Bun.write(join(outdir, "index.html"), Bun.file(join(src, "index.html")));
   await writeReportsIndex();
   // Written last, so a page only reloads once the new app is complete.

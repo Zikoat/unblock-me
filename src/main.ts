@@ -1,17 +1,28 @@
-// The app: wires the canvas, the gestures, storage and live reload together.
+// The app: wires the canvas, the gestures, storage, goals and live reload together.
+import type { Point } from "./camera";
+import type { Goal } from "./goal";
+import { viewCentre } from "./goal";
+import type { GoalRequest } from "./goal-worker";
 import { Gestures } from "./gestures";
-import { fixedLayout, MAX_TRIES, MIN_TRIES, randomLayout, TRIES, type Placed } from "./layout";
+import { fixedLayout, MAX_TRIES, MIN_TRIES, randomLayout, TRIES, UNIT, type Placed, type Ui } from "./layout";
 import { draw } from "./render";
-import { blocksIn, slideRange } from "./rules";
-import { latticeRect, newScene, relayout, resize, restart, visibleBlocks } from "./scene";
+import { blockAt, blocksIn, slideRange, type Move } from "./rules";
+import { latticeRect, newScene, relayout, resize, restart, undo, visibleBlocks, type TapMode } from "./scene";
 
-// v4: a row of 1x1 UI blocks; v3 had one 2x2 reset block, v2 no seed, v1 free positions.
-const SEED_KEY = "unblock-me:v4:seed";
-const MOVED_KEY = "unblock-me:v4:moved";
-const TAPPED_KEY = "unblock-me:v4:tapped";
+// v5: two rows of UI blocks (generation changed) and goals; v4 one row, v3 one 2x2 reset
+// block, v2 no seed, v1 free positions.
+const SEED_KEY = "unblock-me:v5:seed";
+const MOVED_KEY = "unblock-me:v5:moved";
+const HISTORY_KEY = "unblock-me:v5:history";
+const GOAL_KEY = "unblock-me:v5:goal";
 const BORDER_KEY = "unblock-me:border";
 const TRIES_KEY = "unblock-me:tries";
+const TAP_MODE_KEY = "unblock-me:tap-mode";
 const CAMERA_KEY = "unblock-me:camera"; // carried over a live reload only
+/** How many cells the goal's red block is pushed. */
+const EFFORT = 12;
+/** The density slider's track, as a share of its block (see densityIcon). */
+const TRACK = 0.52;
 
 declare const __BUILD_ID__: string;
 
@@ -21,6 +32,7 @@ const shared = new URLSearchParams(location.search).get("board");
 
 const canvas = document.querySelector("canvas")!;
 const fps = document.querySelector<HTMLElement>("#fps")!;
+const tip = document.querySelector<HTMLElement>("#tip")!;
 
 function load<T>(key: string, fallback: T): T {
   try {
@@ -36,8 +48,11 @@ function save(): void {
     localStorage.setItem(SEED_KEY, JSON.stringify(seed));
     localStorage.setItem(BORDER_KEY, JSON.stringify(scene.border));
     localStorage.setItem(TRIES_KEY, JSON.stringify(tries));
+    localStorage.setItem(TAP_MODE_KEY, JSON.stringify(scene.tapMode));
     localStorage.setItem(MOVED_KEY, JSON.stringify([...scene.moved].map(([id, p]) => [id, p.x, p.y])));
-    localStorage.setItem(TAPPED_KEY, JSON.stringify([...scene.tapped]));
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(scene.history));
+    // A goal belongs to one seed and density.
+    localStorage.setItem(GOAL_KEY, JSON.stringify(scene.goal && { seed, tries, goal: scene.goal }));
   } catch {
     // Private mode or full storage: changes just don't survive a reload.
   }
@@ -46,15 +61,44 @@ function save(): void {
 const seed = load<number>(SEED_KEY, Math.floor(Math.random() * 2 ** 32));
 let tries = load<number>(TRIES_KEY, TRIES);
 const moved = load<[string, number, number][]>(MOVED_KEY, []);
+const storedGoal = load<{ seed: number; tries: number; goal: Goal } | null>(GOAL_KEY, null);
 const scene = newScene(innerWidth, innerHeight, {
   layout: randomLayout(seed, { tries }),
   moved: new Map(moved.map(([id, x, y]) => [id, { x, y }])),
-  tapped: new Set(load<string[]>(TAPPED_KEY, [])),
+  history: load<Move[]>(HISTORY_KEY, []),
   border: load<boolean>(BORDER_KEY, false),
+  tapMode: load<TapMode>(TAP_MODE_KEY, "topright"),
+  goal: storedGoal?.seed === seed && storedGoal.tries === tries ? storedGoal.goal : null,
 });
 restoreCamera();
 // A fresh start (first visit or after a reset) keeps its seed from the first load on.
 if (localStorage.getItem(SEED_KEY) === null) save();
+
+// Goals are made by a worker: shuffling a dense board can take a second or two. Only the
+// newest request counts; a slider drag or reset in between makes older answers stale.
+const worker = new Worker("goal-worker.js");
+let job = 0;
+let goalWaiters: (() => void)[] = [];
+function requestGoal(): void {
+  if (shared) return;
+  const near = viewCentre(scene.camera, scene.width, scene.height);
+  // Below the UI rows when the view is on them.
+  const at: Point = near.y >= -1 && near.y <= 0 && near.x >= -2 && near.x <= 2 ? { x: near.x, y: 2 } : near;
+  const request: GoalRequest = { job: ++job, seed, tries, near: at, moved: [...scene.moved], effort: EFFORT };
+  worker.postMessage(request);
+}
+worker.onmessage = (event: MessageEvent<{ job: number; goal: Goal | null }>) => {
+  if (event.data.job !== job) return;
+  scene.goal = event.data.goal;
+  save();
+  redraw();
+  goalWaiters.forEach((resolve) => resolve());
+  goalWaiters = [];
+};
+if (!scene.goal) requestGoal();
+
+// While the density slider is held: where its knob is (0..1), following the finger.
+let slider: { from: number; at: number } | null = null;
 
 const gestures = new Gestures(scene, {
   onChange: save,
@@ -68,23 +112,32 @@ const gestures = new Gestures(scene, {
       toggleFullscreen();
     } else if (ui === "reports") {
       location.href = "reports/";
+    } else if (ui === "home") {
+      location.href = "/";
+    } else if (ui === "undo") {
+      if (undo(scene)) save();
+    } else if (ui === "tapmode") {
+      scene.tapMode = scene.tapMode === "nearest" ? "topright" : "nearest";
+      save();
     }
   },
-  // The density slider: the same seed laid out with more or fewer tries per chunk, live.
-  onAdjust: (steps, done) => {
-    adjustFrom ??= tries;
-    const next = Math.min(MAX_TRIES, Math.max(MIN_TRIES, adjustFrom + steps));
+  // The density slider: the knob stays under the finger, and the board shows that density
+  // right away (same seed, no goal). The goal is made once the finger lifts.
+  onAdjust: (dx, done) => {
+    slider ??= { from: (tries - MIN_TRIES) / (MAX_TRIES - MIN_TRIES), at: 0 };
+    slider.at = Math.min(1, Math.max(0, slider.from + dx / (TRACK * UNIT * scene.camera.scale)));
+    const next = Math.round(MIN_TRIES + slider.at * (MAX_TRIES - MIN_TRIES));
     if (next !== tries) {
       tries = next;
       relayout(scene, randomLayout(seed, { tries }));
     }
     if (done) {
-      adjustFrom = null;
+      slider = null;
+      if (!scene.goal) requestGoal();
       save();
     }
   },
 });
-let adjustFrom: number | null = null;
 
 /** Delete everything Unblock Me stored and reload: a new seed, default settings, centred.
  * Only our own keys go, since other pages on this origin keep theirs in the same storage. */
@@ -116,9 +169,13 @@ Object.assign(window, {
     onScreen: () => blocksIn(scene.layout, latticeRect(scene, { x: 0, y: 0, width: scene.width, height: scene.height }), scene),
     slideRange: (id: string) => slideRange(scene.layout, visibleBlocks(scene).find((b) => b.id === id)!, scene),
     redraw: () => redraw(),
-    /** Replace the random layout with exactly these blocks (for tests). */
-    place: (blocks: Placed[]) => {
+    /** Resolves once a goal requested by the app has arrived. */
+    goalReady: () => (scene.goal ? Promise.resolve() : new Promise<void>((resolve) => goalWaiters.push(resolve))),
+    /** Replace the random layout with exactly these blocks, and optionally a goal (for tests). */
+    place: (blocks: Placed[], goal: Goal | null = null) => {
+      job++; // any goal on its way is for the old board
       restart(scene, fixedLayout(blocks));
+      scene.goal = goal;
       redraw();
     },
   },
@@ -189,7 +246,7 @@ function redraw(): void {
   queued = true;
   requestAnimationFrame((now) => {
     queued = false;
-    draw(canvas, scene, { fullscreen: document.fullscreenElement !== null, density: (tries - MIN_TRIES) / (MAX_TRIES - MIN_TRIES) });
+    draw(canvas, scene, { fullscreen: document.fullscreenElement !== null, density: slider?.at ?? (tries - MIN_TRIES) / (MAX_TRIES - MIN_TRIES) });
     frames.push(now);
     showFps(now);
   });
@@ -197,13 +254,48 @@ function redraw(): void {
 
 const point = (e: PointerEvent | WheelEvent) => ({ x: e.offsetX, y: e.offsetY });
 
+/** What each UI block does, shown when the mouse rests on it. */
+function tooltip(ui: Ui): string {
+  switch (ui) {
+    case "tapmode":
+      return scene.tapMode === "topright"
+        ? "Tapping a block slides it all the way up (vertical blocks) or right (horizontal ones). " +
+          "A block already against that end goes the other way. Tap to switch to: towards the nearer end."
+        : "Tapping a block slides it all the way to the nearer end of its room (up or right on a tie). " +
+          "A block already against one end goes the other way. Tap to switch to: always up or right.";
+    case "undo": return "Undo the last move.";
+    case "home": return "Back to the homepage.";
+    case "density": return "Density: drag sideways for a sparser or denser board.";
+    case "border": return "Show only blocks inside a smaller frame, to check that hidden blocks are skipped.";
+    case "reset": return "Start over: a new board, and everything forgotten.";
+    case "fullscreen": return "Fullscreen on or off.";
+    case "reports": return "Reports about the board.";
+  }
+}
+
+function showTip(e: PointerEvent): void {
+  const world = { x: (e.offsetX - scene.camera.offsetX) / scene.camera.scale / UNIT, y: (e.offsetY - scene.camera.offsetY) / scene.camera.scale / UNIT };
+  const ui = e.pointerType === "mouse" && e.buttons === 0 ? blockAt(visibleBlocks(scene), world)?.ui : null;
+  if (!ui) {
+    tip.style.display = "none";
+    return;
+  }
+  tip.textContent = tooltip(ui);
+  tip.style.display = "block";
+  tip.style.left = `${Math.min(innerWidth - tip.offsetWidth - 8, e.clientX + 14)}px`;
+  tip.style.top = `${Math.min(innerHeight - tip.offsetHeight - 8, e.clientY + 16)}px`;
+}
+canvas.addEventListener("pointerleave", () => (tip.style.display = "none"));
+
 canvas.addEventListener("pointerdown", (e) => {
   if (e.pointerType === "mouse" && e.button !== 0) return;
   canvas.setPointerCapture(e.pointerId);
+  tip.style.display = "none";
   gestures.down(e.pointerId, point(e));
   redraw();
 });
 canvas.addEventListener("pointermove", (e) => {
+  showTip(e);
   gestures.move(e.pointerId, point(e));
   redraw();
 });
