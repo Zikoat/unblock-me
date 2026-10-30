@@ -41,6 +41,11 @@
   .demo-sub { font-size: 14px; color: var(--ink-2); margin-bottom: 8px; max-width: 68ch; }
   .demo-score { font-size: 14px; min-height: 1.5em; margin-top: 4px; }
   .demo svg { display: block; max-width: 100%; height: auto; }
+  .timeline { display: block; width: 100%; height: auto; margin-top: 10px; cursor: pointer; }
+  .values { border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; margin-top: 8px; }
+  .values th, .values td { padding: 3px 10px; border-bottom: 1px solid var(--line); text-align: left; }
+  .values th { color: var(--ink-2); font-weight: 600; }
+  .table-wrap { overflow-x: auto; }
   .play { font: inherit; font-size: 14px; padding: 6px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); cursor: pointer; }
   ul { padding-left: 20px; }
   li { margin: 4px 0; max-width: 68ch; }
@@ -73,6 +78,13 @@
 <div class="card">
   <div class="demo"><div class="demo-title">Stars earned at the end</div><div class="demo-sub">During play the stars are outlines, still in reach. At the goal they fill in one at a time, left to right; then the track goes and all five stars gather in the middle, the ones not won as gray outlines, so the row still shows how hard the goal was. The medal only appears if it was won.</div><div id="demoHollow"></div><div class="demo-score" id="scoreHollow"></div></div>
   <div class="controls">
+    <label for="scrub">Time</label>
+    <input id="scrub" type="range" min="0" max="5000" step="10" value="0">
+    <output id="scrubOut">0 ms</output>
+  </div>
+  <svg id="timeline" class="timeline" role="img" aria-label="The finish animation's timeline"></svg>
+  <div class="table-wrap"><table class="values" id="values"></table></div>
+  <div class="controls">
     <label for="finish">Finish at</label>
     <input id="finish" type="range" min="10" max="38" value="18">
     <output id="finishOut">18</output>
@@ -90,12 +102,12 @@
 <h2>How it reads</h2>
 <ul>
   <li>Every move takes the same width of a track, and every track has the same total width. Moves used are dark, moves left are light, so the dark fill grows to the right.</li>
-  <li>A line across the track marks the exact point where a star is lost: finish before it and you keep the star on it. The medal has no line: its part of the track has its own colour.</li>
+  <li>A line across the track marks the exact point where a star is lost: finish before it and you keep the star on it. The medal has no line, and only shows once won.</li>
   <li>The icons sit on the lines, on their own layer, so their width never shifts the track.</li>
-  <li>5 stars is the game's own best, 15. The rosette sits one move before it, at 14: finishing there beats the game. Before it the track is gray.</li>
+  <li>5 stars is the game's own best, 15. The rosette sits one move before it, at 14: finishing there beats the game. </li>
   <li>One star every 5 moves (a third of 15). Passed icons turn gray.</li>
   <li>The track ends at 35, a step past the last star you can lose, with the star that is never lost on its right end. Past 35 the track stays full.</li>
-  <li>The medal only shows once it is won: on many goals it is out of reach. After an undo an arrow under the gray part says it can no longer be won.</li>
+  <li>The medal only shows once it is won: on many goals it is out of reach. After an undo an arrow under the track, one move before 5 stars, says it can no longer be won.</li>
 </ul>
 </main>
 <script>
@@ -188,7 +200,7 @@ let clips = 0;
  * passed) and "hollow" (outlines until the goal, then filled one at a time). `finish` is how
  * far the finish animation is: the stars filled so far (with `pop` for the newest).
  */
-function track(g, x0, y0, used, { undone = false, scale = 1, size = null, style = "now", finish = null, collapse = 0, upright = false, endInside = false } = {}) {
+function track(g, x0, y0, used, { undone = false, scale = 1, size = null, style = "now", finish = null, collapse = 0, upright = false, endInside = false, trace = null } = {}) {
   // `size` (width and height) overrides the look's, e.g. to fit inside the goal's target.
   const width = size ? size.width : LOOK.width * scale, h = size ? size.height : LOOK.height * scale;
   // When the track fills a goal, its last star sits just inside the right end, the moves
@@ -200,7 +212,6 @@ function track(g, x0, y0, used, { undone = false, scale = 1, size = null, style 
   // While collapsing (after the finish) the track fades and only the stars stay.
   const bar = el("g", { "clip-path": `url(#${clip})`, opacity: 1 - collapse }, g);
   const done = Math.min(used, END);
-  el("rect", { x: x0, y: y0, width: MEDAL * w, height: h, fill: C.zone }, bar);
   el("rect", { x: x0, y: y0, width: used >= END ? width : done * w, height: h, fill: C.used, "fill-opacity": 0.78 }, bar); // the zone shows through
   // Icons as big as the look says, but never wider than the gap between two stars.
   const cy = y0 + h / 2, s = Math.min(h * 0.7, STEP * w * 0.95) * LOOK.icons, ms = s * 0.74;
@@ -225,6 +236,7 @@ function track(g, x0, y0, used, { undone = false, scale = 1, size = null, style 
     const x = collapse ? gather({ x: x0i, m: look.m }) : x0i;
     if (collapse) look = { ...look, pop: (look.pop ?? 1) * grow, opacity: look.opacity === undefined ? 1 : look.opacity + (0.55 - look.opacity) * collapse };
     const box = iconBox(g, x, cy, { ...look, upright });
+    trace?.push({ kind, m: look.m, x: x - x0, opacity: look.opacity ?? 1, scale: look.pop ?? 1, outline: !!look.outline, gray: !!look.gray });
     if (kind === "star") star(box, x, cy, s, { outline: look.outline });
     else rosette(box, x, cy, ms);
   };
@@ -352,40 +364,99 @@ function drawGoals() {
   setGoal(13, 15);
 }
 
-// The finish demos: moves tick up to the finish, then each style's finish plays.
-const MOVE_MS = 110, STAR_MS = 420, HOLD_MS = 500, GATHER_MS = 900;
-let demo = { start: null, until: 18 };
-function drawDemos(now) {
-  const n = demo.until;
-  let used = n, hollow = null, collapse = 0;
-  if (demo.start !== null) {
-    const t = now - demo.start;
-    used = Math.min(n, Math.floor(t / MOVE_MS));
-    const after = t - n * MOVE_MS;
-    if (after >= 0) {
-      hollow = after / STAR_MS;
-      // Once every kept star has filled, a pause, then the track goes and the stars gather.
-      setGoal(13, 15);
-      const kept = MARKS.filter((m) => n <= m.at && m.kind === "star").length + 1 + (n <= MEDAL ? 1 : 0);
-      collapse = Math.max(0, Math.min(1, (after - kept * STAR_MS - HOLD_MS) / GATHER_MS));
-    }
-  }
-  for (const [id, style, finish, scoreId] of [["demoHollow", "hollow", hollow, "scoreHollow"]]) {
-    let kept = [];
-    const svg = trackSvg((g, x, y) => { const r = track(g, x, y, used, { style, finish, scale: 1.2, collapse: style === "hollow" ? collapse : 0 }); kept = r.kept; return r; }, { pad: 14 });
-    document.getElementById(id).replaceChildren(svg);
-    // The count so far: stars filled (or collected) and the medal.
-    let got = 0, medal = false;
-    if (finish !== null) {
-      const counted = kept.slice(0, Math.floor(finish));
-      got = counted.filter((k) => k.kind === "star").length;
-      medal = counted.some((k) => k.kind === "medal");
-    }
-    document.getElementById(scoreId).textContent = finish === null ? `${used} moves` : `${used} moves: ${"★".repeat(got)}${"☆".repeat(5 - got)}${medal ? " + medal" : ""}`;
-  }
-  const total = n * MOVE_MS + 6 * STAR_MS + HOLD_MS + GATHER_MS + 600;
-  if (demo.start !== null && now - demo.start < total) requestAnimationFrame(drawDemos);
+// The finish demo, as a function of time: no animation library, every frame is drawn from
+// the time since Play. Moves tick up to the finish; then each star kept fills (with a pop),
+// a pause, and the track fades while the stars gather in a row.
+const MOVE_MS = 110, STAR_MS = 420, POP_MS = STAR_MS / 1.6, HOLD_MS = 500, GATHER_MS = 900;
+let demo = { t: null, until: 18, playing: false, startAt: 0 };
+
+/** When each part of the finish happens, for finishing in `n` moves. */
+function timeline(n) {
+  setGoal(13, 15);
+  const kept = [...MARKS.filter((m) => m.kind === "star" && n <= m.at).map((m) => `★ ${m.at}`), "★ end", ...(n <= MEDAL ? ["medal"] : [])];
+  const movesEnd = n * MOVE_MS;
+  const fills = kept.map((name, i) => ({ name, at: movesEnd + (i + 1) * STAR_MS }));
+  const gather = movesEnd + kept.length * STAR_MS + HOLD_MS;
+  return { movesEnd, fills, gather, end: gather + GATHER_MS, total: gather + GATHER_MS + 300 };
 }
+
+function drawDemoAt(t) {
+  const n = demo.until, tl = timeline(n);
+  let used = n, finish = null, collapse = 0;
+  if (t !== null) {
+    used = Math.min(n, Math.floor(t / MOVE_MS));
+    const after = t - tl.movesEnd;
+    if (after >= 0) {
+      finish = after / STAR_MS;
+      collapse = Math.max(0, Math.min(1, (t - tl.gather) / GATHER_MS));
+    }
+  }
+  let kept = [];
+  const trace = [];
+  const svg = trackSvg((g, x, y) => { const r = track(g, x, y, used, { style: "hollow", finish, scale: 1.2, collapse, trace }); kept = r.kept; return r; }, { pad: 14 });
+  document.getElementById("demoHollow").replaceChildren(svg);
+  let got = 0, medal = false;
+  if (finish !== null) {
+    const counted = kept.slice(0, Math.floor(finish));
+    got = counted.filter((k) => k.kind === "star").length;
+    medal = counted.some((k) => k.kind === "medal");
+  }
+  document.getElementById("scoreHollow").textContent = finish === null ? `${used} moves` : `${used} moves: ${"★".repeat(got)}${"☆".repeat(5 - got)}${medal ? " + medal" : ""}`;
+  drawTimeline(tl, t ?? tl.total, used, collapse, trace);
+}
+
+/** The timeline: one bar per part, a line at the time shown; and each element's values. */
+function drawTimeline(tl, t, used, collapse, trace) {
+  const scrub = document.getElementById("scrub");
+  scrub.max = Math.ceil(tl.total);
+  scrub.value = Math.round(t);
+  document.getElementById("scrubOut").textContent = `${Math.round(t)} ms`;
+  const rows = [
+    { name: `Moves 0 → ${demo.until}`, from: 0, to: tl.movesEnd, note: `${MOVE_MS} ms a move` },
+    ...tl.fills.map((f) => ({ name: `${f.name} fills`, from: f.at, to: f.at + POP_MS, note: "pop: scale 1 → 1.6 → 1" })),
+    { name: "Pause", from: tl.fills.at(-1).at, to: tl.gather, note: "" },
+    { name: "Track and number fade", from: tl.gather, to: tl.end, note: "opacity 1 → 0" },
+    { name: "Stars gather", from: tl.gather, to: tl.end, note: "ease in-out; scale 1 → 1.5; gray ones to opacity 0.55" },
+  ];
+  const svg = document.getElementById("timeline");
+  svg.replaceChildren();
+  const W = 760, left = 170, rh = 20, H = rows.length * rh + 26, x = (ms) => left + (ms / tl.total) * (W - left - 10);
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const ink = getComputedStyle(document.body).color;
+  for (let ms = 0; ms <= tl.total; ms += 500) {
+    el("line", { x1: x(ms), x2: x(ms), y1: 0, y2: H - 18, stroke: ink, "stroke-opacity": 0.12 }, svg);
+    el("text", { x: x(ms), y: H - 4, "font-size": 10, "text-anchor": "middle", fill: ink, "fill-opacity": 0.6 }, svg).textContent = `${ms / 1000}s`;
+  }
+  rows.forEach((r, i) => {
+    const y = i * rh + 4;
+    el("text", { x: 0, y: y + 12, "font-size": 11, fill: ink }, svg).textContent = r.name;
+    el("rect", { x: x(r.from), y: y + 2, width: Math.max(2, x(r.to) - x(r.from)), height: rh - 8, rx: 3, fill: r.name.startsWith("Moves") ? C.used : r.name.includes("fill") ? C.star : r.name === "Pause" ? "#b9bcc1" : "#3b6fd4", "fill-opacity": 0.85 }, svg).append(Object.assign(el("title", {}), { textContent: `${r.name}: ${Math.round(r.from)}–${Math.round(r.to)} ms${r.note ? ` (${r.note})` : ""}` }));
+  });
+  el("line", { x1: x(t), x2: x(t), y1: 0, y2: H - 18, stroke: "#d64545", "stroke-width": 2 }, svg);
+  svg.onclick = (e) => {
+    const box = svg.getBoundingClientRect(), ms = ((e.clientX - box.left) / box.width * W - left) / (W - left - 10) * tl.total;
+    demo = { ...demo, t: Math.max(0, Math.min(tl.total, ms)), playing: false };
+    drawDemoAt(demo.t);
+  };
+  // The values at this time.
+  const name = (e) => e.kind === "medal" ? "Medal" : e.m === Infinity ? "Star (end)" : `Star at ${e.m}`;
+  const look = (e) => [e.outline ? "outline" : "filled", e.gray ? "gray" : ""].filter(Boolean).join(", ");
+  document.getElementById("values").innerHTML = `<thead><tr><th>Element</th><th>x</th><th>Scale</th><th>Opacity</th><th>Look</th></tr></thead><tbody>
+    <tr><td>Track (fill ${used} moves)</td><td>0</td><td>1</td><td>${(1 - collapse).toFixed(2)}</td><td></td></tr>
+    <tr><td>Move count</td><td>left end</td><td>1</td><td>${(1 - collapse).toFixed(2)}</td><td>white, shadow</td></tr>
+    ${trace.map((e) => `<tr><td>${name(e)}</td><td>${e.x.toFixed(1)}</td><td>${e.scale.toFixed(2)}</td><td>${e.opacity.toFixed(2)}</td><td>${look(e)}</td></tr>`).join("")}
+  </tbody>`;
+}
+
+function playFrame(now) {
+  if (!demo.playing) return;
+  demo.t = now - demo.startAt;
+  const tl = timeline(demo.until);
+  if (demo.t >= tl.total) { demo.t = tl.total; demo.playing = false; }
+  drawDemoAt(demo.t);
+  if (demo.playing) requestAnimationFrame(playFrame);
+}
+function drawDemos() { drawDemoAt(demo.t); }
 
 function drawLook() {
   const box = document.getElementById("look");
@@ -407,7 +478,7 @@ function redraw() {
   update();
   drawGoals();
   drawSteps();
-  drawDemos(performance.now());
+  drawDemos();
 }
 
 const used = document.getElementById("used"), undone = document.getElementById("undone"), out = document.getElementById("usedOut");
@@ -416,13 +487,17 @@ used.addEventListener("input", update);
 undone.addEventListener("change", update);
 const finish = document.getElementById("finish");
 finish.addEventListener("input", () => {
-  demo = { start: null, until: Number(finish.value) };
+  demo = { t: null, until: Number(finish.value), playing: false, startAt: 0 };
   document.getElementById("finishOut").textContent = finish.value;
-  drawDemos(performance.now());
+  drawDemos();
 });
 document.getElementById("play").addEventListener("click", () => {
-  demo = { start: performance.now(), until: Number(finish.value) };
-  requestAnimationFrame(drawDemos);
+  demo = { t: 0, until: Number(finish.value), playing: true, startAt: performance.now() };
+  requestAnimationFrame(playFrame);
+});
+document.getElementById("scrub").addEventListener("input", (e) => {
+  demo = { ...demo, t: Number(e.target.value), playing: false };
+  drawDemos();
 });
 drawLook();
 redraw();
