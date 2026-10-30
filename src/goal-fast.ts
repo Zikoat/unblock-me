@@ -10,6 +10,9 @@ export type Tuning = {
   /** Skip a slide whose path holds a fixed or busy block, or more blockers than moves are
    * left (each needs at least one move); longer slides that way are skipped too. */
   prune?: boolean;
+  /** With prune: when the moves left are exactly one per blocker, skip the slide if some
+   * blocker cannot get out of the way in one slide (it needs another block moved first). */
+  lookahead?: boolean;
   /** Stop trying candidates once one reached full effort (keeps the fewest-moves rule only
    * among those already tried). */
   earlyStop?: boolean;
@@ -21,7 +24,7 @@ export type Tuning = {
 
 /** Empty `cell` without moving blocks in `keep` (see clearCell in frozen.ts); moves are
  * applied to the board on success, and it is left as it was on failure. */
-export function clearCellOn(board: Board, cell: Point, keep: ReadonlySet<string>, { maxMoves = 12, reach = 8, budget = 200_000, prune = false, stats }: { maxMoves?: number; reach?: number; budget?: number; prune?: boolean; stats?: Tuning["stats"] } = {}): Move[] | null {
+export function clearCellOn(board: Board, cell: Point, keep: ReadonlySet<string>, { maxMoves = 12, reach = 8, budget = 200_000, prune = false, lookahead = false, stats }: { maxMoves?: number; reach?: number; budget?: number; prune?: boolean; lookahead?: boolean; stats?: Tuning["stats"] } = {}): Move[] | null {
   const plan: Move[] = [];
   let nodes = 0;
   const forbidden = new Map<number, number>();
@@ -33,6 +36,30 @@ export function clearCellOn(board: Board, cell: Point, keep: ReadonlySet<string>
   };
   const busy = new Set(keep);
   const blockers = new Set<string>();
+  const path = new Set<number>();
+
+  /** Can `id` slide clear of the forbidden cells and `path` in one move, treating the
+   * other blockers as gone (they move too)? */
+  function free(id: string): boolean {
+    const b = board.block(id);
+    const horizontal = b.w > b.h;
+    const pos = horizontal ? b.x : b.y;
+    const size = horizontal ? b.w : b.h;
+    const key = (p: number) => (horizontal ? cellKey(p, b.y) : cellKey(b.x, p));
+    const occupant = (p: number) => (horizontal ? board.at(p, b.y) : board.at(b.x, p));
+    for (const dir of [1, -1]) {
+      for (let d = 1; d <= reach; d++) {
+        const swept = dir > 0 ? pos + size - 1 + d : pos - d;
+        const o = occupant(swept);
+        if (o !== null && !blockers.has(o)) break;
+        const p = pos + dir * d;
+        let ok = true;
+        for (let i = 0; i < size; i++) if (forbidden.has(key(p + i)) || path.has(key(p + i))) ok = false;
+        if (ok) return true;
+      }
+    }
+    return false;
+  }
 
   function vacate(id: string, limit: number): boolean {
     const block = board.block(id);
@@ -65,6 +92,13 @@ export function clearCellOn(board: Board, cell: Point, keep: ReadonlySet<string>
           if (stop || plan.length + 1 + blockers.size > limit) {
             dead[s] = true;
             continue;
+          }
+          if (lookahead && !hit && plan.length + 1 + blockers.size === limit && blockers.size > 0) {
+            path.clear();
+            for (let i = 0; i < d; i++) path.add(key(cell(i)));
+            let all = true;
+            for (const o of blockers) if (!free(o)) all = false;
+            if (!all) continue;
           }
         }
         if (hit) continue;
@@ -168,7 +202,7 @@ export function makeGoalFast(layout: Layout, near: Point, { effort = 12, perCell
         const ahead = isHorizontal(at)
           ? { x: dir > 0 ? at.x + at.w : at.x - 1, y: at.y }
           : { x: at.x, y: dir > 0 ? at.y + at.h : at.y - 1 };
-        const plan = clearCellOn(board, ahead, keep, { maxMoves: perCell, budget: tuning.budget, prune: tuning.prune, stats: tuning.stats });
+        const plan = clearCellOn(board, ahead, keep, { maxMoves: perCell, budget: tuning.budget, prune: tuning.prune, lookahead: tuning.lookahead, stats: tuning.stats });
         if (!plan) break;
         moves.push(...plan);
         const to = isHorizontal(at) ? { x: at.x + dir, y: at.y } : { x: at.x, y: at.y + dir };
