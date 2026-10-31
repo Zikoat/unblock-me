@@ -104,20 +104,18 @@ const browser = await chromium.launch();
     { id: "home", x: -2, y: 2, w: 1, h: 1, ui: "home" },
   ];
 
-  // Without the debug UI only the game's row is there: reset and fullscreen.
+  // Without the debug UI only the fullscreen block is there.
   await fresh({ debug: false });
-  check((await page.evaluate(() => unblock.visibleBlocks().filter((b) => b.ui).map((b) => b.ui).sort().join())) === "fullscreen,reset", "only reset and fullscreen show at first");
-  // Reset, fullscreen, reset, fullscreen in a row turns the debug UI on (and resets).
-  for (const [i, x] of [0.5, 1.5, 0.5, 1.5].entries()) {
-    const reload = page.waitForEvent("load", { timeout: 3000 }).then(() => true, () => false);
-    await tap(cell(x, 0.5));
-    if (i !== 1) check(await reload, `tap ${i + 1} of the code reloads (a reset)`);
-    else await page.waitForTimeout(200);
-    await frame(page);
-  }
+  check((await page.evaluate(() => unblock.visibleBlocks().filter((b) => b.ui).map((b) => b.ui).join())) === "fullscreen", "only the fullscreen block shows at first");
+  // Five quick taps on the empty board turn the debug UI on (and reset).
+  await place([]);
+  const debugReload = page.waitForEvent("load", { timeout: 5000 }).then(() => true, () => false);
+  for (let i = 0; i < 5; i++) await tap(cell(0.5, 3.5));
+  check(await debugReload, "five quick taps on the empty board reset the game");
+  await frame(page);
   await page.waitForTimeout(300);
-  const uis = await page.evaluate(() => [unblock.visibleBlocks().filter((b) => b.ui).length, localStorage.getItem("unblock-me:debug"), localStorage.getItem("unblock-me:debug-code")]);
-  check(uis[0] === 8, `reset, fullscreen, reset, fullscreen turns the debug UI on (${uis})`);
+  const uis = await page.evaluate(() => [unblock.visibleBlocks().filter((b) => b.ui).length, localStorage.getItem("unblock-me:debug")]);
+  check(uis[0] === 8 && uis[1] === "true", `and turn the debug UI on, reset among it (${uis})`);
 
   // Random layout with the UI blocks in the middle.
   await fresh();
@@ -190,7 +188,6 @@ const browser = await chromium.launch();
     "someone-else": "keep me",
     "unblock-me:border": "false",
     "unblock-me:debug": "true",
-    "unblock-me:debug-code": "0",
     "unblock-me:fps": "false",
     "unblock-me:tries": "12",
     "unblock-me:v6:history": "[]",
@@ -472,8 +469,8 @@ const browser = await chromium.launch();
   await page.evaluate(() => { unblock.scene.goal = null; unblock.redraw(); });
   const pointer = async () => page.evaluate(() => {
     const c = unblock.scene.camera, s = unblock.scene;
-    // The middle of the game's UI row (x 0..2, y 0..1), on screen.
-    const ux = 1 * 60 * c.scale + c.offsetX, uy = 0.5 * 60 * c.scale + c.offsetY;
+    // The middle of the fullscreen block (x 1..2, y 0..1), on screen.
+    const ux = 1.5 * 60 * c.scale + c.offsetX, uy = 0.5 * 60 * c.scale + c.offsetY;
     const dx = ux - s.width / 2, dy = uy - s.height / 2;
     const k = Math.min(Math.abs((s.width / 2 - 26) / dx || Infinity), Math.abs((s.height / 2 - 26) / dy || Infinity));
     return [s.width / 2 + dx * k, s.height / 2 + dy * k + 10];
@@ -489,7 +486,7 @@ const browser = await chromium.launch();
   await tap(arrowAt);
   await page.waitForTimeout(500);
   const home2 = await page.evaluate(() => unblock.scene.camera);
-  check(Math.abs(home2.offsetX - 170) < 1 && Math.abs(home2.offsetY - 370) < 1, `tapping the arrow brings the view back to the UI blocks (offset ${home2.offsetX.toFixed(0)},${home2.offsetY.toFixed(0)})`);
+  check(Math.abs(home2.offsetX - 110) < 1 && Math.abs(home2.offsetY - 370) < 1, `tapping the arrow brings the view back to the UI blocks (offset ${home2.offsetX.toFixed(0)},${home2.offsetY.toFixed(0)})`);
   check(await page.evaluate(() => unblock.scene.circle === null && unblock.scene.history.length === 0), "and the tap does nothing to the board");
   await page.evaluate(() => { unblock.scene.camera = { ...unblock.scene.camera, offsetX: -900, offsetY: -1200 }; unblock.redraw(); });
   await frame(page);
@@ -499,7 +496,7 @@ const browser = await chromium.launch();
   const borderArrow = await page.evaluate(() => {
     const c = unblock.scene.camera, s = unblock.scene;
     const v = { x: s.width * 0.1, y: s.height * 0.1, w: s.width * 0.8, h: s.height * 0.8 };
-    const ux = 60 * c.scale + c.offsetX, uy = 30 * c.scale + c.offsetY;
+    const ux = 90 * c.scale + c.offsetX, uy = 30 * c.scale + c.offsetY;
     const cx = v.x + v.w / 2, cy = v.y + v.h / 2, dx = ux - cx, dy = uy - cy;
     const k = Math.min(Math.abs((v.w / 2 - 26) / dx || Infinity), Math.abs((v.h / 2 - 26) / dy || Infinity));
     return [cx + dx * k, cy + dy * k + 10];
@@ -513,11 +510,11 @@ const browser = await chromium.launch();
   // UI blocks on screen but just right of the border count as out of view: the arrow shows.
   await page.evaluate(() => { unblock.scene.camera = { scale: 1, offsetX: 430, offsetY: 370 }; unblock.redraw(); });
   await frame(page);
-  // The game's row (x 0..2) now starts at screen x 430: right of the border (x 40..360).
+  // The fullscreen block (x 1..2) now starts at screen x 490: right of the border (x 40..360).
   const rightArrow = await page.evaluate(() => {
     const c = unblock.scene.camera, s = unblock.scene;
     const v = { x: s.width * 0.1, y: s.height * 0.1, w: s.width * 0.8, h: s.height * 0.8 };
-    const ux = 60 * c.scale + c.offsetX, uy = 30 * c.scale + c.offsetY;
+    const ux = 90 * c.scale + c.offsetX, uy = 30 * c.scale + c.offsetY;
     const cx = v.x + v.w / 2, cy = v.y + v.h / 2, dx = ux - cx, dy = uy - cy;
     const k = Math.min(Math.abs((v.w / 2 - 26) / dx || Infinity), Math.abs((v.h / 2 - 26) / dy || Infinity));
     return [cx + dx * k, cy + dy * k + 10];
@@ -624,7 +621,7 @@ const browser = await chromium.launch();
   // the border (y 80).
   await page.evaluate(() => { unblock.scene.border = true; unblock.scene.camera = { scale: 1, offsetX: 170, offsetY: -230 }; unblock.redraw(); });
   await frame(page);
-  const spot = [170 + 1.2 * 60, -230 + 4.2 * 60];
+  const spot = [170 + 2.5 * 60, -230 + 4.2 * 60]; // clear of the UI arrow at the top edge
   const pale = await rgbAt(page, ...spot);
   check(Math.abs(pale[0] - pale[1]) < 10, `a goal area outside the border is not drawn (${pale.join(",")} at ${spot.join(",")})`);
   await page.evaluate(() => { unblock.scene.border = false; unblock.redraw(); });

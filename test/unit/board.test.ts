@@ -324,7 +324,7 @@ describe("taps on the background", () => {
 });
 
 describe("UI blocks", () => {
-  // The game's row: reset (0,0), fullscreen (1,0); an empty row; the debug row: density
+  // The fullscreen block (1,0); with the debug UI reset (0,0), an empty row, and the debug row: density
   // (-1,2), border (0,2), upload (1,2), fps (2,2), reports (3,2), home (-2,2).
   const ui = () => UI_BLOCKS.map((b) => ({ ...b }));
   const spots = [
@@ -333,7 +333,7 @@ describe("UI blocks", () => {
 
   test("they are 1x1: a row for the game, a gap, and a row of debug blocks", () => {
     expect(ui().map((b) => [b.id, b.x, b.y, b.w, b.h])).toEqual([
-      ["reset", 0, 0, 1, 1], ["fullscreen", 1, 0, 1, 1],
+      ["fullscreen", 1, 0, 1, 1], ["reset", 0, 0, 1, 1],
       ["density", -1, 2, 1, 1], ["border", 0, 2, 1, 1], ["upload", 1, 2, 1, 1], ["fps", 2, 2, 1, 1], ["reports", 3, 2, 1, 1], ["home", -2, 2, 1, 1],
     ]);
   });

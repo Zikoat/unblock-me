@@ -1,15 +1,15 @@
 // Makes goals off the main thread, so the board stays responsive while it searches.
 import { choices } from "./choices";
 import { makeGoalHard } from "./goal-search";
-import { fixedLayout, randomLayout, type Placed } from "./layout";
+import { fixedLayout, randomLayout, type Placed, type UiShown } from "./layout";
 import type { Point, Rect } from "./camera";
 
 export type GoalRequest = {
   job: number;
   seed: number;
   tries: number;
-  /** Whether the debug UI row is on the board (it changes the layout). */
-  debug: boolean;
+  /** Which UI blocks are on the board (they change the layout). */
+  ui: UiShown;
   /** An exact board instead of the random one (one placed for a test). */
   placed: Placed[] | null;
   near: Point;
@@ -22,8 +22,8 @@ export type GoalRequest = {
 };
 
 self.onmessage = (event: MessageEvent<GoalRequest>) => {
-  const { job, seed, tries, debug, placed, near, moved, level = 1, exclude, avoid } = event.data;
-  const layout = placed ? fixedLayout(placed) : randomLayout(seed, { tries, debug });
+  const { job, seed, tries, ui, placed, near, moved, level = 1, exclude, avoid } = event.data;
+  const layout = placed ? fixedLayout(placed) : randomLayout(seed, { tries, ...ui });
   // The push search's targets ranked by the difficulty measure (docs/goal-search.md).
   const found = makeGoalHard(layout, near, { moved: new Map(moved), exclude: new Set(exclude), avoid }, level);
   if (!found) {

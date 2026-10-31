@@ -65,14 +65,16 @@ describe("random layout", () => {
 
   test("the UI blocks sit in the middle for every seed, and no block overlaps them", () => {
     for (const seed of [1, 2, 3, 99, 2 ** 31]) {
-      // Without the debug UI: the game's row only.
+      // Without the debug UI: the fullscreen block only, or no UI at all where the browser
+      // cannot go full screen.
       const plain = randomLayout(seed).blocksIn({ x: -5, y: -5, width: 10, height: 10 });
-      expect(plain.filter((b) => b.ui).map((b) => [b.ui, b.x, b.y])).toEqual([["reset", 0, 0], ["fullscreen", 1, 0]]);
-      for (const b of plain) if (!b.ui) for (const c of cells(b)) expect(["0,0", "1,0"]).not.toContain(c);
+      expect(plain.filter((b) => b.ui).map((b) => [b.ui, b.x, b.y])).toEqual([["fullscreen", 1, 0]]);
+      for (const b of plain) if (!b.ui) for (const c of cells(b)) expect(c).not.toBe("1,0");
+      expect(randomLayout(seed, { fullscreen: false }).blocksIn({ x: -5, y: -5, width: 10, height: 10 }).some((b) => b.ui)).toBe(false);
       // With it: both rows, nothing generated in the rectangle round them and the gap.
       const near = randomLayout(seed, { debug: true }).blocksIn({ x: -5, y: -5, width: 10, height: 10 });
       expect(near.filter((b) => b.ui).map((b) => [b.ui, b.x, b.y, b.w, b.h])).toEqual([
-        ["reset", 0, 0, 1, 1], ["fullscreen", 1, 0, 1, 1],
+        ["fullscreen", 1, 0, 1, 1], ["reset", 0, 0, 1, 1],
         ["density", -1, 2, 1, 1], ["border", 0, 2, 1, 1], ["upload", 1, 2, 1, 1], ["fps", 2, 2, 1, 1], ["reports", 3, 2, 1, 1], ["home", -2, 2, 1, 1],
       ]);
       for (const b of near) if (!b.ui) for (const c of cells(b)) {
