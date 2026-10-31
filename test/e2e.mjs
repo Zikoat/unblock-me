@@ -89,7 +89,7 @@ const browser = await chromium.launch();
   }
   const tap = (p) => gesture([p], [[p[0] + 2, p[1] + 2]], { steps: 1 });
   // A fresh start, with the debug UI on unless asked not to.
-  const fresh = async ({ debug = true } = {}) => { await page.goto(url); await page.evaluate((d) => { unblock.forget(); if (d) localStorage.setItem("unblock-me:debug", "true"); }, debug); await page.goto(url); await frame(page); };
+  const fresh = async ({ debug = true } = {}) => { await page.goto(url); await page.evaluate((d) => { unblock.forget(); localStorage.setItem("unblock-me:browser-answer", "not telegram"); if (d) localStorage.setItem("unblock-me:debug", "true"); }, debug); await page.goto(url); await frame(page); };
   const place = async (blocks, goal = null) => { await page.evaluate(([b, g]) => unblock.place(b, g), [blocks, goal]); await frame(page); };
   const H = (id, x, y) => ({ id, x, y, w: 2, h: 1 });
   const V = (id, x, y) => ({ id, x, y, w: 1, h: 2 });
@@ -189,6 +189,7 @@ const browser = await chromium.launch();
   check(JSON.stringify(rest) === JSON.stringify({
     "someone-else": "keep me",
     "unblock-me:border": "false",
+    "unblock-me:browser-answer": "not telegram",
     "unblock-me:debug": "true",
     "unblock-me:debug-code": "0",
     "unblock-me:fps": "false",
