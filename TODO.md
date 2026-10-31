@@ -15,3 +15,4 @@
 - Undo a reached goal: rewind to where its moves started counting and replay it for a better score; waits on the score track.
 - Undo during a goal (or undoing the goal) loses the medal (shown faded) and is stored with the goal; waits on the score track.
 - Hovering a reached goal highlights the blocks its solution needed, and differently those moved without need; waits on you picking it.
+- Progress is lost when moving from Telegram’s in-app browser to the phone’s browser (separate storage); waits on the Telegram check’s reports, then maybe carry the save in the "Open in browser" link.
