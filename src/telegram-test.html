@@ -63,6 +63,7 @@ const BOXES = [
   { key: "B", label: "touch-action none", style: "touch-action: none" },
   { key: "C", label: "blocked at touch start", style: "touch-action: none", block: "touchstart" },
   { key: "D", label: "blocked while moving", style: "touch-action: none", block: "touchmove" },
+  { key: "E", label: "from the screen's edge", style: "touch-action: none", block: "touchmove", edge: true },
 ];
 const EXITS = [
   { key: "telegram", label: "Open with Telegram" },
@@ -103,8 +104,8 @@ function show() {
     return;
   }
   if (s.kind === "where") {
-    app.innerHTML = `${counter}<h1>Where did you open this link?</h1>
-      <div class="buttons"><button data-a="telegram">In Telegram</button><button class="light" data-a="other">Somewhere else</button></div>`;
+    app.innerHTML = `${counter}<h1>Which browser is showing this page?</h1><p>Telegram's own browser has Telegram's bar at the top (✕, share, ⋮).</p>
+      <div class="buttons"><button data-a="telegram">Telegram's browser</button><button class="light" data-a="other">Chrome, Safari or another browser</button></div>`;
     app.onclick = (e) => {
       const a = e.target.closest("button")?.dataset.a;
       if (!a) return;
@@ -117,17 +118,21 @@ function show() {
   if (s.kind === "box") {
     const { box } = s, r = (state.results.boxes[box.key] ??= {});
     r.swipes = r.swipes ?? []; r.label = box.label;
-    app.innerHTML = `${counter}<h1>Swipe left and right in the box</h1><p>A few times, fast and slow. If the page closes, just open the link again.</p>
-      <div class="box" id="box" style="${box.style ?? ""}">Swipe here<small id="n">0 swipes</small></div>
-      <div class="buttons"><button id="next" disabled>Next</button></div>`;
+    app.innerHTML = box.edge
+      ? `${counter}<h1>Swipe in from the edge</h1><p>Start with your finger right on the left edge of the screen and swipe right, then from the right edge to the left. If the page closes, just open the link again.</p>
+      <div class="box" id="box" style="${box.style}; margin: 0 -20px; border-radius: 0">Swipe from the edges<small id="n">0 swipes</small></div>`
+      : `${counter}<h1>Swipe left and right in the box</h1><p>A few times, fast and slow. If the page closes, just open the link again.</p>
+      <div class="box" id="box" style="${box.style ?? ""}">Swipe here<small id="n">0 swipes</small></div>`;
+    app.innerHTML += `
+<div class="buttons"><button id="next" disabled>Next</button></div>`;
     const el = document.getElementById("box"), n = document.getElementById("n"), btn = document.getElementById("next");
     if (box.block) el.addEventListener(box.block, (e) => e.preventDefault(), { passive: false });
     let down = null, made = 0;
-    el.addEventListener("pointerdown", (e) => { down = { x: e.clientX, y: e.clientY, t: performance.now(), moves: 0 }; state.left = "box"; save(); });
+    el.addEventListener("pointerdown", (e) => { down = { x: e.clientX, y: e.clientY, t: performance.now(), moves: 0, fromEdge: Math.min(e.clientX, innerWidth - e.clientX) < 24 }; state.left = "box"; save(); });
     el.addEventListener("pointermove", (e) => { if (down) { down.moves++; down.lx = e.clientX; down.ly = e.clientY; } });
     const end = (how) => (e) => {
       if (!down) return;
-      r.swipes.push({ how, dx: Math.round((down.lx ?? down.x) - down.x), dy: Math.round((down.ly ?? down.y) - down.y), ms: Math.round(performance.now() - down.t), moves: down.moves });
+      r.swipes.push({ how, x0: Math.round(down.x), fromEdge: down.fromEdge, dx: Math.round((down.lx ?? down.x) - down.x), dy: Math.round((down.ly ?? down.y) - down.y), ms: Math.round(performance.now() - down.t), moves: down.moves });
       down = null; made++;
       state.left = null; save();
       n.textContent = `${made} swipe${made === 1 ? "" : "s"}`;
@@ -142,7 +147,7 @@ function show() {
     const { exit } = s;
     app.innerHTML = `${counter}<h1>Can this get you out of Telegram?</h1><p>Tap the button. Then come back here (or to this page in the browser it opened) and say what happened.</p>
       <div class="buttons"><button id="go">${exit.label}</button></div>
-      <div id="after" hidden><p>What happened?</p>
+      <div id="after"><p>What happened?</p>
       <div class="buttons"><button class="light" data-a="browser">My phone's browser opened</button><button class="light" data-a="telegram">It stayed in Telegram</button><button class="light" data-a="nothing">Nothing happened</button></div></div>`;
     app.onclick = (e) => {
       const b = e.target.closest("button");
@@ -150,9 +155,6 @@ function show() {
       if (b.id === "go") {
         state.results.exits[exit.key] = { tapped: true };
         save();
-        // Only now ask what happened.
-        b.hidden = true;
-        document.getElementById("after").hidden = false;
         const url = `${target}?from=${exit.key}`;
         const intent = (pkg) => `intent://${location.host}${location.pathname}?from=${exit.key}#Intent;scheme=https;${pkg ? `package=${pkg};` : ""}S.browser_fallback_url=${encodeURIComponent(url)};end`;
         if (exit.key === "telegram") proxy?.postEvent ? proxy.postEvent("web_app_open_link", JSON.stringify({ url, try_browser: "chrome" })) : (state.results.exits.telegram.noProxy = true);
