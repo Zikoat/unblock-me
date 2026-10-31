@@ -36,6 +36,8 @@ async function build(): Promise<void> {
   });
   for (const r of [result, worker]) if (!r.success) throw new Error(r.logs.map((log) => log.message).join("\n"));
   await Bun.write(join(outdir, "index.html"), Bun.file(join(src, "index.html")));
+  // A standalone page for finding out how Telegram's in-app browser treats swipes.
+  await Bun.write(join(outdir, "telegram-test.html"), Bun.file(join(src, "telegram-test.html")));
   await buildReports(join(root, "reports"), join(outdir, "reports"));
   // Written last, so a page only reloads once the new app is complete.
   await Bun.write(join(outdir, "build.txt"), id);
