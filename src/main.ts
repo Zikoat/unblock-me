@@ -864,6 +864,9 @@ canvas.addEventListener("wheel", (e) => {
   redraw();
 }, { passive: false });
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+// Telegram's in-app browser on iPhone takes swipes right and down to close itself unless the
+// page blocks the touch's moves (telegram-test.html showed touch-action alone is not enough).
+canvas.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
 addEventListener("resize", () => {
   resize(scene, innerWidth, innerHeight);
   redraw();
