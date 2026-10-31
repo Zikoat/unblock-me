@@ -6,12 +6,13 @@
 <meta name="theme-color" content="#f3f2ee">
 <title>Quick test</title>
 <style>
-  /* A guided test for Telegram's in-app browser, one step at a time: where the page was
-     opened, how swipes reach it under four settings (resuming if a swipe closes it), and
-     which ways out of Telegram work. Results go to the server as play data (play-data/). */
+  /* A guided test for Telegram's in-app browser, one step at a time: which browser shows
+     the page, whether swipes reach it (or the browser takes them to close itself) under a
+     few layouts, and opening the page in the phone's own browser. Results go to the server
+     as play data (play-data/ on the VM). */
   * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; background: #f3f2ee; color: #1d1d1f; font: 17px/1.45 system-ui, sans-serif; overscroll-behavior: none; }
-  main { max-width: 480px; min-height: 100%; margin: 0 auto; padding: 28px 20px; display: flex; flex-direction: column; gap: 16px; }
+  html, body { margin: 0; background: #f3f2ee; color: #1d1d1f; font: 17px/1.45 system-ui, sans-serif; }
+  main { max-width: 480px; margin: 0 auto; padding: 28px 20px; display: flex; flex-direction: column; gap: 16px; }
   .count { font-size: 14px; color: #6b6e73; }
   h1 { font-size: 23px; line-height: 1.25; margin: 0; }
   p { margin: 0; }
@@ -19,166 +20,132 @@
   button { font: inherit; font-weight: 600; padding: 14px 16px; border: 0; border-radius: 12px; background: #1d1d1f; color: #f3f2ee; cursor: pointer; }
   button.light { background: #e3e2dc; color: #1d1d1f; }
   button:disabled { opacity: .35; cursor: default; }
-  .box { height: 220px; border-radius: 16px; background: #4f6d8f; color: #fff; display: grid; place-items: center; text-align: center; font-size: 20px; font-weight: 650; user-select: none; -webkit-user-select: none; padding: 12px; }
+  .box { height: 220px; border-radius: 16px; background: #4f6d8f; color: #fff; display: grid; place-items: center; text-align: center; font-size: 20px; font-weight: 650; user-select: none; -webkit-user-select: none; padding: 12px; touch-action: none; }
   .box small { display: block; font-size: 15px; font-weight: 400; opacity: .85; margin-top: 6px; }
+  /* A box over the whole screen, like the game's board. */
+  .full { position: fixed; inset: 0; height: auto; border-radius: 0; display: flex; flex-direction: column; justify-content: center; gap: 14px; padding: 24px; }
+  .full button { background: #f3f2ee; color: #1d1d1f; }
 </style>
 </head>
 <body>
 <main id="app"></main>
 <script>
-// Where the test is, and its results so far, kept so a swipe that closes the page (or a
-// way out that opens another browser) can carry on where it left off.
-const KEY = "telegram-test";
-const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) ?? null; } catch { return null; } };
+// Where the test is, and its results so far, kept so a swipe that closes the page can carry
+// on where it left off.
+const KEY = "telegram-test-2";
 if (new URLSearchParams(location.search).has("restart")) try { localStorage.removeItem(KEY); } catch {}
-const state = load() ?? { id: (crypto.randomUUID?.() ?? String(Math.random()).slice(2)).replace(/-/g, "").slice(0, 24), step: 0, results: { boxes: {}, exits: {} }, visits: 0 };
-state.visits++;
+const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) ?? null; } catch { return null; } };
+const state = load() ?? { id: (crypto.randomUUID?.() ?? String(Math.random()).slice(2)).replace(/-/g, "").slice(0, 24), step: 0, results: { boxes: {} } };
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {} };
 
 const proxy = window.TelegramWebviewProxy;
 const facts = {
   userAgent: navigator.userAgent,
-  userAgentData: navigator.userAgentData ? { brands: navigator.userAgentData.brands, mobile: navigator.userAgentData.mobile, platform: navigator.userAgentData.platform } : null,
   telegramGlobals: Object.keys(window).filter((k) => /telegram/i.test(k)),
-  proxyPostEvent: typeof proxy?.postEvent,
-  webviewInUserAgent: /; wv\)/.test(navigator.userAgent),
-  referrer: document.referrer, url: location.href, historyLength: history.length,
+  referrer: document.referrer, historyLength: history.length,
   screen: { width: screen.width, height: screen.height, innerWidth, innerHeight, dpr: devicePixelRatio },
-  maxTouchPoints: navigator.maxTouchPoints,
 };
 const detected = !!proxy || /Telegram/i.test(navigator.userAgent);
-(state.results.visits ??= []).push({ at: new Date().toISOString(), detected, facts, from: new URLSearchParams(location.search).get("from") });
+(state.results.visits ??= []).push({ at: new Date().toISOString(), detected, facts });
 
 // Sent after every step, replacing this test's last upload.
 const send = (beacon = false) => {
   save();
-  const body = JSON.stringify({ kind: "telegram-test", id: state.id, sentAt: new Date().toISOString(), step: state.step, ...state.results });
-  const url = `play-data?device=tg-${state.id}`;
+  const body = JSON.stringify({ kind: "telegram-test-2", id: state.id, sentAt: new Date().toISOString(), step: state.step, ...state.results });
+  const url = `play-data?device=tg2-${state.id}`;
   if (beacon) navigator.sendBeacon(url, new Blob([body], { type: "application/json" }));
   else fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body }).catch(() => {});
 };
 
+// The layouts to swipe in. All block the browser's own handling of the touch (as the
+// game does); they differ in size and in whether the page itself can scroll a little.
 const BOXES = [
-  { key: "A", label: "normal", setup: () => {} },
-  { key: "B", label: "touch-action none", style: "touch-action: none" },
-  { key: "C", label: "blocked at touch start", style: "touch-action: none", block: "touchstart" },
-  { key: "D", label: "blocked while moving", style: "touch-action: none", block: "touchmove" },
-  { key: "E", label: "from the screen's edge", style: "touch-action: none", block: "touchmove", edge: true },
+  { key: "small", title: "Swipe in the box", text: "Left, right, up and down, a few times each." },
+  { key: "full", title: "Swipe anywhere", text: "Left, right, up and down, a few times each. This one fills the screen, like the game.", full: true },
+  { key: "fullScroll", title: "Swipe anywhere", text: "Left, right, up and down, a few times each. Same as before, with one small change behind the scenes.", full: true, scroll: true },
+  { key: "edges", title: "Swipe in from the edges", text: "Start right on the left edge and swipe right, then from the right edge to the left, then from the top edge down.", full: true, scroll: true },
 ];
-const EXITS = [
-  { key: "telegram", label: "Open with Telegram" },
-  { key: "intent", label: "Open in a browser", android: true },
-  { key: "chrome", label: "Open in Chrome", android: true },
-  { key: "window", label: "Open in a new window" },
-];
-const android = /Android/i.test(navigator.userAgent);
-const target = location.origin + location.pathname;
-
-// The steps, in order.
-const steps = [
-  { kind: "where" },
-  ...BOXES.map((box) => ({ kind: "box", box })),
-  ...EXITS.map((exit) => ({ kind: "exit", exit })),
-  { kind: "done" },
-];
+const steps = [{ kind: "where" }, ...BOXES.map((box) => ({ kind: "box", box })), { kind: "outside" }, { kind: "done" }];
 const app = document.getElementById("app");
-const next = () => { state.step++; state.left = null; send(); show(); };
+const next = () => { state.step++; state.asking = false; unscroll(); send(); show(); };
+
+// The page made a few px larger than the screen and scrolled into the middle of that, so
+// it can scroll a little every way (the browser's scrolling may then win the swipe over its
+// own close gesture).
+const scrollable = () => {
+  document.documentElement.style.cssText = "overflow: auto";
+  document.body.style.cssText = "width: calc(100vw + 8px); height: calc(100vh + 8px)";
+  scrollTo(4, 4);
+};
+const unscroll = () => { document.documentElement.style.cssText = ""; document.body.style.cssText = ""; };
 
 function show() {
-  let s = steps[state.step];
-  // Skip the ways out when not in Telegram, and the Android ones elsewhere.
-  while (s && s.kind === "exit" && (state.results.where !== "telegram" || (s.exit.android && !android))) s = steps[++state.step];
+  const s = steps[state.step];
   save();
-  const counter = `<p class="count">Step ${Math.min(state.step + 1, steps.length)} of ${steps.length}</p>`;
-  // Back after the page closed during a box: ask what happened.
-  if (state.left !== null && state.left !== undefined && s?.kind === "box") {
-    app.innerHTML = `${counter}<h1>Welcome back!</h1><p>Did swiping in the box close the page or go back?</p>
-      <div class="buttons"><button data-a="yes">Yes, it closed</button><button class="light" data-a="no">No, I closed it myself</button></div>`;
-    app.onclick = (e) => {
-      const a = e.target.closest("button")?.dataset.a;
-      if (!a) return;
-      const r = (state.results.boxes[s.box.key] ??= {});
-      r.closedPage = a === "yes";
-      next();
-    };
-    return;
-  }
+  const counter = `<p class="count">Step ${state.step + 1} of ${steps.length}</p>`;
+  const answer = (handler) => (app.onclick = (e) => { const a = e.target.closest("button")?.dataset.a; if (a) handler(a); });
   if (s.kind === "where") {
-    app.innerHTML = `${counter}<h1>Which browser is showing this page?</h1><p>Telegram's own browser has Telegram's bar at the top (✕, share, ⋮).</p>
+    app.innerHTML = `${counter}<h1>Which browser is showing this page?</h1><p>Telegram's own browser has Telegram's bar at the top (✕ and ⋮, or Done on iPhone).</p>
       <div class="buttons"><button data-a="telegram">Telegram's browser</button><button class="light" data-a="other">Chrome, Safari or another browser</button></div>`;
-    app.onclick = (e) => {
-      const a = e.target.closest("button")?.dataset.a;
-      if (!a) return;
-      state.results.where = a;
-      state.results.detected = detected;
-      next();
-    };
+    answer((a) => { state.results.where = a; state.results.detected = detected; next(); });
     return;
   }
   if (s.kind === "box") {
-    const { box } = s, r = (state.results.boxes[box.key] ??= {});
-    r.swipes = r.swipes ?? []; r.label = box.label;
-    app.innerHTML = box.edge
-      ? `${counter}<h1>Swipe in from the edge</h1><p>Start with your finger right on the left edge of the screen and swipe right, then from the right edge to the left. If the page closes, just open the link again.</p>
-      <div class="box" id="box" style="${box.style}; margin: 0 -20px; border-radius: 0">Swipe from the edges<small id="n">0 swipes</small></div>`
-      : `${counter}<h1>Swipe left and right in the box</h1><p>A few times, fast and slow. If the page closes, just open the link again.</p>
-      <div class="box" id="box" style="${box.style ?? ""}">Swipe here<small id="n">0 swipes</small></div>`;
-    app.innerHTML += `
-<div class="buttons"><button id="next" disabled>Next</button></div>`;
+    const { box } = s, r = (state.results.boxes[box.key] ??= { swipes: [] });
+    // After the swipes (or after the page closed during them): did the browser try to close?
+    if (state.asking) {
+      app.innerHTML = `${counter}<h1>Did the browser try to close?</h1><p>While you swiped: did the page slide away, shrink, go back or close, even for a moment?</p>
+        <div class="buttons"><button data-a="yes">Yes</button><button class="light" data-a="no">No, it stayed put</button></div>`;
+      answer((a) => { r.triedToClose = a === "yes"; next(); });
+      return;
+    }
+    if (box.scroll) scrollable();
+    app.innerHTML = box.full
+      ? `<div class="box full" id="box">${counter.replace('class="count"', 'class="count" style="color:#dfe5ec"')}<h1>${box.title}</h1><p>${box.text}</p><small id="n">0 swipes</small><div class="buttons"><button id="next" disabled>Done swiping</button></div></div>`
+      : `${counter}<h1>${box.title}</h1><p>${box.text}</p><div class="box" id="box">Swipe here<small id="n">0 swipes</small></div><div class="buttons"><button id="next" disabled>Done swiping</button></div>`;
     const el = document.getElementById("box"), n = document.getElementById("n"), btn = document.getElementById("next");
-    if (box.block) el.addEventListener(box.block, (e) => e.preventDefault(), { passive: false });
-    let down = null, made = 0;
-    el.addEventListener("pointerdown", (e) => { down = { x: e.clientX, y: e.clientY, t: performance.now(), moves: 0, fromEdge: Math.min(e.clientX, innerWidth - e.clientX) < 24 }; state.left = "box"; save(); });
+    el.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
+    let down = null, made = r.swipes.length;
+    n.textContent = `${made} swipes`;
+    el.addEventListener("pointerdown", (e) => {
+      if (e.target.closest("button")) return;
+      down = { x: e.clientX, y: e.clientY, t: performance.now(), moves: 0 };
+      state.inSwipe = box.key; save();
+    });
     el.addEventListener("pointermove", (e) => { if (down) { down.moves++; down.lx = e.clientX; down.ly = e.clientY; } });
-    const end = (how) => (e) => {
+    const end = (how) => () => {
       if (!down) return;
-      r.swipes.push({ how, x0: Math.round(down.x), fromEdge: down.fromEdge, dx: Math.round((down.lx ?? down.x) - down.x), dy: Math.round((down.ly ?? down.y) - down.y), ms: Math.round(performance.now() - down.t), moves: down.moves });
-      down = null; made++;
-      state.left = null; save();
-      n.textContent = `${made} swipe${made === 1 ? "" : "s"}`;
-      if (made >= 3) btn.disabled = false;
+      const dx = Math.round((down.lx ?? down.x) - down.x), dy = Math.round((down.ly ?? down.y) - down.y);
+      const way = Math.abs(dx) < 30 && Math.abs(dy) < 30 ? "tap" : Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : dy > 0 ? "down" : "up";
+      r.swipes.push({ how, way, x0: Math.round(down.x), y0: Math.round(down.y), dx, dy, ms: Math.round(performance.now() - down.t), moves: down.moves });
+      down = null; made++; state.inSwipe = null; save();
+      n.textContent = `${made} swipes`;
+      if (made >= 4) btn.disabled = false;
     };
     el.addEventListener("pointerup", end("up"));
     el.addEventListener("pointercancel", end("taken by the browser"));
-    app.onclick = (e) => { if (e.target.id === "next") { r.closedPage = false; next(); } };
+    btn.addEventListener("click", () => { state.asking = true; unscroll(); send(); show(); });
+    app.onclick = null;
     return;
   }
-  if (s.kind === "exit") {
-    const { exit } = s;
-    app.innerHTML = `${counter}<h1>Can this get you out of Telegram?</h1><p>Tap the button. Then come back here (or to this page in the browser it opened) and say what happened.</p>
-      <div class="buttons"><button id="go">${exit.label}</button></div>
-      <div id="after"><p>What happened?</p>
-      <div class="buttons"><button class="light" data-a="browser">My phone's browser opened</button><button class="light" data-a="telegram">It stayed in Telegram</button><button class="light" data-a="nothing">Nothing happened</button></div></div>`;
-    app.onclick = (e) => {
-      const b = e.target.closest("button");
-      if (!b) return;
-      if (b.id === "go") {
-        state.results.exits[exit.key] = { tapped: true };
-        save();
-        const url = `${target}?from=${exit.key}`;
-        const intent = (pkg) => `intent://${location.host}${location.pathname}?from=${exit.key}#Intent;scheme=https;${pkg ? `package=${pkg};` : ""}S.browser_fallback_url=${encodeURIComponent(url)};end`;
-        if (exit.key === "telegram") proxy?.postEvent ? proxy.postEvent("web_app_open_link", JSON.stringify({ url, try_browser: "chrome" })) : (state.results.exits.telegram.noProxy = true);
-        if (exit.key === "intent") location.href = intent("");
-        if (exit.key === "chrome") location.href = intent("com.android.chrome");
-        if (exit.key === "window") window.open(url, "_blank");
-        return;
-      }
-      if (b.dataset.a) {
-        (state.results.exits[exit.key] ??= {}).outcome = b.dataset.a;
-        next();
-      }
-    };
+  if (s.kind === "outside") {
+    app.innerHTML = `${counter}<h1>Now open this page in your phone's own browser</h1>
+      <p>In Telegram's browser: tap ⋮ (top right) on Android, or the ⋯ / share menu on iPhone, and choose <b>Open in browser</b> (or Open in Safari / Chrome). Then do the test there too.</p>
+      <div class="buttons"><button data-a="opened">Done, it opened in my browser</button><button class="light" data-a="couldnt">I couldn't find a way</button><button class="light" data-a="already">I'm already in my own browser</button></div>`;
+    answer((a) => { state.results.openOutside = a; next(); });
     return;
   }
-  app.innerHTML = `<h1>All done, thanks!</h1><p>The results have been sent. You can close this page.</p><div class="buttons"><button class="light" onclick="location.href='?restart'">Start again</button></div>`;
-  app.onclick = null;
+  app.innerHTML = `<h1>All done, thanks!</h1><p>The results have been sent. You can close this page.</p><div class="buttons"><button class="light" data-a="restart">Start again</button></div>`;
+  answer(() => (location.href = "?restart"));
   send();
 }
 
-// Leaving mid-box (a swipe that closed the page, say): send what is known so far.
-addEventListener("pagehide", () => { if (state.left) (state.results.leftDuring ??= []).push(steps[state.step]?.box?.key ?? state.step); send(true); });
-// Ask Telegram (if it listens) not to take swipes, as a Mini App can.
-try { proxy?.postEvent?.("web_app_setup_swipe_behavior", JSON.stringify({ allow_vertical_swipe: false })); } catch {}
+// The page left in the middle of a swipe (a swipe that closed it, say): note it, and ask
+// about it when it is opened again.
+addEventListener("pagehide", () => {
+  if (state.inSwipe) { (state.results.leftDuring ??= []).push(state.inSwipe); state.inSwipe = null; state.asking = true; }
+  send(true);
+});
 show();
 </script>
 </body>
