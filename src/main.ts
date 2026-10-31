@@ -3,7 +3,6 @@ import type { Point, Rect } from "./camera";
 import type { Difficulty } from "./difficulty";
 import { MAX_STARS, medalWon, scoreTrack, starsEarned } from "./stars";
 import { finishTimes } from "./score-track";
-import { ANSWER_KEY, browserCheck, SENT_KEY } from "./browser-check";
 import { bestKnown, medal, viewCentre, type Goal } from "./goal";
 import type { GoalRequest } from "./goal-worker";
 import { Gestures } from "./gestures";
@@ -121,9 +120,6 @@ const device = (() => {
     return crypto.randomUUID();
   }
 })();
-// Is this Telegram's in-app browser (where sideways swipes close the page)? Ask, record
-// how swipes arrive, and offer the phone's own browser.
-if (!shared) browserCheck({ device, commit: __COMMIT__ });
 function upload(): Promise<boolean> {
   unsent = 0;
   return sendPlayData(true);
@@ -468,14 +464,12 @@ const gestures = new Gestures(scene, {
 function forgetEverything(): void {
   log({ e: "reset", goal: scene.goal?.id ?? null });
   const kept = JSON.stringify(playLog), debugOn = load<boolean>(DEBUG_KEY, false), code = load<number>(CODE_KEY, 0);
-  const browser = [ANSWER_KEY, SENT_KEY].map((k) => [k, localStorage.getItem(k)] as const);
   forget();
   try {
     localStorage.setItem(LOG_KEY, kept);
     localStorage.setItem(DEVICE_KEY, device);
     localStorage.setItem(DEBUG_KEY, JSON.stringify(debugOn));
     localStorage.setItem(CODE_KEY, JSON.stringify(code));
-    for (const [k, v] of browser) if (v !== null) localStorage.setItem(k, v);
   } catch {
     // No storage: nothing to keep.
   }
