@@ -490,12 +490,22 @@ function forget(): void {
   }
 }
 
+// Safari has fullscreen only with the webkit prefix, and on iPhone not at all (only for
+// video): there the block says how to get a full screen instead.
+type Webkit = { webkitFullscreenElement?: Element | null; webkitExitFullscreen?: () => void; webkitRequestFullscreen?: () => void };
+const fullscreenElement = () => document.fullscreenElement ?? (document as unknown as Webkit).webkitFullscreenElement ?? null;
 function toggleFullscreen(): void {
   // Runs inside the tap's pointerup, which counts as the user gesture fullscreen needs.
-  if (document.fullscreenElement) void document.exitFullscreen();
-  else void document.documentElement.requestFullscreen?.().catch(() => {});
+  const doc = document as unknown as Webkit, root = document.documentElement as unknown as Webkit & HTMLElement;
+  if (fullscreenElement()) void (document.exitFullscreen?.() ?? doc.webkitExitFullscreen?.());
+  else if (root.requestFullscreen) void root.requestFullscreen().catch(() => {});
+  else if (root.webkitRequestFullscreen) root.webkitRequestFullscreen();
+  else if (matchMedia("(display-mode: standalone)").matches || (navigator as unknown as { standalone?: boolean }).standalone) note("Already as full screen as it gets", 2500);
+  else if ("TelegramWebviewProxy" in window) note("Full screen isn't available here. Open the game in Safari (menu → Open in Safari), then Share → Add to Home Screen, and play from the icon.", 6000);
+  else note("Full screen isn't available in this browser. On iPhone: Share → Add to Home Screen, and play from the icon.", 6000);
 }
 document.addEventListener("fullscreenchange", () => redraw());
+document.addEventListener("webkitfullscreenchange", () => redraw());
 
 // For tests and debugging in the console.
 Object.assign(window, {
@@ -626,7 +636,7 @@ function redraw(): void {
     if (shake && shake.born < 0) shake.born = now;
     if (shake && now > shake.born + SHAKE_MS) shake = null;
     draw(canvas, scene, {
-      fullscreen: document.fullscreenElement !== null,
+      fullscreen: fullscreenElement() !== null,
       density: slider?.ui === "density" ? slider.at : (tries - MIN_TRIES) / (MAX_TRIES - MIN_TRIES),
       fps: showingFps,
       sliding: moving,
@@ -723,12 +733,15 @@ async function sendPlayData(quiet = false): Promise<boolean> {
   }
 }
 /** A short note in the middle of the view for a couple of seconds. */
-function note(text: string): void {
+/** Until when a note stays up (hovering and pointers leaving do not hide it). */
+let noteUntil = 0;
+function note(text: string, ms = 2500): void {
+  noteUntil = performance.now() + ms;
   tip.textContent = text;
   tip.style.display = "block";
   tip.style.left = `${(innerWidth - tip.offsetWidth) / 2}px`;
   tip.style.top = `${innerHeight / 2}px`;
-  setTimeout(() => (tip.style.display = "none"), 2500);
+  setTimeout(() => (tip.style.display = "none"), ms);
 }
 /** Moves made since history had `begun` entries, where moving one block several times in a
  * row counts once (as in the fewest-moves count). */
@@ -775,7 +788,7 @@ function showTip(e: PointerEvent): void {
   const ui = hovering ? blockAt(visibleBlocks(scene), world)?.ui : null;
   const text = ui ? tooltip(ui) : hovering ? goalTip(world) : null;
   if (!text) {
-    tip.style.display = "none";
+    if (performance.now() >= noteUntil) tip.style.display = "none";
     return;
   }
   tip.textContent = text;
@@ -784,7 +797,7 @@ function showTip(e: PointerEvent): void {
   tip.style.top = `${Math.min(innerHeight - tip.offsetHeight - 8, e.clientY + 16)}px`;
 }
 canvas.addEventListener("pointerleave", () => {
-  tip.style.display = "none";
+  if (performance.now() >= noteUntil) tip.style.display = "none";
   scene.hover = null;
   redraw();
 });
