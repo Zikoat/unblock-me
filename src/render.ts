@@ -19,6 +19,7 @@ export const COLORS = {
   // score-track.ts); reached goals are gold: the block, and its target's area and outline,
   // which show where it was once the block has moved away.
   target: "rgba(255, 127, 95, 0.18)",
+  targetLine: "rgba(233, 108, 82, 0.7)",
   done: "#d49a2a",
   doneTarget: "rgba(240, 176, 40, 0.2)",
   doneLine: "rgba(205, 140, 20, 0.6)",
@@ -131,8 +132,8 @@ export function draw(
     const { goal: g, cells } = targets[i]!;
     const own = new Path2D();
     area(cells, own);
-    // The current target: a pale coral area. A reached one: a pale gold area with an
-    // outline, faded out while its block stands on it (no ring round the block).
+    // The current target: a pale coral area with an outline. A reached one: a pale gold area
+    // with an outline, faded out while its block stands on it (no ring round the block).
     const shown = g === goal ? 1 : areaShown(g, now);
     if (shown <= 0) return;
     ctx.save();
@@ -141,11 +142,10 @@ export function draw(
     ctx.fillStyle = g === goal ? COLORS.target : COLORS.doneTarget;
     ctx.fill(own);
     ctx.restore();
-    if (g === goal) return;
     ctx.save();
     ctx.globalAlpha = shown;
     outside(targets.filter((_, j) => j !== i));
-    ctx.strokeStyle = COLORS.doneLine;
+    ctx.strokeStyle = g === goal ? COLORS.targetLine : COLORS.doneLine;
     ctx.lineWidth = 2;
     ctx.stroke(own);
     ctx.restore();

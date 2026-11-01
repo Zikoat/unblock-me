@@ -542,8 +542,11 @@ const browser = await chromium.launch();
   // Row 4, walls at x -4 and 3: r (x -3..-2) can go right to x 1, where the target is.
   // n (column 0, rows 6..7) can later be pushed up as the next goal's red block.
   await place([...UI, Wall(-4, 4), H("r", -3, 4), Wall(3, 4), V("n", 0, 6)], { id: "r", target: { x: 1, y: 4 }, solution: [] });
-  // The target has no outline: just past its end it is the plain background.
-  check((await colorAt(page, cell(1.5, 0)[0], cell(0, 4)[1] - 6)) === "background", "the target has no outline");
+  // The target has a coral outline at its edge (3 px outside the cells), and the plain
+  // background just past it.
+  const outline = await rgbAt(page, cell(1.5, 0)[0], cell(0, 4)[1] - 3);
+  check(outline[0] - outline[2] > 60, `the target has a coral outline (${outline.join(",")})`);
+  check((await colorAt(page, cell(1.5, 0)[0], cell(0, 4)[1] - 7)) === "background", "with the plain background past it");
   await page.evaluate(() => (unblock.frames = []));
   await tap(cell(-2, 4.5));
   check((await block(page, "r")).x === 1, "a tap pushes the red block onto its target");
