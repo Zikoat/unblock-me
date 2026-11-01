@@ -107,7 +107,7 @@ export type TournamentOptions = GoalOptions & {
   tuning?: Tuning;
 };
 
-export type Ranked = Goal & { difficulty: Difficulty; distance: number };
+export type Ranked = Goal & { difficulty: Difficulty; distance: number; train?: number };
 
 /** Tournament settings by effort level: 0 for a goal the player is waiting for (a few
  * hundred ms), 1 for one made ahead (about a second), 2 and 3 for more time (several
@@ -128,15 +128,34 @@ export function makeGoalHard(layout: Layout, near: Point, options: GoalOptions =
 /** How a goal's difficulty is weighed against its distance: difficulty / distance^alpha.
  * 0 ranks by difficulty alone (nearly always the furthest cell: each nearer cell's proof
  * is a prefix of the further one's); 1 by difficulty per cell. */
-export const tradeoff = { alpha: 0.6 }; // (reports/play-analysis.html)
-export const balance = (g: { difficulty: Difficulty; distance: number }) => g.difficulty.score / Math.pow(g.distance, tradeoff.alpha);
+/** And each block on the red block's own track between it and the target (see onTrack)
+ * multiplies the balance by `train`: they have to be pushed ahead of it, some past the
+ * target, which is tedious rather than hard (reports/blocks-on-track.html). */
+export const tradeoff = { alpha: 0.6, train: 0.5 }; // (reports/play-analysis.html)
+export const balance = (g: { difficulty: Difficulty; distance: number; train?: number }) => (g.difficulty.score / Math.pow(g.distance, tradeoff.alpha)) * Math.pow(tradeoff.train, g.train ?? 0);
+
+/** Blocks on red block `id`'s own track (lying the same way, in its lane) between where it
+ * is and the far end of `target`: they can only be pushed ahead of it. */
+export function onTrack(board: Board, id: string, target: Point): number {
+  const red = board.block(id), horizontal = red.w > red.h;
+  const from = horizontal ? red.x : red.y, to = horizontal ? target.x : target.y, size = horizontal ? red.w : red.h;
+  const seen = new Set<string>();
+  for (let p = Math.min(from, to); p < Math.max(from, to) + size; p++) {
+    const o = horizontal ? board.at(p, red.y) : board.at(red.x, p);
+    if (o === null || o === id || seen.has(o)) continue;
+    const b = board.block(o);
+    if (horizontal ? b.w > b.h && b.y === red.y : b.h > b.w && b.x === red.x) seen.add(o);
+  }
+  return seen.size;
+}
 
 /** The push search's targets, ranked by the difficulty measure. */
 export function makeGoalTournament(layout: Layout, near: Point, options: TournamentOptions = {}): Ranked | null {
   const { moved = new Map(), avoid = [], rough = 3_000, exact = 50_000, finalists = 4, stride = 1, tuning = { prune: true, lookahead: true, goalBudget: 50_000 } } = options;
   const board = new Board(layout, moved);
   const all = pushes(board, layout, near, { ...options, perCell: options.perCell ?? 6 }, tuning);
-  // Every cell of every push is a candidate, measured roughly.
+  // Every cell of every push is a candidate, measured roughly; each notes the blocks on its
+  // red block's track on the way, for the balance's penalty.
   const candidates: Ranked[] = [];
   for (const p of all) {
     const red = board.block(p.id);
@@ -147,7 +166,7 @@ export function makeGoalTournament(layout: Layout, near: Point, options: Tournam
       const solution = simplifyFast(board, p.raw.slice(0, step.moves));
       const goal = { id: p.id, target: step.at, solution };
       const d = measure(board, goal, { limit: rough });
-      candidates.push({ ...goal, difficulty: d, distance: k + 1 });
+      candidates.push({ ...goal, difficulty: d, distance: k + 1, train: onTrack(board, p.id, step.at) });
     }
   }
   // Rank by difficulty for the distance (a lower bound counts as the moves): a near goal

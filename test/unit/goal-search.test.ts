@@ -3,7 +3,7 @@
 import { describe, expect, test } from "bun:test";
 import { Board } from "../../src/board";
 import { replay } from "../../src/frozen";
-import { makeGoalDeep, makeGoalHard, makeGoalTournament } from "../../src/goal-search";
+import { makeGoalDeep, makeGoalHard, makeGoalTournament, onTrack } from "../../src/goal-search";
 import { fixedLayout, randomLayout, type Placed } from "../../src/layout";
 import { isHorizontal } from "../../src/rules";
 
@@ -50,5 +50,25 @@ describe("goal search", () => {
         for (const a of avoid) expect(goal.target.x < a.x + a.width && goal.target.x + red.w > a.x && goal.target.y < a.y + a.height && goal.target.y + red.h > a.y).toBe(false);
       }
     }
+  }, 30_000);
+});
+
+describe("blocks on the red block's track", () => {
+  test("only blocks lying its way in its lane, between it and the far end of the target", () => {
+    // r at x 0..1; a and b on its row (a on the way, b past the target); v crosses the row.
+    const board = new Board(fixedLayout([H("r", 0, 0), H("a", 3, 0), V("v", 5, 0), H("b", 9, 0)]));
+    expect(onTrack(board, "r", { x: 6, y: 0 })).toBe(1);
+    expect(onTrack(board, "r", { x: 8, y: 0 })).toBe(2);
+    expect(onTrack(board, "r", { x: 1, y: 0 })).toBe(0);
+  });
+
+  test("goals made with the penalty rarely have any", () => {
+    let with_ = 0;
+    for (const tries of [7, 15]) for (const seed of [1, 2, 3]) {
+      const layout = randomLayout(seed * 31 + tries, { tries });
+      const g = makeGoalHard(layout, { x: seed * 9, y: 0 }, {}, 0)!;
+      if (onTrack(new Board(layout), g.id, g.target) > 0) with_++;
+    }
+    expect(with_).toBeLessThanOrEqual(1);
   }, 30_000);
 });
