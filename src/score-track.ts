@@ -49,7 +49,9 @@ function star(ctx: CanvasRenderingContext2D, x: number, y: number, s: number, lo
     ctx.lineWidth = s * 0.06;
     ctx.strokeStyle = STAR_EDGE;
   } else {
-    ctx.fillStyle = "rgba(255, 255, 255, 0.25)";
+    // A star still in reach has a solid centre, near the pale track it sits on; one not won
+    // stays see-through.
+    ctx.fillStyle = look === "gray" ? "rgba(255, 255, 255, 0.25)" : "#f7e7e3";
     ctx.fill();
     ctx.lineWidth = s * 0.09;
     ctx.strokeStyle = look === "gray" ? TRACK_COLORS.gray : STAR_EDGE;
