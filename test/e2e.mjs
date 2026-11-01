@@ -107,11 +107,17 @@ const browser = await chromium.launch();
   // Without the debug UI only the fullscreen block is there.
   await fresh({ debug: false });
   check((await page.evaluate(() => unblock.visibleBlocks().filter((b) => b.ui).map((b) => b.ui).join())) === "fullscreen", "only the fullscreen block shows at first");
-  // Five quick taps on the empty board turn the debug UI on (and reset).
-  await place([]);
-  const debugReload = page.waitForEvent("load", { timeout: 5000 }).then(() => true, () => false);
-  for (let i = 0; i < 5; i++) await tap(cell(0.5, 3.5));
-  check(await debugReload, "five quick taps on the empty board reset the game");
+  // With the red block stuck: tapping the empty board, then the red block (it shakes), five
+  // times over turns the debug UI on (and resets). A slip starts it over.
+  await place([Wall(-1, 4), H("r", 0, 4), Wall(2, 4)], { id: "r", target: { x: 4, y: 4 }, solution: [] });
+  const debugReload = page.waitForEvent("load", { timeout: 8000 }).then(() => true, () => false);
+  await tap(cell(0.5, 2.5)); // a tap, then a second tap where the red block should be: starts over
+  for (let i = 0; i < 5; i++) {
+    await tap(cell(0.5, 2.5));
+    await tap(cell(1, 4.5));
+    if (i === 3) check(await page.evaluate(() => localStorage.getItem("unblock-me:debug")) === null, "four rounds are not enough");
+  }
+  check(await debugReload, "five rounds of empty board then the stuck red block reset the game");
   await frame(page);
   await page.waitForTimeout(300);
   const uis = await page.evaluate(() => [unblock.visibleBlocks().filter((b) => b.ui).length, localStorage.getItem("unblock-me:debug")]);

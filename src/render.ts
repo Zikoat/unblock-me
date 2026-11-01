@@ -595,10 +595,10 @@ function drawBand(ctx: CanvasRenderingContext2D, b: Band, dpr: number): void {
   ctx.fillRect(b.x, b.y, b.width, b.height);
 }
 
-/** The arrow to the UI blocks (the fullscreen block, or reset with the debug UI), when they
- * are out of view (tapping it goes there); none when there are none. */
+/** The arrow to the fullscreen block, when it is out of view (tapping it goes there); none
+ * where there is no fullscreen block. */
 export function uiArrow(scene: Scene): EdgeArrow | null {
-  const b = scene.layout.byId("fullscreen") ?? scene.layout.byId("reset");
+  const b = scene.layout.byId("fullscreen");
   return b ? edgeArrow(scene, onScreen(scene, { x: b.x, y: b.y, width: b.w, height: b.h })) : null;
 }
 

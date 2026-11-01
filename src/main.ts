@@ -25,9 +25,10 @@ const CAMERA_KEY = "unblock-me:camera"; // where the view is, kept across reload
 const LOG_KEY = "unblock-me:log"; // the play log; kept across resets
 const DEVICE_KEY = "unblock-me:device"; // names this browser's automatic uploads; kept across resets
 const DEBUG_KEY = "unblock-me:debug"; // whether the debug UI row is on; kept across resets
-/** Tapping the empty board this many times in a row, quickly, with no block touched between,
- * turns the debug UI on (for good) and resets, since its blocks change the board. */
-const DEBUG_TAPS = 5, DEBUG_TAP_MS = 3000;
+/** With the red block stuck, tapping the empty board and then the red block (which shakes)
+ * this many times over, with nothing else between, turns the debug UI on (for good) and
+ * resets, since its blocks change the board. Unlikely by accident. */
+const DEBUG_ROUNDS = 5;
 /** The density slider's track, as a share of its block (see densityIcon). */
 const TRACK = 0.52;
 
@@ -373,14 +374,15 @@ function takeBack(): void {
 }
 undoButton.addEventListener("click", takeBack);
 
-/** Count a tap on the empty board towards DEBUG_TAPS (anything else starts it over); true
- * when they are all there, which turns the debug UI on. */
-let debugTaps: number[] = [];
-function debugCode(tap: boolean): boolean {
+/** Count a step of the debug sequence: a tap on the empty board ("tap"), then a tap on the
+ * stuck red block ("red"); anything else (null) starts it over. True once it is complete,
+ * which turns the debug UI on. */
+let debugSteps = 0;
+function debugCode(step: "tap" | "red" | null): boolean {
   if (debug) return false;
-  const now = performance.now();
-  debugTaps = tap ? [...debugTaps.filter((t) => now - t < DEBUG_TAP_MS), now] : [];
-  if (debugTaps.length < DEBUG_TAPS) return false;
+  const want = debugSteps % 2 === 0 ? "tap" : "red";
+  debugSteps = step === want ? debugSteps + 1 : step === "tap" ? 1 : 0;
+  if (debugSteps < DEBUG_ROUNDS * 2) return false;
   try {
     localStorage.setItem(DEBUG_KEY, "true");
   } catch {
@@ -391,12 +393,12 @@ function debugCode(tap: boolean): boolean {
 
 const gestures = new Gestures(scene, {
   onChange: () => {
-    debugCode(false);
+    debugCode(null);
     save();
     reachGoal(performance.now()); // a drag lands at once; a tap's slide reaches it at its end
   },
   onPush: (move) => {
-    debugCode(false);
+    debugCode(null);
     animate(move);
     // A tap that sends the red block onto its target: if the target is not all in view, the
     // view glides there first and the block moves after, so the finish shows.
@@ -412,12 +414,12 @@ const gestures = new Gestures(scene, {
     }
   },
   onStuck: (id) => {
-    debugCode(false);
+    if (debugCode(id === scene.goal?.id ? "red" : null)) forgetEverything();
     shake = { id, born: -1 };
     redraw();
   },
   onUi: (ui) => {
-    debugCode(false);
+    debugCode(null);
     if (ui === "reset") {
       forgetEverything();
     } else if (ui === "border") {
@@ -821,7 +823,7 @@ function markerAt(e: PointerEvent): Point | null {
       return { x: goal.target.x + red.w / 2, y: goal.target.y + red.h / 2 };
     }
   }
-  const home = scene.layout.byId("fullscreen") ?? scene.layout.byId("reset");
+  const home = scene.layout.byId("fullscreen");
   if (home && near(uiArrow(scene))) return { x: home.x + 0.5, y: home.y + 0.5 };
   return null;
 }
@@ -863,7 +865,7 @@ canvas.addEventListener("pointerup", (e) => {
   gestures.up(e.pointerId, point(e));
   if (scene.circle && scene.circle !== tapped) {
     ripples.push({ at: scene.circle, born: -1 }); // a tap on the background
-    if (debugCode(true)) forgetEverything();
+    if (debugCode("tap")) forgetEverything();
   }
   redraw();
 });
