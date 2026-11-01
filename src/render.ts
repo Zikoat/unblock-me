@@ -4,6 +4,7 @@ import { worldRect } from "./camera";
 import { intersects, UNIT, type Block } from "./layout";
 import { drawScoreTrack, FINISH, finishTimes, type TraceEntry } from "./score-track";
 import { bestKnown, type Goal } from "./goal";
+import { onBlock, over, quake, screenFlash, squash, under, type Fx } from "./finish-fx";
 import { borderOnScreen, latticeRect, quickPush, visibleBlocks, whereIs, type Scene } from "./scene";
 
 export const COLORS = {
@@ -89,7 +90,7 @@ export function draw(
     /** Moves made on the current goal so far, for its score track. */
     used?: number;
     /** The goal just reached, and when: its score track plays the finish. */
-    finish?: { id: string; born: number } | null;
+    finish?: { id: string; born: number; dir?: { x: number; y: number } } | null;
     now?: number;
   },
 ): void {
@@ -105,6 +106,12 @@ export function draw(
   ctx.fillRect(0, 0, width, height);
 
   ctx.setTransform(dpr * camera.scale, 0, 0, dpr * camera.scale, dpr * camera.offsetX, dpr * camera.offsetY);
+  // The finish's effects round the block (finish-fx.ts); its hits jolt the whole board.
+  const fx = finishFx(scene, finish, now, worldRect(camera, { x: 0, y: 0, width, height }));
+  if (fx) {
+    const q = quake(fx);
+    ctx.translate(q.x, q.y);
+  }
 
   const view = worldRect(camera, { x: 0, y: 0, width, height });
   const goal = scene.goal;
@@ -187,6 +194,7 @@ export function draw(
   // Reached targets go under the blocks (their red blocks sit on them); the current one goes
   // over them, so it shows even where blocks stand on it.
   targets.forEach((t, i) => t.goal !== goal && drawTarget(i));
+  if (fx) under(ctx, fx);
 
   // The sliding block is drawn until its slide ends, even when it ends outside the view and
   // culling would leave it out.
@@ -233,6 +241,13 @@ export function draw(
     // A stuck block shakes along its axis, a few px each way, dying down.
     const st = shake?.id === block.id ? (now - shake.born) / SHAKE_MS : 1;
     const jolt = st >= 0 && st < 1 ? Math.sin(st * Math.PI * 4) * 4 * (1 - st) : 0; // two wiggles
+    const squashed = fx && block.id === finish?.id ? squash(fx) : null;
+    if (squashed) {
+      ctx.save();
+      ctx.translate(squashed.about.x, squashed.about.y);
+      ctx.scale(squashed.sx, squashed.sy);
+      ctx.translate(-squashed.about.x, -squashed.about.y);
+    }
     if (beat !== 1 || jolt) {
       ctx.save();
       if (jolt) ctx.translate(block.w > block.h ? jolt : 0, block.w > block.h ? 0 : jolt);
@@ -244,6 +259,12 @@ export function draw(
     ctx.beginPath();
     ctx.roundRect(block.x * UNIT + GAP, block.y * UNIT + GAP, block.w * UNIT - 2 * GAP, block.h * UNIT - 2 * GAP, block.wall ? 3 : 8);
     ctx.fill();
+    if (squashed) {
+      ctx.save();
+      ctx.clip();
+      onBlock(ctx, fx!);
+      ctx.restore();
+    }
     if (block.ui === "reset") resetIcon(ctx, block);
     else if (block.ui === "border") borderIcon(ctx, block, scene.border);
     else if (block.ui === "fullscreen") fullscreenIcon(ctx, block, fullscreen);
@@ -253,6 +274,7 @@ export function draw(
     else if (block.ui === "density") densityIcon(ctx, block, density);
     else if (block.ui === "home") homeIcon(ctx, block);
     if (beat !== 1 || jolt) ctx.restore();
+    if (squashed) ctx.restore();
   }
 
   // The new red block's way to its target: a red trail growing from it along its lane,
@@ -292,6 +314,7 @@ export function draw(
     else if (g.used !== undefined) drawScoreTrack(ctx, trackRect(cells), fewestOf(g), g.used, { t: finish?.id === g.id ? now - finish.born : Infinity, undone: g.undone, trace: finish?.id === g.id ? trace : undefined });
   }
   for (const s of sparkles) sparkle(ctx, s, now);
+  if (fx) over(ctx, fx);
 
   // A tap on the background: one small yellow ring spreading out and fading, like a drop
   // landing in water. Nothing stays.
@@ -305,6 +328,11 @@ export function draw(
       ctx.arc(ripple.at.x, ripple.at.y, (4 + 26 * spread) / scene.camera.scale, 0, Math.PI * 2);
       ctx.stroke();
     }
+  }
+
+  if (fx) {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    screenFlash(ctx, fx, width, height);
   }
 
   // The culling border is a screen thing, so it is drawn in screen pixels.
@@ -333,6 +361,24 @@ export function draw(
       if (toChange) drawPin(ctx, toChange, COLORS.moved, 11, dpr);
     }
   }
+}
+
+/** The finishing goal's effects at `now`, if one is finishing and its block shows. */
+function finishFx(scene: Scene, finish: { id: string; born: number; dir?: { x: number; y: number } } | null, now: number, view: Fx["view"]): Fx | null {
+  const g = finish && scene.done.find((d) => d.id === finish.id);
+  const block = g && scene.layout.byId(g.id), at = g && whereIs(scene, g.id);
+  if (!finish || !g || g.used === undefined || !block || !at) return null;
+  const times = finishTimes(bestKnown(g) ?? g.solution.length, g.used);
+  const t = now - finish.born;
+  if (t < 0 || t > times.end) return null;
+  return {
+    t,
+    times,
+    rect: { x: at.x * UNIT + GAP, y: at.y * UNIT + GAP, width: block.w * UNIT - 2 * GAP, height: block.h * UNIT - 2 * GAP },
+    dir: finish.dir ?? { x: 0, y: 0 },
+    medal: times.medalAt !== null && !g.undone,
+    view,
+  };
 }
 
 /** Between two #rrggbb colours, `k` of the way from `a` to `b`. */

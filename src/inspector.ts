@@ -18,7 +18,7 @@ export type InspectorHooks = {
   advance(now: number): unknown;
   paint(now: number, moving: unknown, to?: HTMLCanvasElement, trace?: TraceEntry[]): void;
   /** What is going on, for the time line. */
-  state(): { sliding: boolean; gliding: boolean; finishing: boolean; goal: string | null };
+  state(): { sliding: boolean; gliding: boolean; finishing: boolean; goal: string | null; parts: { name: string; from: number; to: number }[] };
   /** The sparkles' random numbers. */
   seed(random: () => number): void;
 };
@@ -165,14 +165,16 @@ export class Inspector {
     const off = document.createElement("canvas");
     this.samples = [];
     let goalBefore: string | null = null, nextAt = -1;
+    let parts: { name: string; from: number; to: number }[] = [];
     const limit = 12_000;
     this.replay(limit, (at) => {
       const s = this.hooks.state();
       goalBefore ??= s.goal;
       mark("View glides to the target", s.gliding, at);
       mark("Red block slides", s.sliding, at);
-      mark("Finish (stars, medal, gathering)", s.finishing, at);
-      if (nextAt < 0 && marks["Finish (stars, medal, gathering)"] && s.goal && s.goal !== goalBefore) nextAt = at;
+      if (s.finishing && !marks["Finish"]) parts = s.parts.map((p) => ({ ...p, from: p.from + at, to: p.to + at }));
+      mark("Finish", s.finishing, at);
+      if (nextAt < 0 && marks["Finish"] && s.goal && s.goal !== goalBefore) nextAt = at;
       if (at % 80 === 0 && (s.finishing || s.sliding)) {
         const trace: TraceEntry[] = [];
         this.hooks.paint(BASE + at, null, off, trace);
@@ -181,8 +183,10 @@ export class Inspector {
     });
     const end = Math.max(0, ...Object.values(marks).map((m) => m[1]));
     this.total = Math.ceil((nextAt > 0 ? nextAt + 900 : end + 400) / 100) * 100;
-    const colors = ["#8a8d91", "#d64545", "#d49a2a"];
-    this.spans = Object.entries(marks).map(([name, [from, to]], i) => ({ name, from, to, color: colors[i % colors.length]! }));
+    const colors = ["#8a8d91", "#d64545", "#d49a2a", "#e66b2e", "#2f9e6e", "#b84aa8", "#4bb3c4", "#c9a227"];
+    // The finish shows as its parts.
+    const shown = [...Object.entries(marks).filter(([name]) => name !== "Finish").map(([name, [from, to]]) => ({ name, from, to })), ...parts];
+    this.spans = shown.map((s, i) => ({ ...s, color: colors[i % colors.length]! }));
     if (nextAt > 0) this.spans.push({ name: "Next red block (throb, then its way)", from: nextAt, to: Math.min(this.total, nextAt + 900), color: "#3b6fd4" });
     this.slider.max = String(this.total);
   }

@@ -4,6 +4,7 @@ import type { Difficulty } from "./difficulty";
 import { MAX_STARS, medalWon, scoreTrack, starsEarned } from "./stars";
 import { finishTimes, type TraceEntry } from "./score-track";
 import { Inspector } from "./inspector";
+import { finishParts } from "./finish-fx";
 import { bestKnown, medal, viewCentre, type Goal } from "./goal";
 import type { GoalRequest } from "./goal-worker";
 import { Gestures } from "./gestures";
@@ -54,7 +55,8 @@ const TESTBED = {
     { id: "d", target: { x: -2, y: 7 }, solution: [], difficulty: known(1) },
   ] as Goal[],
 };
-let testbedNext = 0;
+// ?testbed=N starts at goal N (0 first).
+let testbedNext = Number(new URLSearchParams(location.search).get("testbed")) || 0;
 // ?board=<JSON list of placed blocks> opens exactly that board (for sharing a board, and
 // for tests). Nothing is stored while it is open (nor on the testbed).
 const shared = new URLSearchParams(location.search).get("board") ?? (testbed ? JSON.stringify(TESTBED.blocks) : null);
@@ -359,7 +361,7 @@ let ripples: { at: Point; born: number }[] = [];
 let shake: { id: string; born: number } | null = null;
 // The goal just reached: its score track plays the finish (stars fill, the medal, the row).
 // The next goal shows once the stars have gathered (`next`: where it is made).
-let finish: { id: string; born: number; end: number; next: Point } | null = null;
+let finish: { id: string; born: number; end: number; next: Point; dir: Point } | null = null;
 function reachGoal(now: number): void {
   const goal = scene.goal;
   if (!goal || !goalSolved(scene) || animation?.move.id === goal.id) return;
@@ -370,7 +372,10 @@ function reachGoal(now: number): void {
   log({ e: "reached", id: goal.id, used: goal.used });
   scene.done.push(goal);
   scene.goal = null;
-  finish = { id: goal.id, born: now, end: finishTimes(bestKnown(goal) ?? goal.solution.length, goal.used).end, next: goal.target };
+  // The way it slid in, for the landing's squash and jolt.
+  const last = scene.history.at(-1);
+  const dir = last?.id === goal.id ? { x: Math.sign(last.to.x - last.from.x), y: Math.sign(last.to.y - last.from.y) } : { x: 0, y: 0 };
+  finish = { id: goal.id, born: now, end: finishTimes(bestKnown(goal) ?? goal.solution.length, goal.used).end, next: goal.target, dir };
   const red = scene.layout.byId(goal.id)!;
   const at = whereIs(scene, goal.id)!;
   const cx = (at.x + red.w / 2) * UNIT;
@@ -976,7 +981,12 @@ const inspector: Inspector | null = !testbed ? null : new Inspector({
   },
   advance,
   paint: (now, moving, to, trace) => paint(now, moving as ReturnType<typeof sliding>, to, trace),
-  state: () => ({ sliding: !!animation && !(animation.wait && flight), gliding: !!flight, finishing: !!finish, goal: scene.goal?.id ?? null }),
+  state: () => {
+    const g = finish && scene.done.find((d) => d.id === finish!.id);
+    const times = g && g.used !== undefined ? finishTimes(bestKnown(g) ?? g.solution.length, g.used) : null;
+    const parts = g && times ? finishParts({ times, medal: times.medalAt !== null && !g.undone }) : [];
+    return { sliding: !!animation && !(animation.wait && flight), gliding: !!flight, finishing: !!finish, goal: scene.goal?.id ?? null, parts };
+  },
   seed(r) {
     random = r;
   },

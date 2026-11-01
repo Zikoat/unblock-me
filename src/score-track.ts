@@ -12,17 +12,20 @@ const TRACK_COLORS = { fill: "rgba(232, 115, 115, 0.85)", gray: "#c9ccd1" };
 const BLUE = "#3b6fd4", BLUE_DARK = "#2f5bb3", BLUE_DARKER = "#264a94";
 
 /** The finish, in ms from the moment the goal is reached. */
-export const FINISH = { START_MS: 250, STAR_MS: 420, POP_MS: 300, MEDAL_WAIT_MS: 700, MEDAL_MS: 1000, MEDAL_FALL: 0.35, HOLD_MS: 600, GATHER_MS: 900 };
+export const FINISH = { START_MS: 250, STAR_MS: 420, POP_MS: 300, MEDAL_WAIT_MS: 700, MEDAL_MS: 1000, MEDAL_FALL: 0.35, HOLD_MS: 800, GATHER_MS: 900, LAND_MS: 700 };
 
 /** When each part of the finish happens for a goal of `fewest` finished in `used` moves:
  * the stars kept fill from START_MS, STAR_MS apart; the medal (if under the game's best)
  * comes a moment after the last; then a pause, and the stars gather. */
-export function finishTimes(fewest: number, used: number): { kept: number; medalAt: number | null; gather: number; end: number } {
+export function finishTimes(fewest: number, used: number): { kept: number; starsEnd: number; medalAt: number | null; medalHit: number | null; gather: number; landed: number; end: number } {
   const kept = scoreTrack(fewest).lines.filter((at) => used <= at).length + 1;
   const starsEnd = FINISH.START_MS + (kept - 1) * FINISH.STAR_MS + FINISH.POP_MS;
   const medalAt = used < fewest ? starsEnd + FINISH.MEDAL_WAIT_MS : null;
+  const medalHit = medalAt === null ? null : medalAt + FINISH.MEDAL_FALL * FINISH.MEDAL_MS;
   const gather = (medalAt !== null ? medalAt + FINISH.MEDAL_MS : starsEnd) + FINISH.HOLD_MS;
-  return { kept, medalAt, gather, end: gather + FINISH.GATHER_MS };
+  // Once gathered, the row lands: a hop along it and a shine over the block.
+  const landed = gather + FINISH.GATHER_MS;
+  return { kept, starsEnd, medalAt, medalHit, gather, landed, end: landed + FINISH.LAND_MS };
 }
 
 /** One icon as drawn: which, where along the track (world px), its size and opacity (for the
@@ -30,9 +33,10 @@ export function finishTimes(fewest: number, used: number): { kept: number; medal
 export type TraceEntry = { name: string; along: number; scale: number; opacity: number };
 
 const clamp = (v: number) => Math.max(0, Math.min(1, v));
+const easeOut = (t: number) => 1 - (1 - t) ** 3;
 const easeInOut = (t: number) => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2);
-/** A filled star's pop: a damped spring from and back to its size, up to about 1.25. */
-const pop = (p: number) => 1 + 0.4 * Math.sin(1.5 * Math.PI * p) * (1 - p) ** 2;
+/** A filled star's pop: a damped spring from and back to its size, up to about 1.45. */
+const pop = (p: number) => 1 + 0.75 * Math.sin(1.5 * Math.PI * p) * (1 - p) ** 2;
 
 function starPath(ctx: CanvasRenderingContext2D, x: number, y: number, r: number): void {
   ctx.beginPath();
@@ -115,6 +119,55 @@ function sparkle(ctx: CanvasRenderingContext2D, x: number, y: number, r: number)
   ctx.fill();
 }
 
+/** A soft gold glow, `r` across, behind a star. */
+function halo(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, alpha: number): void {
+  if (alpha <= 0) return;
+  const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+  g.addColorStop(0, `rgba(255, 236, 140, ${alpha})`);
+  g.addColorStop(1, "rgba(255, 220, 90, 0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(x - r, y - r, 2 * r, 2 * r);
+}
+
+/** A star's fill: a white ring spreading from it and six sparkles thrown out (`p` 0..1). */
+function burst(ctx: CanvasRenderingContext2D, x: number, y: number, s: number, p: number, seed: number): void {
+  const out = easeOut(p);
+  ctx.save();
+  ctx.globalAlpha = 1 - p;
+  ctx.strokeStyle = "#ffffff";
+  ctx.lineWidth = s * 0.14 * (1 - p);
+  ctx.beginPath();
+  ctx.arc(x, y, s * (0.45 + 0.75 * out), 0, Math.PI * 2);
+  ctx.stroke();
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2 + seed * 0.7, d = s * (0.5 + 1.1 * out);
+    ctx.fillStyle = i % 2 ? STAR : "#ffffff";
+    sparkle(ctx, x + Math.cos(a) * d, y + Math.sin(a) * d, s * 0.22 * (1 - p * 0.7));
+  }
+  ctx.restore();
+}
+
+/** Sun rays: wedges of light turning slowly round (x, y), `r` long. */
+function rays(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, alpha: number, turn: number): void {
+  if (alpha <= 0) return;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(turn);
+  const g = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
+  g.addColorStop(0, `rgba(255, 230, 120, ${alpha})`);
+  g.addColorStop(1, "rgba(255, 210, 80, 0)");
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2;
+    ctx.moveTo(0, 0);
+    ctx.arc(0, 0, r, a, a + Math.PI / 14);
+    ctx.closePath();
+  }
+  ctx.fill();
+  ctx.restore();
+}
+
 /**
  * The track over `rect` (world px), along its long side: left to right, or bottom to top
  * for a tall one. `t` is ms since the goal was reached, null while it is played; past the
@@ -151,7 +204,7 @@ export function drawScoreTrack(
     const k = ((t ?? 0) - times.medalAt! - FINISH.MEDAL_FALL * FINISH.MEDAL_MS) / 220;
     if (k >= 0 && k < 1) {
       const shake = Math.sin(k * Math.PI * 5) * (1 - k) ** 2;
-      ctx.translate(shake * 4, Math.abs(shake) * 2.5);
+      ctx.translate(shake * 7, Math.abs(shake) * 4);
     }
   }
   /** Draw at local (u, v), the right way up whichever way the track runs. */
@@ -212,25 +265,65 @@ export function drawScoreTrack(
   // px past it, the block stops 3 px short of its cells), with room at each end.
   const sf = Math.min(T * 0.55, (L - 28) / ((row.length - 1) * 1.2 + 1.2));
   const size = s0 + (sf - s0) * ease;
-  const place = (key: number | "medal", u: number) => u + (L / 2 + (row.indexOf(key) - (row.length - 1) / 2) * sf * 1.2 - u) * ease;
+  const placeAt = (key: number | "medal", u: number, e: number) => u + (L / 2 + (row.indexOf(key) - (row.length - 1) / 2) * sf * 1.2 - u) * e;
+  const place = (key: number | "medal", u: number) => placeAt(key, u, ease);
+  /** Across the track while gathering: each icon swings out on an arc (alternate sides),
+   * and once landed hops in turn, a wave along the row. */
+  const swing = (key: number | "medal", e: number) => {
+    const r = row.indexOf(key), arc = Math.sin(Math.PI * e) * T * 0.75 * (r % 2 ? 1 : -1);
+    const h = finished ? (t - times.landed - r * 70) / 340 : -1;
+    return cv + arc - (h > 0 && h < 1 ? Math.sin(Math.PI * h) * T * 0.3 : 0);
+  };
+  const gathering = collapse > 0 && collapse < 1;
   for (const st of stars) {
     const k = kept.indexOf(st);
     const fillAt = FINISH.START_MS + k * FINISH.STAR_MS;
     const filled = finished && k >= 0 && t >= fillAt;
-    const scale = filled ? pop(clamp((t - fillAt) / FINISH.POP_MS)) : 1;
+    const since = filled ? t - fillAt : Infinity;
+    const scale = filled ? pop(clamp(since / FINISH.POP_MS)) : 1;
     const look = filled ? "filled" : k >= 0 ? "outline" : "gray";
+    const u = place(st.at, st.u), v = swing(st.at, ease);
+    // It spins in as it fills, and turns once more on its way to the row.
+    const turn = (filled ? -(1 - easeOut(clamp(since / (FINISH.POP_MS * 1.6)))) * Math.PI * 1.2 : 0) + ease * Math.PI * 2 * (filled ? 1 : 0);
+    // Gathering, a filled star trails ghosts of itself.
+    if (gathering && filled) {
+      for (let j = 3; j >= 1; j--) {
+        const e = easeInOut(clamp(collapse - j * 0.045));
+        ctx.save();
+        ctx.globalAlpha = 0.28 / j;
+        upright(placeAt(st.at, st.u, e), swing(st.at, e), () => star(ctx, 0, 0, (s0 + (sf - s0) * e) * 0.9, "filled"));
+        ctx.restore();
+      }
+    }
+    // A won star glows while the stars are shown, a slow pulse each out of step.
+    if (filled && collapse < 1) {
+      const glow = clamp(since / 200) * (0.55 + 0.25 * Math.sin(t / 140 + k * 1.3)) * (1 - collapse);
+      halo(ctx, u, v, size * 1.15, glow);
+    }
     ctx.save();
-    upright(place(st.at, st.u), cv, () => star(ctx, 0, 0, size * scale, look, 1 - ease));
+    upright(u, v, () => {
+      ctx.rotate(turn);
+      star(ctx, 0, 0, size * scale, look, 1 - ease);
+      // The fill flashes white for a moment.
+      if (since < 220) {
+        ctx.globalAlpha = 1 - since / 220;
+        starPath(ctx, 0, size * scale * 0.057, size * scale * 0.6);
+        ctx.fillStyle = "#ffffff";
+        ctx.fill();
+      }
+    });
     ctx.restore();
-    trace?.push({ name: st.at === Infinity ? "Star (end)" : `Star ${st.at}`, along: place(st.at, st.u), scale: (size / s0) * scale, opacity: look === "gray" ? 0.45 + 0.5 * ease : 1 });
+    // A ring and a few sparkles burst from it as it fills.
+    if (since < 480) burst(ctx, u, v, size, since / 480, k);
+    trace?.push({ name: st.at === Infinity ? "Star (end)" : `Star ${st.at}`, along: u, scale: (size / s0) * scale, opacity: look === "gray" ? 0.45 + 0.5 * ease : 1 });
   }
   if (medalP !== null) {
-    const u = place("medal", Math.min(used, span) * w), ms = size * 0.8;
+    const u = place("medal", Math.min(used, span) * w), ms = size * 0.8, mv = swing("medal", ease);
     if (undone) {
       // Would have been won but for an undo: it only fades in, gray and faint.
       ctx.save();
       ctx.globalAlpha = 0.45 * clamp(medalP * 2);
-      upright(u, cv, () => rosette(ctx, 0, 0, ms, true));
+      upright(u, mv, () => rosette(ctx, 0, 0, ms, true));
       ctx.restore();
     } else {
       // Falls in from 3.5x, speeding up and spinning; hits hard (squash and a stiff
@@ -243,20 +336,25 @@ export function drawScoreTrack(
         ctx.strokeStyle = STAR;
         ctx.lineWidth = ms * 0.25 * (1 - settle);
         ctx.beginPath();
-        ctx.arc(u, cv, ms * (0.6 + 1.8 * settle), 0, Math.PI * 2);
+        ctx.arc(u, mv, ms * (0.6 + 1.8 * settle), 0, Math.PI * 2);
         ctx.stroke();
         ctx.globalAlpha = Math.min(1, (1 - settle) * 1.6);
         for (let i = 0; i < 12; i++) {
           const a = (i / 12) * 2 * Math.PI + (i % 2) * 0.26, dist = ms * (0.7 + (2.2 + (i % 3) * 0.6) * (1 - (1 - settle) ** 2));
           ctx.fillStyle = i % 3 ? STAR : "#ffffff";
-          sparkle(ctx, u + Math.cos(a) * dist, cv + Math.sin(a) * dist, ms * (0.4 + 0.2 * (i % 2)) * (1 - settle * 0.8));
+          sparkle(ctx, u + Math.cos(a) * dist, mv + Math.sin(a) * dist, ms * (0.4 + 0.2 * (i % 2)) * (1 - settle * 0.8));
         }
         ctx.restore();
+      }
+      // Sun rays turn behind it from its hit until the row has gathered.
+      if (land >= 1) {
+        const k = medalP < 1 ? settle : 1, fade = 1 - clamp((collapse - 0.6) / 0.4);
+        rays(ctx, u, mv, ms * (1.2 + 1.6 * easeOut(clamp(k * 2))), 0.42 * fade * clamp(k * 3), (t ?? 0) / 1400);
       }
       trace?.push({ name: "Medal", along: u, scale: scale * (size / s0), opacity: land < 1 ? clamp(land * 2.5) : 1 });
       ctx.save();
       ctx.globalAlpha = land < 1 ? clamp(land * 2.5) : 1;
-      upright(u, cv, () => {
+      upright(u, mv, () => {
         ctx.rotate((-70 * (1 - land) * Math.PI) / 180);
         ctx.scale(scale, scale);
         rosette(ctx, 0, 0, ms, false);
