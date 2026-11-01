@@ -158,7 +158,11 @@ export class Inspector {
       lastTap = now;
     };
     svg.addEventListener("pointerup", up);
-    svg.addEventListener("pointercancel", up);
+    // The browser took the touch to scroll the panel up or down: nothing else happens.
+    svg.addEventListener("pointercancel", (e) => {
+      fingers.delete(e.pointerId);
+      if (fingers.size === 0) (pinch = null), (scrubbing = false);
+    });
     svg.addEventListener("wheel", (e) => {
       e.preventDefault();
       if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
@@ -417,5 +421,5 @@ const STYLE = `
   #inspector.open button { background: #3a3a3d; min-width: 44px; height: 44px; padding: 0 12px; }
   #inspector input[type=range] { flex: 1; min-width: 0; height: 44px; accent-color: #ff5a5a; }
   #inspector #insOut { font-variant-numeric: tabular-nums; min-width: 52px; text-align: right; }
-  #inspector svg { display: block; width: 100%; height: auto; margin-top: 6px; touch-action: none; user-select: none; -webkit-user-select: none; }
+  #inspector svg { display: block; width: 100%; height: auto; margin-top: 6px; touch-action: pan-y; /* up and down scroll the panel; sideways is ours */ user-select: none; -webkit-user-select: none; }
 `;
