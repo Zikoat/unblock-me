@@ -557,6 +557,7 @@ const browser = await chromium.launch();
   // On landing: reached, stars fly out of it, and a check shows on the target.
   // n is the next red block (column 0, rows 6..7): as it turns red it throbs, for a moment
   // reaching past its top edge.
+  const view = await page.evaluate(() => unblock.scene.camera); // the soul's flight moves it later
   const [starsSeen, beat, landedAt, shownAt] = await page.evaluate(([x, y]) => new Promise((resolve) => {
     const c = document.querySelector("canvas"), d = c.width / c.clientWidth;
     let best = 0, frames = 0;
@@ -601,7 +602,11 @@ const browser = await chromium.launch();
   check(JSON.stringify(logged) === JSON.stringify([["move", "r", "number"], ["reached", "r", "number"], ["goal", "n", "number"]]), `the play log has the move, the goal reached and the next goal, with times (${JSON.stringify(logged)})`);
   const snapshot = await page.evaluate(() => unblock.playLog.at(-1).moved);
   check(JSON.stringify(snapshot) === JSON.stringify([["r", 1, 4]]), `and the next goal's board snapshot (${JSON.stringify(snapshot)})`);
-  await page.waitForTimeout(100);
+  // The red block's soul flies over to it (the view following), then it is red; the view
+  // is put back for the checks.
+  await page.waitForTimeout(1600);
+  await page.evaluate((v) => { unblock.scene.camera = v; unblock.redraw(); }, view);
+  await frame(page);
   await expectColor(page, cell(0.5, 6.5), "goal", "and it is red now");
   await expectColor(page, cell(1.25, 4.12), "done", "and the reached red block stays red, a darker red");
   // Its score track plays the finish, then leaves a row of stars on the target.

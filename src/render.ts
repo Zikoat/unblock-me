@@ -2,9 +2,9 @@
 // camera transform, so it all zooms and pans together.
 import { worldRect } from "./camera";
 import { intersects, UNIT, type Block } from "./layout";
-import { drawScoreTrack, FINISH, finishTimes, type TraceEntry } from "./score-track";
+import { drawScoreTrack, FINISH, finishTimes, starPoints, type TraceEntry } from "./score-track";
 import { bestKnown, type Goal } from "./goal";
-import { onBlock, over, quake, screenFlash, squash, under, type Fx } from "./finish-fx";
+import { onBlock, over, punch, quake, screenFlash, soul as drawSoul, SOUL, squash, under, type Fx } from "./finish-fx";
 import { borderOnScreen, latticeRect, quickPush, visibleBlocks, whereIs, type Scene } from "./scene";
 
 export const COLORS = {
@@ -67,7 +67,7 @@ const throbScale = (t: number) => (t <= 0 || t >= 1 ? 1 : 1 + 0.15 * Math.sin(Ma
 export function draw(
   canvas: HTMLCanvasElement,
   scene: Scene,
-  { fullscreen, density, fps = true, sliding, sparkles = [], throb = null, cue = null, ripples = [], shake = null, pinThrob = null, used = 0, trace, finish = null, now = 0 }: {
+  { fullscreen, density, fps = true, sliding, sparkles = [], throb = null, cue = null, ripples = [], shake = null, pinThrob = null, used = 0, trace, finish = null, soul = null, now = 0 }: {
     fullscreen: boolean;
     density: number;
     /** Whether the fps counter is showing. */
@@ -91,6 +91,8 @@ export function draw(
     used?: number;
     /** The goal just reached, and when: its score track plays the finish. */
     finish?: { id: string; born: number; dir?: { x: number; y: number } } | null;
+    /** The last red block's soul flying to the new one (world px), and when it set off. */
+    soul?: { from: { x: number; y: number; width: number; height: number }; toId: string; born: number } | null;
     now?: number;
   },
 ): void {
@@ -107,10 +109,14 @@ export function draw(
 
   ctx.setTransform(dpr * camera.scale, 0, 0, dpr * camera.scale, dpr * camera.offsetX, dpr * camera.offsetY);
   // The finish's effects round the block (finish-fx.ts); its hits jolt the whole board.
-  const fx = finishFx(scene, finish, now, worldRect(camera, { x: 0, y: 0, width, height }));
+  const fx = finishFx(scene, finish, now, worldRect(camera, { x: 0, y: 0, width, height }), camera.scale);
+  // The soul still on its way: the new red block shows as it was until it arrives.
+  const soulK = soul ? now - soul.born : Infinity;
   if (fx) {
-    const q = quake(fx);
-    ctx.translate(q.x, q.y);
+    const q = quake(fx), f = punch(fx), cx = fx.rect.x + fx.rect.width / 2, cy = fx.rect.y + fx.rect.height / 2;
+    ctx.translate(q.x + cx, q.y + cy);
+    ctx.scale(f, f);
+    ctx.translate(-cx, -cy);
   }
 
   const view = worldRect(camera, { x: 0, y: 0, width, height });
@@ -233,7 +239,7 @@ export function draw(
       : block.wall ? COLORS.wall
       : block.id === scene.dragging?.id ? COLORS.dragging
       : block.id === scene.stuckId ? COLORS.stuck
-      : isGoal ? COLORS.goal
+      : isGoal ? (soulK < SOUL.TRAVEL_MS && block.id === soul?.toId ? mix(block.moved ? COLORS.moved : COLORS.block, COLORS.goal, Math.max(0, (soulK / SOUL.TRAVEL_MS - 0.85) / 0.15)) : COLORS.goal)
       : wasGoal ? doneColor(block.id)
       : block.moved ? COLORS.moved
       : COLORS.block;
@@ -315,6 +321,10 @@ export function draw(
   }
   for (const s of sparkles) sparkle(ctx, s, now);
   if (fx) over(ctx, fx);
+  if (soul && soulK >= 0) {
+    const to = scene.layout.byId(soul.toId), at = whereIs(scene, soul.toId);
+    if (to && at) drawSoul(ctx, soul.from, { x: at.x * UNIT + GAP, y: at.y * UNIT + GAP, width: to.w * UNIT - 2 * GAP, height: to.h * UNIT - 2 * GAP }, soulK, camera.scale);
+  }
 
   // A tap on the background: one small yellow ring spreading out and fading, like a drop
   // landing in water. Nothing stays.
@@ -364,7 +374,7 @@ export function draw(
 }
 
 /** The finishing goal's effects at `now`, if one is finishing and its block shows. */
-function finishFx(scene: Scene, finish: { id: string; born: number; dir?: { x: number; y: number } } | null, now: number, view: Fx["view"]): Fx | null {
+function finishFx(scene: Scene, finish: { id: string; born: number; dir?: { x: number; y: number } } | null, now: number, view: Fx["view"], zoom: number): Fx | null {
   const g = finish && scene.done.find((d) => d.id === finish.id);
   const block = g && scene.layout.byId(g.id), at = g && whereIs(scene, g.id);
   if (!finish || !g || g.used === undefined || !block || !at) return null;
@@ -378,6 +388,8 @@ function finishFx(scene: Scene, finish: { id: string; born: number; dir?: { x: n
     dir: finish.dir ?? { x: 0, y: 0 },
     medal: times.medalAt !== null && !g.undone,
     view,
+    zoom,
+    stars: starPoints({ x: g.target.x * UNIT - TARGET_MARGIN, y: g.target.y * UNIT - TARGET_MARGIN, width: block.w * UNIT + 2 * TARGET_MARGIN, height: block.h * UNIT + 2 * TARGET_MARGIN }, bestKnown(g) ?? g.solution.length, g.used),
   };
 }
 

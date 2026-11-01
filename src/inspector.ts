@@ -4,6 +4,8 @@
 // opacity over time. Every frame is replayed from the start (the game's state only moves
 // forward), with the same scatter of sparkles each time.
 import type { TraceEntry } from "./score-track";
+import * as sfx from "./sfx";
+import { SOUL } from "./finish-fx";
 
 export type InspectorHooks = {
   /** Leave `bottom` px below the board for the panel (0: the whole screen again). */
@@ -18,7 +20,7 @@ export type InspectorHooks = {
   advance(now: number): unknown;
   paint(now: number, moving: unknown, to?: HTMLCanvasElement, trace?: TraceEntry[]): void;
   /** What is going on, for the time line. */
-  state(): { sliding: boolean; gliding: boolean; finishing: boolean; goal: string | null; parts: { name: string; from: number; to: number }[] };
+  state(): { sliding: boolean; gliding: boolean; finishing: boolean; souling: boolean; goal: string | null; parts: { name: string; from: number; to: number }[] };
   /** The sparkles' random numbers. */
   seed(random: () => number): void;
 };
@@ -52,6 +54,8 @@ export class Inspector {
   private total = 4000;
   private playing = false;
   private playFrom = 0;
+  /** Up to when the sounds have played (ms). */
+  private heard = 0;
   private spans: Span[] = [];
   private samples: { t: number; trace: TraceEntry[] }[] = [];
   private panel: HTMLElement;
@@ -198,6 +202,7 @@ export class Inspector {
   private start(): void {
     this.before = this.hooks.snapshot();
     this.open = true;
+    sfx.listen("none");
     this.panel.querySelector<HTMLElement>("#insOpen")!.hidden = true;
     this.panel.querySelector<HTMLElement>("#insBody")!.hidden = false;
     this.panel.classList.add("open");
@@ -223,6 +228,7 @@ export class Inspector {
     this.panel.classList.remove("open");
     this.hooks.open(0);
     this.hooks.restore(this.before);
+    sfx.listen("all");
     this.redraw();
   }
 
@@ -232,6 +238,8 @@ export class Inspector {
       if (this.t >= this.total) this.t = 0;
       this.playing = true;
       this.playFrom = performance.now() - this.t;
+      this.heard = this.t - 1;
+      sfx.unlock();
     }
     this.show();
   }
@@ -267,6 +275,7 @@ export class Inspector {
       mark("Red block slides", s.sliding, at);
       if (s.finishing && !marks["Finish"]) parts = s.parts.map((p) => ({ ...p, from: p.from + at, to: p.to + at }));
       mark("Finish", s.finishing, at);
+      mark("Soul flies to the next red block", s.souling, at);
       if (nextAt < 0 && marks["Finish"] && s.goal && s.goal !== goalBefore) nextAt = at;
       if (at % 32 === 0 && (s.finishing || s.sliding)) {
         const trace: TraceEntry[] = [];
@@ -275,12 +284,14 @@ export class Inspector {
       }
     });
     const end = Math.max(0, ...Object.values(marks).map((m) => m[1]));
-    this.total = Math.ceil((nextAt > 0 ? nextAt + 900 : end + 400) / 100) * 100;
+    this.total = Math.ceil((nextAt > 0 ? Math.max(nextAt + SOUL.TRAVEL_MS + 900, end + 300) : end + 400) / 100) * 100;
     const colors = ["#8a8d91", "#d64545", "#d49a2a", "#e66b2e", "#2f9e6e", "#b84aa8", "#4bb3c4", "#c9a227"];
     // The finish shows as its parts.
     const shown = [...Object.entries(marks).filter(([name]) => name !== "Finish").map(([name, [from, to]]) => ({ name, from, to })), ...parts];
     this.spans = shown.map((s, i) => ({ ...s, color: colors[i % colors.length]! }));
-    if (nextAt > 0) this.spans.push({ name: "Next red block (throb, then its way)", from: nextAt, to: Math.min(this.total, nextAt + 900), color: "#3b6fd4" });
+    // The new red block throbs once the soul has got to it.
+    const throbAt = marks["Soul flies to the next red block"] ? marks["Soul flies to the next red block"][0] + SOUL.TRAVEL_MS : nextAt;
+    if (nextAt > 0) this.spans.push({ name: "Next red block (throb, then its way)", from: throbAt, to: Math.min(this.total, throbAt + 900), color: "#3b6fd4" });
     this.slider.max = String(this.total);
     this.v0 = 0;
     this.v1 = this.total;
@@ -293,7 +304,11 @@ export class Inspector {
       this.t = Math.min(this.total, performance.now() - this.playFrom);
       if (this.t >= this.total) this.playing = false;
     }
+    // Sounds only for the frames just played (not the replay up to them, nor scrubbing).
+    if (this.playing) sfx.listen([BASE + this.heard, BASE + this.t]);
     const moving = this.replay(this.t);
+    sfx.listen("none");
+    this.heard = this.t;
     this.hooks.paint(BASE + this.t, moving);
     this.slider.value = String(Math.round(this.t));
     this.timeOut.textContent = `${(this.t / 1000).toFixed(2)} s`;

@@ -12,7 +12,7 @@ const TRACK_COLORS = { fill: "rgba(232, 115, 115, 0.85)", gray: "#c9ccd1" };
 const BLUE = "#3b6fd4", BLUE_DARK = "#2f5bb3", BLUE_DARKER = "#264a94";
 
 /** The finish, in ms from the moment the goal is reached. */
-export const FINISH = { START_MS: 250, STAR_MS: 420, POP_MS: 300, MEDAL_WAIT_MS: 700, MEDAL_MS: 1000, MEDAL_FALL: 0.35, HOLD_MS: 800, GATHER_MS: 900, LAND_MS: 700 };
+export const FINISH = { START_MS: 600, STAR_MS: 420, POP_MS: 300, MEDAL_WAIT_MS: 700, MEDAL_MS: 1000, MEDAL_FALL: 0.35, HOLD_MS: 800, GATHER_MS: 900, LAND_MS: 700 };
 
 /** When each part of the finish happens for a goal of `fewest` finished in `used` moves:
  * the stars kept fill from START_MS, STAR_MS apart; the medal (if under the game's best)
@@ -26,6 +26,15 @@ export function finishTimes(fewest: number, used: number): { kept: number; stars
   // Once gathered, the row lands: a hop along it and a shine over the block.
   const landed = gather + FINISH.GATHER_MS;
   return { kept, starsEnd, medalAt, medalHit, gather, landed, end: landed + FINISH.LAND_MS };
+}
+
+/** Where the stars won sit on the track over `rect` (world px), in the order they fill. */
+export function starPoints(rect: { x: number; y: number; width: number; height: number }, fewest: number, used: number): { x: number; y: number }[] {
+  const vertical = rect.height > rect.width;
+  const L = vertical ? rect.height : rect.width, T = vertical ? rect.width : rect.height;
+  const { step, lines, end } = scoreTrack(fewest);
+  const w = L / (end + step / 2);
+  return [...lines, end].filter((at, i) => i === lines.length || used <= at).map((at) => (vertical ? { x: rect.x + T / 2, y: rect.y + rect.height - at * w } : { x: rect.x + at * w, y: rect.y + T / 2 }));
 }
 
 /** One icon as drawn: which, where along the track (world px), its size and opacity (for the

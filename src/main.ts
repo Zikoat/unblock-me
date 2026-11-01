@@ -4,7 +4,8 @@ import type { Difficulty } from "./difficulty";
 import { MAX_STARS, medalWon, scoreTrack, starsEarned } from "./stars";
 import { finishTimes, type TraceEntry } from "./score-track";
 import { Inspector } from "./inspector";
-import { finishParts } from "./finish-fx";
+import { finishCues, finishParts, SOUL } from "./finish-fx";
+import * as sfx from "./sfx";
 import { bestKnown, medal, viewCentre, type Goal } from "./goal";
 import type { GoalRequest } from "./goal-worker";
 import { Gestures } from "./gestures";
@@ -77,14 +78,14 @@ function placeView(): void {
 
 // Tapping an edge arrow glides the view there, at the same zoom, putting `to` (lattice units)
 // in the middle; `delay` ms later, so the arrow's throb shows first.
-let flight: { from: { scale: number; offsetX: number; offsetY: number }; to: Point; start: number | null; delay: number } | null = null;
-function flyTo(to: Point, delay = 0): void {
-  flight = { from: { ...scene.camera }, to, start: null, delay };
+let flight: { from: { scale: number; offsetX: number; offsetY: number }; to: Point; start: number | null; delay: number; duration: number } | null = null;
+function flyTo(to: Point, delay = 0, duration = 350): void {
+  flight = { from: { ...scene.camera }, to, start: null, delay, duration };
 }
 function flying(now: number): void {
   if (!flight) return;
   flight.start ??= now + flight.delay;
-  const t = Math.max(0, Math.min(1, (now - flight.start) / 350));
+  const t = Math.max(0, Math.min(1, (now - flight.start) / flight.duration));
   const { scale } = flight.from;
   const to = { offsetX: scene.width / 2 - flight.to.x * UNIT * scale, offsetY: scene.height / 2 - flight.to.y * UNIT * scale };
   const e = ease(t);
@@ -260,7 +261,15 @@ function showGoal(goal: Goal | null): void {
     // A snapshot of the board, so the goal can be measured again later.
     log({ e: "goal", commit: __COMMIT__, id: goal.id, target: goal.target, start: goal.start, tries, seed, solution: goal.solution.length, moved: [...scene.moved].map(([id, p]) => [id, p.x, p.y]) });
   }
-  // The new red block throbs once; its clock starts at the first frame drawn.
+  // The last red block's soul flies to the new one, the view following it there.
+  const red = goal && scene.layout.byId(goal.id), at = goal && whereIs(scene, goal.id);
+  if (soulFrom && goal && red && at) {
+    soul = { from: soulFrom, toId: goal.id, born: -1 };
+    flyTo({ x: at.x + red.w / 2, y: at.y + red.h / 2 }, 0, SOUL.TRAVEL_MS);
+  }
+  soulFrom = null;
+  // The new red block throbs once; its clock starts at the first frame drawn (after the soul
+  // gets there).
   if (scene.goal) throb = { id: scene.goal.id, born: -1 };
   if (scene.goal) cue = { id: scene.goal.id, born: -1 };
   save();
@@ -361,7 +370,12 @@ let ripples: { at: Point; born: number }[] = [];
 let shake: { id: string; born: number } | null = null;
 // The goal just reached: its score track plays the finish (stars fill, the medal, the row).
 // The next goal shows once the stars have gathered (`next`: where it is made).
-let finish: { id: string; born: number; end: number; next: Point; dir: Point } | null = null;
+let finish: { id: string; born: number; end: number; next: Point; dir: Point; heard: number } | null = null;
+// Once the finish is over, the red block's soul flies from it (`soulFrom`, world px) to the
+// next red block, the view gliding along; the new block throbs once it arrives.
+type WorldRect = { x: number; y: number; width: number; height: number };
+let soulFrom: WorldRect | null = null;
+let soul: { from: WorldRect; toId: string; born: number } | null = null;
 function reachGoal(now: number): void {
   const goal = scene.goal;
   if (!goal || !goalSolved(scene) || animation?.move.id === goal.id) return;
@@ -375,7 +389,7 @@ function reachGoal(now: number): void {
   // The way it slid in, for the landing's squash and jolt.
   const last = scene.history.at(-1);
   const dir = last?.id === goal.id ? { x: Math.sign(last.to.x - last.from.x), y: Math.sign(last.to.y - last.from.y) } : { x: 0, y: 0 };
-  finish = { id: goal.id, born: now, end: finishTimes(bestKnown(goal) ?? goal.solution.length, goal.used).end, next: goal.target, dir };
+  finish = { id: goal.id, born: now, end: finishTimes(bestKnown(goal) ?? goal.solution.length, goal.used).end, next: goal.target, dir, heard: -1 };
   const red = scene.layout.byId(goal.id)!;
   const at = whereIs(scene, goal.id)!;
   const cx = (at.x + red.w / 2) * UNIT;
@@ -657,7 +671,7 @@ function redraw(): void {
     if (inspector?.open) return; // it draws the frames itself
     const moving = advance(now);
     paint(now, moving);
-    if (animation || sparkles.length || flight || throb || cue || ripples.length || shake || finish || pinThrob || fading()) redraw();
+    if (animation || sparkles.length || flight || throb || cue || ripples.length || shake || finish || soul || pinThrob || fading()) redraw();
   });
 }
 
@@ -671,9 +685,15 @@ function advance(now: number): ReturnType<typeof sliding> {
     // A red block standing on its target always counts, whatever ended its slide (a reload
     // mid-slide, a frame that failed): reachGoal does nothing otherwise.
     if (!animation) reachGoal(now);
-    if (throb && throb.born < 0) throb.born = now;
+    if (soul && soul.born < 0) {
+      soul.born = now;
+      sfx.play("soul", now);
+    }
+    if (soul && now > soul.born + SOUL.TRAVEL_MS + SOUL.BURST_MS) soul = null;
+    const arrived = !soul || now >= soul.born + SOUL.TRAVEL_MS;
+    if (throb && throb.born < 0 && arrived) throb.born = now;
     if (throb && now > throb.born + THROB_MS) throb = null;
-    if (cue && cue.born < 0) cue.born = now;
+    if (cue && cue.born < 0 && arrived) cue.born = now;
     if (cue && now > cue.born + CUE_MS) cue = null;
     for (const r of ripples) if (r.born < 0) r.born = now;
     ripples = ripples.filter((r) => now <= r.born + RIPPLE_MS);
@@ -681,8 +701,19 @@ function advance(now: number): ReturnType<typeof sliding> {
     if (shake && now > shake.born + SHAKE_MS) shake = null;
     if (pinThrob && pinThrob.born < 0) pinThrob.born = now;
     if (pinThrob && now > pinThrob.born + THROB_MS) pinThrob = null;
+    if (finish) {
+      // Its sounds, each once, as the finish gets to it.
+      const g = scene.done.find((d) => d.id === finish!.id), t = now - finish.born;
+      if (g && g.used !== undefined) {
+        const times = finishTimes(bestKnown(g) ?? g.solution.length, g.used);
+        for (const cue of finishCues({ times, medal: times.medalAt !== null && !g.undone })) if (cue.at > finish.heard && cue.at <= t) sfx.play(cue.sound, now, cue.n);
+      }
+      finish.heard = t;
+    }
     if (finish && now > finish.born + finish.end) {
       const next = finish.next;
+      const red = scene.layout.byId(finish.id), at = whereIs(scene, finish.id);
+      soulFrom = red && at ? { x: at.x * UNIT + 3, y: at.y * UNIT + 3, width: red.w * UNIT - 6, height: red.h * UNIT - 6 } : null;
       finish = null;
       requestGoal(next);
     }
@@ -705,6 +736,7 @@ function paint(now: number, moving: ReturnType<typeof sliding>, to: HTMLCanvasEl
       pinThrob,
       used: scene.goal ? movesSince(scene.goal.begun ?? 0) : 0,
       finish,
+      soul,
       trace,
       now,
     });
@@ -882,6 +914,7 @@ const hitsArrow = (e: PointerEvent) => markerAt(e) !== null;
 let pinThrob: { pin: "red" | "ui"; born: number } | null = null;
 
 canvas.addEventListener("pointerdown", (e) => {
+  sfx.unlock(); // sound can start only from a touch
   if (inspector?.open) return; // the board is a replay while it is open
   if (e.pointerType === "mouse" && e.button !== 0) return;
   canvas.setPointerCapture(e.pointerId);
@@ -949,7 +982,7 @@ addEventListener("resize", () => {
 /** Everything a replay changes (copied in and out whole). */
 const playState = () => ({
   scene: { moved: scene.moved, history: scene.history, goal: scene.goal, done: scene.done, camera: scene.camera, circle: scene.circle },
-  state: { flight, animation, sparkles, throb, cue, ripples, shake, finish, pinThrob, testbedNext },
+  state: { flight, animation, sparkles, throb, cue, ripples, shake, finish, pinThrob, testbedNext, soul, soulFrom },
 });
 const inspector: Inspector | null = !testbed ? null : new Inspector({
   open(bottom) {
@@ -965,7 +998,7 @@ const inspector: Inspector | null = !testbed ? null : new Inspector({
   restore(snap) {
     const { scene: s, state: t } = structuredClone(snap as ReturnType<typeof playState>);
     Object.assign(scene, s, { dragging: null, stuckId: null });
-    ({ flight, animation, sparkles, throb, cue, ripples, shake, finish, pinThrob, testbedNext } = t);
+    ({ flight, animation, sparkles, throb, cue, ripples, shake, finish, pinThrob, testbedNext, soul, soulFrom } = t);
     random = Math.random;
     resetFades();
   },
@@ -985,7 +1018,7 @@ const inspector: Inspector | null = !testbed ? null : new Inspector({
     const g = finish && scene.done.find((d) => d.id === finish!.id);
     const times = g && g.used !== undefined ? finishTimes(bestKnown(g) ?? g.solution.length, g.used) : null;
     const parts = g && times ? finishParts({ times, medal: times.medalAt !== null && !g.undone }) : [];
-    return { sliding: !!animation && !(animation.wait && flight), gliding: !!flight, finishing: !!finish, goal: scene.goal?.id ?? null, parts };
+    return { sliding: !!animation && !(animation.wait && flight), gliding: !!flight, finishing: !!finish, souling: !!soul, goal: scene.goal?.id ?? null, parts };
   },
   seed(r) {
     random = r;
