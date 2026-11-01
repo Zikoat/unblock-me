@@ -16,3 +16,4 @@
 - Undo during a goal (or undoing the goal) loses the medal (shown faded) and is stored with the goal; waits on the score track.
 - Hovering a reached goal highlights the blocks its solution needed, and differently those moved without need; waits on you picking it.
 - Progress is lost when moving from Telegram’s in-app browser to the phone’s browser (separate storage); waits on the Telegram check’s reports, then maybe carry the save in the "Open in browser" link.
+- A way to make goals hard without blocks on the red block's track (since the penalty, goals made ahead need about 11 fewest moves instead of 17, reports/blocks-on-track.html); waits on you picking it.
