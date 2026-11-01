@@ -137,7 +137,8 @@ export function draw(
     // with an outline, faded out while its block stands on it (no ring round the block).
     const shown = g === goal ? 1 : areaShown(g, now);
     if (shown <= 0) return;
-    const reached = (j: number) => targets[j]!.goal !== goal;
+    // Only other reached targets that show (not faded under their blocks) join this one.
+    const reached = (j: number) => targets[j]!.goal !== goal && areaShown(targets[j]!.goal, now) > 0;
     ctx.save();
     ctx.globalAlpha = shown;
     if (g !== goal) outside(targets.slice(0, i).filter((_, j) => reached(j)));

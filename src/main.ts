@@ -35,9 +35,28 @@ const TRACK = 0.52;
 declare const __BUILD_ID__: string;
 declare const __COMMIT__: string;
 
+// ?testbed opens a small fixed board with a few simple goals in turn, for trying the
+// finish's animations; a reload starts it over.
+const testbed = new URLSearchParams(location.search).has("testbed");
+const H = (id: string, x: number, y: number): Placed => ({ id, x, y, w: 2, h: 1 });
+const V = (id: string, x: number, y: number): Placed => ({ id, x, y, w: 1, h: 2 });
+const Wall = (x: number, y: number): Placed => ({ id: `wall ${x},${y}`, x, y, w: 1, h: 1, wall: true });
+const known = (moves: number): Difficulty => ({ moves, atLeast: moves, searched: 0, branching: 2, score: moves });
+const TESTBED = {
+  blocks: [H("a", -2, -1), Wall(3, -1), V("b", 3, 1), Wall(3, 6), H("c", -2, 3), Wall(-3, 3), V("v", 1, 2), V("d", -2, 5), Wall(-2, 9), H("e", -1, -3), V("f", 0, 5)],
+  // One move for a medal; one for 5 stars; two (move v first) for 5 stars, more for fewer;
+  // one more for 5 stars, or fewer after extra moves.
+  goals: [
+    { id: "a", target: { x: 1, y: -1 }, solution: [], difficulty: known(2) },
+    { id: "b", target: { x: 3, y: 4 }, solution: [], difficulty: known(1) },
+    { id: "c", target: { x: 1, y: 3 }, solution: [], difficulty: known(2) },
+    { id: "d", target: { x: -2, y: 7 }, solution: [], difficulty: known(1) },
+  ] as Goal[],
+};
+let testbedNext = 0;
 // ?board=<JSON list of placed blocks> opens exactly that board (for sharing a board, and
-// for tests). Nothing is stored while it is open.
-const shared = new URLSearchParams(location.search).get("board");
+// for tests). Nothing is stored while it is open (nor on the testbed).
+const shared = new URLSearchParams(location.search).get("board") ?? (testbed ? JSON.stringify(TESTBED.blocks) : null);
 // Set by a reset: from then on this page stores nothing.
 let forgetting = false;
 
@@ -200,6 +219,7 @@ let goalWaiters: (() => void)[] = [];
 /** Ask for a goal near `near` (the middle of the view by default), never with an earlier
  * red block. */
 function requestGoal(near: Point = viewCentre(scene.camera, scene.width, scene.height)): void {
+  if (testbed) return showGoal(TESTBED.goals[testbedNext++] ? { ...TESTBED.goals[testbedNext - 1]! } : null);
   if (shared) return;
   const exclude = scene.done.map((g) => g.id);
   // Made already while the red block was one move away: no wait.
@@ -286,7 +306,9 @@ ahead.worker.onmessage = (event: MessageEvent<Reply>) => {
   if ("difficulty" in event.data) return measured(event.data);
   if (event.data.job === ahead.job) ahead.ready = { key: ahead.asked, goal: event.data.goal };
 };
-if (!scene.goal) requestGoal();
+if (testbed) {
+  // The testbed shows its first goal once its board is in place (below).
+} else if (!scene.goal) requestGoal();
 else lookAhead();
 
 // While a slider is held: where its knob is (0..1), following the finger.
@@ -544,6 +566,7 @@ if (shared) {
   } catch {
     // A broken link: show the normal board.
   }
+  if (testbed) requestGoal();
 }
 
 // Live reload: every build writes a new id to build.txt. While the page is visible, check
