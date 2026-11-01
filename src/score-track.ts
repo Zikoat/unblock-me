@@ -8,7 +8,7 @@ import { scoreTrack } from "./stars";
 const STAR = "#fdd835", STAR_EDGE = "#e07b00", LINE = "rgba(80, 82, 86, 0.25)";
 /** The moves' fill, and the outline of a star not won (light, to show on the fill). Set by
  * the colour theme (render.ts). */
-export const TRACK_COLORS = { fill: "rgba(142, 63, 60, 0.78)", gray: "#c9ccd1" };
+export const TRACK_COLORS = { fill: "rgba(233, 108, 82, 0.8)", gray: "#c9ccd1" };
 const BLUE = "#3b6fd4", BLUE_DARK = "#2f5bb3", BLUE_DARKER = "#264a94";
 
 /** The finish, in ms from the moment the goal is reached. */
@@ -114,7 +114,9 @@ export function drawScoreTrack(
   const vertical = rect.height > rect.width;
   const L = vertical ? rect.height : rect.width, T = vertical ? rect.width : rect.height;
   const { step, lines, end } = scoreTrack(fewest);
-  const w = L / end, cv = T / 2;
+  // The moves span the track up to half a step past the last star, so that star sits inside
+  // the end, as far from it as the stars are from each other (and the fill goes on to the end).
+  const span = end + step / 2, w = L / span, cv = T / 2;
   const times = finishTimes(fewest, used);
   const finished = t !== null;
   const medalP = finished && times.medalAt !== null && t >= times.medalAt ? clamp((t - times.medalAt) / FINISH.MEDAL_MS) : null;
@@ -153,7 +155,7 @@ export function drawScoreTrack(
     ctx.roundRect(0, 0, L, T, radius);
     ctx.clip();
     ctx.fillStyle = TRACK_COLORS.fill;
-    ctx.fillRect(0, 0, Math.min(used, end) * w, T);
+    ctx.fillRect(0, 0, Math.min(used, span) * w, T);
     ctx.globalAlpha = (1 - collapse) * linesShown;
     ctx.strokeStyle = LINE;
     ctx.lineWidth = 1.5;
@@ -179,16 +181,18 @@ export function drawScoreTrack(
     ctx.restore();
   }
 
-  // The icons: the four stars on their lines, the last one just inside the end; the medal
+  // The icons: the four stars on their lines, the last one inside the end; the medal
   // (only once it comes in) where the moves ended.
-  const s0 = Math.min(T * 0.6, step * w * 0.95);
-  const stars = [...lines.map((line) => ({ u: line * w, at: line })), { u: L - s0 * 0.6, at: Infinity }];
+  // Never wider than the gap between two lines, so the stars never touch.
+  const s0 = Math.min(T * 0.6, step * w * 0.8);
+  const stars = [...lines.map((line) => ({ u: line * w, at: line })), { u: end * w, at: Infinity }];
   const kept = stars.filter((st) => used <= st.at);
   const lost = stars.filter((st) => used > st.at);
   // The row they gather into: the medal, the stars not won, then the stars won.
   const row = [...(medalP !== null ? ["medal"] : []), ...lost.map((st) => st.at), ...kept.map((st) => st.at)];
-  // Sized so the whole row fits inside the target, with a little room at each end.
-  const sf = Math.min(T * 0.62, (L - 8) / ((row.length - 1) * 1.2 + 1.1));
+  // Sized so the whole row fits inside the red block on the target (the target reaches 3
+  // px past it, the block stops 3 px short of its cells), with room at each end.
+  const sf = Math.min(T * 0.55, (L - 28) / ((row.length - 1) * 1.2 + 1.2));
   const size = s0 + (sf - s0) * ease;
   const place = (key: number | "medal", u: number) => u + (L / 2 + (row.indexOf(key) - (row.length - 1) / 2) * sf * 1.2 - u) * ease;
   for (const st of stars) {
@@ -203,7 +207,7 @@ export function drawScoreTrack(
     ctx.restore();
   }
   if (medalP !== null) {
-    const u = place("medal", Math.min(used, end) * w), ms = size * 0.8;
+    const u = place("medal", Math.min(used, span) * w), ms = size * 0.8;
     if (undone) {
       // Would have been won but for an undo: it only fades in, gray and faint.
       ctx.save();

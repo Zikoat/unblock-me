@@ -15,31 +15,34 @@ export const COLORS = {
   dragging: "#e0823d",
   stuck: "#8d97a3",
   goal: "#d64545",
-  target: "rgba(214, 69, 69, 0.14)",
-  // Reached goals: a darker, duller red, so the one in play stands out.
-  done: "#8e3f3c",
-  doneTarget: "rgba(120, 66, 60, 0.10)",
+  target: "rgba(255, 127, 95, 0.18)",
+  // Reached goals: a softer colour, so the one in play stands out (applyTheme).
+  done: "#e9765c",
+  targetLine: "",
+  doneLine: "",
   star: "#f2b632",
   ui: "#1d1d1f",
   wall: "#5f5d57",
   icon: "#f3f2ee",
 };
-/** Colour themes for the goals (?theme=<name>, to compare them): the current target's area,
- * a reached one's (empty: none, so no ring round its red block), a reached red block, and
- * the score track's fill. */
-export const THEMES: Record<string, { target: string; doneTarget: string; done: string; fill: string }> = {
-  red: { target: "rgba(214, 69, 69, 0.14)", doneTarget: "rgba(120, 66, 60, 0.10)", done: "#8e3f3c", fill: "rgba(142, 63, 60, 0.78)" },
-  coral: { target: "rgba(255, 127, 95, 0.18)", doneTarget: "", done: "#e9765c", fill: "rgba(233, 108, 82, 0.8)" },
-  gold: { target: "rgba(240, 176, 40, 0.2)", doneTarget: "", done: "#d49a2a", fill: "rgba(205, 140, 20, 0.8)" },
-  teal: { target: "rgba(30, 160, 170, 0.16)", doneTarget: "", done: "#2a8f9d", fill: "rgba(28, 128, 140, 0.8)" },
-  violet: { target: "rgba(130, 95, 220, 0.16)", doneTarget: "", done: "#7a5cc4", fill: "rgba(110, 80, 190, 0.8)" },
+/** Colour themes for the goals (?theme=coral|gold, to compare them; coral by default): the
+ * current target's area, a reached red block, the score track's fill, and the outlines a
+ * border option draws. Reached targets have no area of their own (no ring round the block). */
+export const THEMES: Record<string, { target: string; done: string; fill: string; line: string; doneLine: string }> = {
+  coral: { target: "rgba(255, 127, 95, 0.18)", done: "#e9765c", fill: "rgba(233, 108, 82, 0.8)", line: "rgba(233, 108, 82, 0.7)", doneLine: "rgba(214, 92, 66, 0.55)" },
+  gold: { target: "rgba(240, 176, 40, 0.2)", done: "#d49a2a", fill: "rgba(205, 140, 20, 0.8)", line: "rgba(205, 140, 20, 0.75)", doneLine: "rgba(185, 125, 15, 0.55)" },
 };
-export function applyTheme(name: string | null): void {
-  const t = THEMES[name ?? ""] ?? THEMES.red!;
+/** Outlines to try (?border=): none, the current target, reached targets, or both. */
+export const BORDERS = { target: false, done: false };
+export function applyTheme(name: string | null, border: string | null = null): void {
+  const t = THEMES[name ?? ""] ?? THEMES.coral!;
   COLORS.target = t.target;
-  COLORS.doneTarget = t.doneTarget;
   COLORS.done = t.done;
+  COLORS.targetLine = t.line;
+  COLORS.doneLine = t.doneLine;
   TRACK_COLORS.fill = t.fill;
+  BORDERS.target = border === "target" || border === "both";
+  BORDERS.done = border === "done" || border === "both";
 }
 const DOT_SIZE = 4.5; // world units across, one dot per lattice corner
 const GAP = 3; // world units between a block's edge and its lattice cells
@@ -135,14 +138,25 @@ export function draw(
   };
   const drawTarget = (i: number) => {
     const { goal: g, cells } = targets[i]!;
-    if (g !== goal && !COLORS.doneTarget) return; // reached targets drawn only under their row
     const own = new Path2D();
     area(cells, own);
-    ctx.save();
-    outside(targets.slice(0, i));
-    ctx.fillStyle = g === goal ? COLORS.target : COLORS.doneTarget;
-    ctx.fill(own);
-    ctx.restore();
+    // The current target has a pale area; a reached one none (no ring round its block).
+    if (g === goal) {
+      ctx.save();
+      outside(targets.slice(0, i));
+      ctx.fillStyle = COLORS.target;
+      ctx.fill(own);
+      ctx.restore();
+    }
+    // Outlines, where the border option asks for them, only outside the other targets.
+    if (g === goal ? BORDERS.target : BORDERS.done) {
+      ctx.save();
+      outside(targets.filter((_, j) => j !== i));
+      ctx.strokeStyle = g === goal ? COLORS.targetLine : COLORS.doneLine;
+      ctx.lineWidth = 2;
+      ctx.stroke(own);
+      ctx.restore();
+    }
   };
   const trackRect = (c: Cells) => ({ x: c.x * UNIT - TARGET_MARGIN, y: c.y * UNIT - TARGET_MARGIN, width: c.w * UNIT + 2 * TARGET_MARGIN, height: c.h * UNIT + 2 * TARGET_MARGIN });
   const fewestOf = (g: Goal) => bestKnown(g) ?? g.solution.length;

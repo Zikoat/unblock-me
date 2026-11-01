@@ -38,7 +38,7 @@ const COLORS = {
   background: [243, 242, 238], dot: [211, 209, 202], border: [185, 182, 173],
   block: [79, 109, 143], moved: [63, 154, 122], dragging: [224, 130, 61],
   goal: [214, 69, 69], reset: [29, 29, 31], wall: [95, 93, 87], star: [242, 182, 50], stuck: [141, 151, 163],
-  done: [142, 63, 60],
+  done: [233, 118, 92],
 };
 let failures = 0;
 const check = (ok, what) => {

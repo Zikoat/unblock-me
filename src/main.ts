@@ -156,8 +156,8 @@ function save(): void {
   lookAhead();
 }
 
-// A colour theme for the goals, to compare them (reports/goal-colors.html).
-applyTheme(new URLSearchParams(location.search).get("theme"));
+// A colour theme and border for the goals, to compare them (reports/goal-colors.html).
+applyTheme(new URLSearchParams(location.search).get("theme"), new URLSearchParams(location.search).get("border"));
 const seed = load<number>(SEED_KEY, Math.floor(Math.random() * 2 ** 32));
 let tries = load<number>(TRIES_KEY, TRIES);
 const debug = load<boolean>(DEBUG_KEY, false);
