@@ -7,7 +7,7 @@ import { bestKnown, medal, viewCentre, type Goal } from "./goal";
 import type { GoalRequest } from "./goal-worker";
 import { Gestures } from "./gestures";
 import { fixedLayout, MAX_TRIES, MIN_TRIES, randomLayout, TRIES, UNIT, type Placed, type Ui } from "./layout";
-import { CUE_MS, draw, RIPPLE_MS, SHAKE_MS, THROB_MS, goalBand, redArrow, uiArrow, type Sparkle } from "./render";
+import { CUE_MS, draw, RIPPLE_MS, SHAKE_MS, THROB_MS, redArrow, uiArrow, type Sparkle } from "./render";
 import { ease, slideDuration } from "./slide";
 import { blockAt, blocksIn, slideRange, type Move } from "./rules";
 import { borderOnScreen, goalSolved, latticeRect, newScene, relayout, resize, restart, undo, visibleBlocks, whereIs } from "./scene";
@@ -53,16 +53,16 @@ function placeView(): void {
   Object.assign(viewBox.style, { left: `${v.x}px`, top: `${v.y}px`, width: `${v.width}px`, height: `${v.height}px` });
 }
 
-// Tapping an edge marker (the arrows, the target's glow) glides the view there, at the same
-// zoom, putting `to` (lattice units) in the middle.
-let flight: { from: { scale: number; offsetX: number; offsetY: number }; to: Point; start: number | null } | null = null;
-function flyTo(to: Point): void {
-  flight = { from: { ...scene.camera }, to, start: null };
+// Tapping an edge arrow glides the view there, at the same zoom, putting `to` (lattice units)
+// in the middle; `delay` ms later, so the arrow's throb shows first.
+let flight: { from: { scale: number; offsetX: number; offsetY: number }; to: Point; start: number | null; delay: number } | null = null;
+function flyTo(to: Point, delay = 0): void {
+  flight = { from: { ...scene.camera }, to, start: null, delay };
 }
 function flying(now: number): void {
   if (!flight) return;
-  flight.start ??= now;
-  const t = Math.min(1, (now - flight.start) / 350);
+  flight.start ??= now + flight.delay;
+  const t = Math.max(0, Math.min(1, (now - flight.start) / 350));
   const { scale } = flight.from;
   const to = { offsetX: scene.width / 2 - flight.to.x * UNIT * scale, offsetY: scene.height / 2 - flight.to.y * UNIT * scale };
   const e = ease(t);
@@ -634,6 +634,8 @@ function redraw(): void {
     ripples = ripples.filter((r) => now <= r.born + RIPPLE_MS);
     if (shake && shake.born < 0) shake.born = now;
     if (shake && now > shake.born + SHAKE_MS) shake = null;
+    if (pinThrob && pinThrob.born < 0) pinThrob.born = now;
+    if (pinThrob && now > pinThrob.born + THROB_MS) pinThrob = null;
     draw(canvas, scene, {
       fullscreen: fullscreenElement() !== null,
       density: slider?.ui === "density" ? slider.at : (tries - MIN_TRIES) / (MAX_TRIES - MIN_TRIES),
@@ -644,6 +646,7 @@ function redraw(): void {
       cue,
       ripples,
       shake,
+      pinThrob,
       used: scene.goal ? movesSince(scene.goal.begun ?? 0) : 0,
       finish,
       now,
@@ -657,7 +660,7 @@ function redraw(): void {
     undoButton.disabled = scene.history.length === 0;
     const debug = (window as unknown as { unblock: { frames: { t: number; x: number; y: number }[] | null } }).unblock;
     if (debug.frames && moving) debug.frames.push({ t: now, x: moving.x, y: moving.y });
-    if (animation || sparkles.length || flight || throb || cue || ripples.length || shake || finish) redraw();
+    if (animation || sparkles.length || flight || throb || cue || ripples.length || shake || finish || pinThrob) redraw();
   });
 }
 
@@ -809,25 +812,24 @@ function hoverAt(e: PointerEvent): void {
 
 // A press on the arrow to the UI blocks is the arrow's, not the board's.
 let onArrow: number | null = null;
-/** Where tapping the edge marker under the pointer goes (lattice units), or null. */
-function markerAt(e: PointerEvent): Point | null {
+/** Where tapping the edge arrow under the pointer goes (lattice units), and which arrow it
+ * is, or null. (The goal's glow is not tappable: it was hit by accident.) */
+function markerAt(e: PointerEvent): (Point & { pin: "red" | "ui" }) | null {
   const near = (a: { x: number; y: number } | null) => !!a && Math.hypot(e.offsetX - a.x, e.offsetY - a.y) <= 24;
-  // The goal's markers first: when pins overlap, the red one is on top.
+  // The red arrow first: when pins overlap, it is on top.
   const goal = scene.goal;
   const red = goal && scene.layout.byId(goal.id);
   if (goal && red) {
     const at = whereIs(scene, goal.id)!;
-    if (near(redArrow(scene))) return { x: at.x + red.w / 2, y: at.y + red.h / 2 };
-    const b = goalBand(scene);
-    if (b && b.alpha > 0.3 && e.offsetX >= b.x - 8 && e.offsetX <= b.x + b.width + 8 && e.offsetY >= b.y - 8 && e.offsetY <= b.y + b.height + 8) {
-      return { x: goal.target.x + red.w / 2, y: goal.target.y + red.h / 2 };
-    }
+    if (near(redArrow(scene))) return { x: at.x + red.w / 2, y: at.y + red.h / 2, pin: "red" };
   }
   const home = scene.layout.byId("fullscreen");
-  if (home && near(uiArrow(scene))) return { x: home.x + 0.5, y: home.y + 0.5 };
+  if (home && near(uiArrow(scene))) return { x: home.x + 0.5, y: home.y + 0.5, pin: "ui" };
   return null;
 }
 const hitsArrow = (e: PointerEvent) => markerAt(e) !== null;
+// A tapped arrow throbs, then the view glides, so it is clear the arrow did it.
+let pinThrob: { pin: "red" | "ui"; born: number } | null = null;
 
 canvas.addEventListener("pointerdown", (e) => {
   if (e.pointerType === "mouse" && e.button !== 0) return;
@@ -857,7 +859,10 @@ canvas.addEventListener("pointerup", (e) => {
   if (e.pointerId === onArrow) {
     onArrow = null;
     const to = markerAt(e);
-    if (to) flyTo(to);
+    if (to) {
+      pinThrob = { pin: to.pin, born: -1 };
+      flyTo(to, 160);
+    }
     redraw();
     return;
   }

@@ -492,7 +492,7 @@ const browser = await chromium.launch();
   await page.screenshot({ path: shots + "phone-5b-indicator.png" });
   // Tapping the arrow glides the view back to the UI blocks, at the same zoom.
   await tap(arrowAt);
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(700);
   const home2 = await page.evaluate(() => unblock.scene.camera);
   check(Math.abs(home2.offsetX - 110) < 1 && Math.abs(home2.offsetY - 370) < 1, `tapping the arrow brings the view back to the UI blocks (offset ${home2.offsetX.toFixed(0)},${home2.offsetY.toFixed(0)})`);
   check(await page.evaluate(() => unblock.scene.circle === null && unblock.scene.history.length === 0), "and the tap does nothing to the board");
@@ -689,10 +689,14 @@ const browser = await chromium.launch();
   check(offTrack === 0, `no glow once the target's row is not wholly in view (${offTrack} red spots on the edge)`);
   await page.evaluate((c) => { unblock.scene.camera = c; unblock.redraw(); }, camera);
   await frame(page);
+  const beforeGlowTap = await page.evaluate(() => ({ ...unblock.scene.camera }));
   await tap(marks.glowEdge.map((v, i) => (i === 0 ? v - 10 : v)));
   await page.waitForTimeout(500);
-  const atTarget = await page.evaluate(() => unblock.scene.camera);
-  check(Math.abs(atTarget.offsetX - (200 - 21 * 60)) < 1 && Math.abs(atTarget.offsetY - (400 - 3.5 * 60)) < 1, `tapping the glow brings the target to the middle (${atTarget.offsetX.toFixed(0)},${atTarget.offsetY.toFixed(0)})`);
+  const afterGlowTap = await page.evaluate(() => unblock.scene.camera);
+  check(JSON.stringify(afterGlowTap) === JSON.stringify(beforeGlowTap), "tapping the glow does not move the view (it was hit by accident)");
+  // Go to the target, then the arrow back to the red block.
+  await page.evaluate(() => { unblock.scene.camera = { scale: 1, offsetX: 200 - 21 * 60, offsetY: 400 - 3.5 * 60 }; unblock.redraw(); });
+  await frame(page);
   const back = await page.evaluate(() => {
     const c = unblock.scene.camera, s = unblock.scene;
     const bx = -6 * 60 * c.scale + c.offsetX, by = 3.5 * 60 * c.scale + c.offsetY;
@@ -700,11 +704,15 @@ const browser = await chromium.launch();
     const k = Math.min(Math.abs((s.width / 2 - 26) / dx || Infinity), Math.abs((s.height / 2 - 26) / dy || Infinity));
     return [cx + dx * k, cy + dy * k];
   });
+  const pinBefore = await page.evaluate(() => ({ ...unblock.scene.camera }));
   await tap(back);
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(90);
+  const pinMid = await page.evaluate(() => ({ ...unblock.scene.camera }));
+  check(pinMid.offsetX === pinBefore.offsetX, "a tapped arrow throbs first; the view waits for it");
+  await page.waitForTimeout(700);
   const atRed = await page.evaluate(() => unblock.scene.camera);
   check(Math.abs(atRed.offsetX - (200 + 6 * 60)) < 1, `tapping the red arrow brings the red block to the middle (${atRed.offsetX.toFixed(0)})`);
-  check(await page.evaluate(() => unblock.scene.history.length === 0 && unblock.scene.circle === null), "and the taps did nothing to the board");
+  check(await page.evaluate(() => unblock.scene.history.length === 0), "and the taps moved nothing on the board");
   await page.evaluate(() => { unblock.scene.camera = { scale: 1, offsetX: 170, offsetY: 370 }; unblock.redraw(); });
 
   // The home block goes to the homepage (here the test server's root).

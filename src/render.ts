@@ -49,7 +49,7 @@ const throbScale = (t: number) => (t <= 0 || t >= 1 ? 1 : 1 + 0.15 * Math.sin(Ma
 export function draw(
   canvas: HTMLCanvasElement,
   scene: Scene,
-  { fullscreen, density, fps = true, sliding, sparkles = [], throb = null, cue = null, ripples = [], shake = null, used = 0, finish = null, now = 0 }: {
+  { fullscreen, density, fps = true, sliding, sparkles = [], throb = null, cue = null, ripples = [], shake = null, pinThrob = null, used = 0, finish = null, now = 0 }: {
     fullscreen: boolean;
     density: number;
     /** Whether the fps counter is showing. */
@@ -65,6 +65,8 @@ export function draw(
     ripples?: { at: { x: number; y: number }; born: number }[];
     /** A block that was tapped but cannot move, shaking since `born`. */
     shake?: { id: string; born: number } | null;
+    /** A tapped edge arrow, throbbing since `born`. */
+    pinThrob?: { pin: "red" | "ui"; born: number } | null;
     /** Moves made on the current goal so far, for its score track. */
     used?: number;
     /** The goal just reached, and when: its score track plays the finish. */
@@ -261,9 +263,10 @@ export function draw(
   const band = goalBand(scene);
   if (band) drawBand(ctx, band, dpr);
   const toUi = uiArrow(scene);
-  if (toUi) drawPin(ctx, toUi, COLORS.ui, 16, dpr, true);
+  const pinBeat = (pin: "red" | "ui") => (pinThrob?.pin === pin ? 1 + 2 * (throbScale((now - pinThrob.born) / THROB_MS) - 1) : 1);
+  if (toUi) drawPin(ctx, toUi, COLORS.ui, 16 * pinBeat("ui"), dpr, true);
   const toRed = redArrow(scene);
-  if (toRed) drawPin(ctx, toRed, COLORS.goal, 13, dpr);
+  if (toRed) drawPin(ctx, toRed, COLORS.goal, 13 * pinBeat("red"), dpr);
   // A slide entirely out of view (an undo, say): a small green arrow points to it while it runs.
   if (sliding) {
     const block = scene.layout.byId(sliding.id);
