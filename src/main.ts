@@ -7,7 +7,7 @@ import { bestKnown, medal, viewCentre, type Goal } from "./goal";
 import type { GoalRequest } from "./goal-worker";
 import { Gestures } from "./gestures";
 import { fixedLayout, MAX_TRIES, MIN_TRIES, randomLayout, TRIES, UNIT, type Placed, type Ui } from "./layout";
-import { applyTheme, CUE_MS, draw, RIPPLE_MS, SHAKE_MS, THROB_MS, redArrow, uiArrow, type Sparkle } from "./render";
+import { CUE_MS, draw, fading, RIPPLE_MS, SHAKE_MS, THROB_MS, redArrow, uiArrow, type Sparkle } from "./render";
 import { ease, slideDuration } from "./slide";
 import { blockAt, blocksIn, slideRange, type Move } from "./rules";
 import { borderOnScreen, goalSolved, latticeRect, newScene, relayout, resize, restart, undo, visibleBlocks, whereIs } from "./scene";
@@ -156,8 +156,6 @@ function save(): void {
   lookAhead();
 }
 
-// A colour theme and border for the goals, to compare them (reports/goal-colors.html).
-applyTheme(new URLSearchParams(location.search).get("theme"), new URLSearchParams(location.search).get("border"));
 const seed = load<number>(SEED_KEY, Math.floor(Math.random() * 2 ** 32));
 let tries = load<number>(TRIES_KEY, TRIES);
 const debug = load<boolean>(DEBUG_KEY, false);
@@ -662,7 +660,7 @@ function redraw(): void {
     undoButton.disabled = scene.history.length === 0;
     const debug = (window as unknown as { unblock: { frames: { t: number; x: number; y: number }[] | null } }).unblock;
     if (debug.frames && moving) debug.frames.push({ t: now, x: moving.x, y: moving.y });
-    if (animation || sparkles.length || flight || throb || cue || ripples.length || shake || finish || pinThrob) redraw();
+    if (animation || sparkles.length || flight || throb || cue || ripples.length || shake || finish || pinThrob || fading()) redraw();
   });
 }
 

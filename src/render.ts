@@ -2,7 +2,7 @@
 // camera transform, so it all zooms and pans together.
 import { worldRect } from "./camera";
 import { intersects, UNIT, type Block } from "./layout";
-import { drawScoreTrack, TRACK_COLORS } from "./score-track";
+import { drawScoreTrack } from "./score-track";
 import { bestKnown, type Goal } from "./goal";
 import { borderOnScreen, latticeRect, quickPush, visibleBlocks, whereIs, type Scene } from "./scene";
 
@@ -15,35 +15,26 @@ export const COLORS = {
   dragging: "#e0823d",
   stuck: "#8d97a3",
   goal: "#d64545",
+  // The goal in play is coral (its target's area; the score track's fill is in
+  // score-track.ts); reached goals are gold: the block, and its target's area and outline,
+  // which show where it was once the block has moved away.
   target: "rgba(255, 127, 95, 0.18)",
-  // Reached goals: a softer colour, so the one in play stands out (applyTheme).
-  done: "#e9765c",
-  targetLine: "",
-  doneLine: "",
+  done: "#d49a2a",
+  doneTarget: "rgba(240, 176, 40, 0.2)",
+  doneLine: "rgba(205, 140, 20, 0.6)",
   star: "#f2b632",
   ui: "#1d1d1f",
   wall: "#5f5d57",
   icon: "#f3f2ee",
 };
-/** Colour themes for the goals (?theme=coral|gold, to compare them; coral by default): the
- * current target's area, a reached red block, the score track's fill, and the outlines a
- * border option draws. Reached targets have no area of their own (no ring round the block). */
-export const THEMES: Record<string, { target: string; done: string; fill: string; line: string; doneLine: string }> = {
-  coral: { target: "rgba(255, 127, 95, 0.18)", done: "#e9765c", fill: "rgba(233, 108, 82, 0.8)", line: "rgba(233, 108, 82, 0.7)", doneLine: "rgba(214, 92, 66, 0.55)" },
-  gold: { target: "rgba(240, 176, 40, 0.2)", done: "#d49a2a", fill: "rgba(205, 140, 20, 0.8)", line: "rgba(205, 140, 20, 0.75)", doneLine: "rgba(185, 125, 15, 0.55)" },
-};
-/** Outlines to try (?border=): none, the current target, reached targets, or both. */
-export const BORDERS = { target: false, done: false };
-export function applyTheme(name: string | null, border: string | null = null): void {
-  const t = THEMES[name ?? ""] ?? THEMES.coral!;
-  COLORS.target = t.target;
-  COLORS.done = t.done;
-  COLORS.targetLine = t.line;
-  COLORS.doneLine = t.doneLine;
-  TRACK_COLORS.fill = t.fill;
-  BORDERS.target = border === "target" || border === "both";
-  BORDERS.done = border === "done" || border === "both";
-}
+/** How long a reached target's area takes to fade out as its block lands on it (and back
+ * in as it leaves), ms. */
+const AREA_FADE_MS = 300;
+/** Per reached goal: whether its block was on its target at the last frame, and since when. */
+const onTargetSince = new Map<string, { on: boolean; since: number }>();
+let areasFading = false;
+/** Whether a reached target's area is still fading (main.ts keeps frames coming). */
+export const fading = () => areasFading;
 const DOT_SIZE = 4.5; // world units across, one dot per lattice corner
 const GAP = 3; // world units between a block's edge and its lattice cells
 const TARGET_MARGIN = 3; // world units the target reaches past the red block's cells
@@ -140,24 +131,36 @@ export function draw(
     const { goal: g, cells } = targets[i]!;
     const own = new Path2D();
     area(cells, own);
-    // The current target has a pale area; a reached one none (no ring round its block).
-    if (g === goal) {
-      ctx.save();
-      outside(targets.slice(0, i));
-      ctx.fillStyle = COLORS.target;
-      ctx.fill(own);
-      ctx.restore();
-    }
-    // Outlines, where the border option asks for them, only outside the other targets.
-    if (g === goal ? BORDERS.target : BORDERS.done) {
-      ctx.save();
-      outside(targets.filter((_, j) => j !== i));
-      ctx.strokeStyle = g === goal ? COLORS.targetLine : COLORS.doneLine;
-      ctx.lineWidth = 2;
-      ctx.stroke(own);
-      ctx.restore();
-    }
+    // The current target: a pale coral area. A reached one: a pale gold area with an
+    // outline, faded out while its block stands on it (no ring round the block).
+    const shown = g === goal ? 1 : areaShown(g, now);
+    if (shown <= 0) return;
+    ctx.save();
+    ctx.globalAlpha = shown;
+    outside(targets.slice(0, i));
+    ctx.fillStyle = g === goal ? COLORS.target : COLORS.doneTarget;
+    ctx.fill(own);
+    ctx.restore();
+    if (g === goal) return;
+    ctx.save();
+    ctx.globalAlpha = shown;
+    outside(targets.filter((_, j) => j !== i));
+    ctx.strokeStyle = COLORS.doneLine;
+    ctx.lineWidth = 2;
+    ctx.stroke(own);
+    ctx.restore();
   };
+  /** How much of a reached target's area shows: none with its block on it, all without. */
+  const areaShown = (g: Goal, now: number) => {
+    const at = whereIs(scene, g.id), on = !!at && at.x === g.target.x && at.y === g.target.y && sliding?.id !== g.id;
+    let s = onTargetSince.get(g.id);
+    if (!s) onTargetSince.set(g.id, (s = { on, since: -Infinity }));
+    if (s.on !== on) onTargetSince.set(g.id, (s = { on, since: now }));
+    const t = Math.min(1, (now - s.since) / AREA_FADE_MS);
+    if (t < 1) areasFading = true;
+    return on ? 1 - t : t;
+  };
+  areasFading = false;
   const trackRect = (c: Cells) => ({ x: c.x * UNIT - TARGET_MARGIN, y: c.y * UNIT - TARGET_MARGIN, width: c.w * UNIT + 2 * TARGET_MARGIN, height: c.h * UNIT + 2 * TARGET_MARGIN });
   const fewestOf = (g: Goal) => bestKnown(g) ?? g.solution.length;
   // Reached targets go under the blocks (their red blocks sit on them); the current one goes

@@ -6,9 +6,9 @@
 import { scoreTrack } from "./stars";
 
 const STAR = "#fdd835", STAR_EDGE = "#e07b00", LINE = "rgba(80, 82, 86, 0.25)";
-/** The moves' fill, and the outline of a star not won (light, to show on the fill). Set by
- * the colour theme (render.ts). */
-export const TRACK_COLORS = { fill: "rgba(233, 108, 82, 0.8)", gray: "#c9ccd1" };
+/** The moves' fill (the goal in play's coral), and the outline of a star not won (light,
+ * to show on the fill). */
+const TRACK_COLORS = { fill: "rgba(233, 108, 82, 0.8)", gray: "#c9ccd1" };
 const BLUE = "#3b6fd4", BLUE_DARK = "#2f5bb3", BLUE_DARKER = "#264a94";
 
 /** The finish, in ms from the moment the goal is reached. */
@@ -175,9 +175,11 @@ export function drawScoreTrack(
     ctx.shadowOffsetY = 0.6;
     ctx.fillStyle = "#ffffff";
     ctx.font = `700 ${size}px system-ui, sans-serif`;
-    ctx.textBaseline = "middle";
+    // Digits sit on the baseline; a cap height is about 0.72 of the size, so this centres
+    // them on the stars' line.
+    ctx.textBaseline = "alphabetic";
     ctx.textAlign = vertical ? "center" : "left";
-    upright(vertical ? size * 0.9 : T * 0.18, cv, () => ctx.fillText(String(used), 0, 0));
+    upright(vertical ? size * 0.9 : T * 0.18, cv, () => ctx.fillText(String(used), 0, size * 0.36));
     ctx.restore();
   }
 
