@@ -39,8 +39,10 @@ function starPath(ctx: CanvasRenderingContext2D, x: number, y: number, r: number
   ctx.closePath();
 }
 
-/** A star about `s` across: gold, an outline still in reach, or a gray outline (lost). */
-function star(ctx: CanvasRenderingContext2D, x: number, y: number, s: number, look: "filled" | "outline" | "gray"): void {
+/** A star about `s` across: gold, an outline still in reach (solid pale centre), or one
+ * lost (grey outline; `solid` 0..1 how much its centre hides what is under it: the fill,
+ * whose colour it takes, during play, nothing once the stars have gathered). */
+function star(ctx: CanvasRenderingContext2D, x: number, y: number, s: number, look: "filled" | "outline" | "gray", solid = 0): void {
   starPath(ctx, x, y + s * 0.057, s * 0.6);
   ctx.lineJoin = "round";
   if (look === "filled") {
@@ -49,14 +51,22 @@ function star(ctx: CanvasRenderingContext2D, x: number, y: number, s: number, lo
     ctx.lineWidth = s * 0.06;
     ctx.strokeStyle = STAR_EDGE;
   } else {
-    // A star still in reach has a solid centre, near the pale track it sits on; one not won
-    // stays see-through.
-    ctx.fillStyle = look === "gray" ? "rgba(255, 255, 255, 0.25)" : "#f7e7e3";
+    if (look === "gray") {
+      ctx.fillStyle = `rgba(234, 134, 134, ${solid})`; // the moves' fill over the board
+      ctx.fill();
+      ctx.fillStyle = `rgba(255, 255, 255, ${0.25 * (1 - solid)})`;
+    } else ctx.fillStyle = "#f7e7e3"; // near the pale track it sits on
     ctx.fill();
     ctx.lineWidth = s * 0.09;
     ctx.strokeStyle = look === "gray" ? TRACK_COLORS.gray : STAR_EDGE;
   }
-  ctx.stroke();
+  if (look === "gray") {
+    // Faint while the track shows, clearer in the gathered row.
+    ctx.save();
+    ctx.globalAlpha *= 0.45 + 0.5 * (1 - solid);
+    ctx.stroke();
+    ctx.restore();
+  } else ctx.stroke();
 }
 
 /** The blue rosette, its disc about `s` across, centred with its tails on (x, y). */
@@ -206,8 +216,7 @@ export function drawScoreTrack(
     const scale = filled ? pop(clamp((t - fillAt) / FINISH.POP_MS)) : 1;
     const look = filled ? "filled" : k >= 0 ? "outline" : "gray";
     ctx.save();
-    ctx.globalAlpha = k >= 0 ? 1 : 0.35 + 0.55 * ease;
-    upright(place(st.at, st.u), cv, () => star(ctx, 0, 0, size * scale, look));
+    upright(place(st.at, st.u), cv, () => star(ctx, 0, 0, size * scale, look, 1 - ease));
     ctx.restore();
   }
   if (medalP !== null) {
