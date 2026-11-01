@@ -2,15 +2,16 @@
 import type { Point, Rect } from "./camera";
 import type { Difficulty } from "./difficulty";
 import { MAX_STARS, medalWon, scoreTrack, starsEarned } from "./stars";
-import { finishTimes } from "./score-track";
+import { finishTimes, type TraceEntry } from "./score-track";
+import { Inspector } from "./inspector";
 import { bestKnown, medal, viewCentre, type Goal } from "./goal";
 import type { GoalRequest } from "./goal-worker";
 import { Gestures } from "./gestures";
 import { fixedLayout, MAX_TRIES, MIN_TRIES, randomLayout, TRIES, UNIT, type Placed, type Ui } from "./layout";
-import { CUE_MS, draw, fading, RIPPLE_MS, SHAKE_MS, THROB_MS, redArrow, uiArrow, type Sparkle } from "./render";
+import { CUE_MS, draw, fading, resetFades, RIPPLE_MS, SHAKE_MS, THROB_MS, redArrow, uiArrow, type Sparkle } from "./render";
 import { ease, slideDuration } from "./slide";
 import { blockAt, blocksIn, slideRange, type Move } from "./rules";
-import { borderOnScreen, goalSolved, latticeRect, newScene, relayout, resize, restart, undo, visibleBlocks, whereIs } from "./scene";
+import { borderOnScreen, goalSolved, latticeRect, newScene, quickPush, record, relayout, resize, restart, undo, visibleBlocks, whereIs } from "./scene";
 
 // v6: UI blocks in a game row and a debug row (generation changed); v5 two rows of UI
 // blocks, v4 one row, v3 one 2x2 reset block, v2 no seed, v1 free positions.
@@ -345,9 +346,10 @@ function sliding(now: number): { id: string; x: number; y: number; from: Point; 
   return { id: move.id, x: move.from.x + (move.to.x - move.from.x) * e, y: move.from.y + (move.to.y - move.from.y) * e, from: move.from, to: move.to };
 }
 
-// The first time the red block lands on its target, stars fly out of it; from then on the
-// target keeps a check.
+// The first time the red block lands on its target, stars fly out of it.
 let sparkles: Sparkle[] = [];
+// Where the sparkles' scatter comes from (seeded by the inspector, so replays match).
+let random = Math.random;
 let throb: { id: string; born: number } | null = null;
 // Just after the throb, a trail from the new red block towards its target shows the way.
 let cue: { id: string; born: number } | null = null;
@@ -374,11 +376,11 @@ function reachGoal(now: number): void {
   const cx = (at.x + red.w / 2) * UNIT;
   const cy = (at.y + red.h / 2) * UNIT;
   sparkles = Array.from({ length: 16 }, (_, i) => {
-    const angle = (i / 16) * Math.PI * 2 + Math.random() * 0.3;
-    const reach = UNIT * (0.9 + Math.random() * 0.9);
+    const angle = (i / 16) * Math.PI * 2 + random() * 0.3;
+    const reach = UNIT * (0.9 + random() * 0.9);
     return {
       x: cx, y: cy, dx: Math.cos(angle) * reach, dy: Math.sin(angle) * reach,
-      born: now + Math.random() * 80, life: 650 + Math.random() * 250, size: UNIT * (0.09 + Math.random() * 0.08), spin: (Math.random() - 0.5) * 6,
+      born: now + random() * 80, life: 650 + random() * 250, size: UNIT * (0.09 + random() * 0.08), spin: (random() - 0.5) * 6,
     };
   });
   save();
@@ -413,6 +415,23 @@ function debugCode(step: "tap" | "red" | null): boolean {
   return true;
 }
 
+/** A tap pushed a block (the move is made): it slides there. A tap that sends the red block
+ * onto its target: if the target is not all in view, the view glides there first and the
+ * block moves after, so the finish shows. */
+function pushed(move: Move): void {
+  animate(move);
+  const goal = scene.goal, red = goal && scene.layout.byId(goal.id);
+  if (goal && red && animation && move.id === goal.id && move.to.x === goal.target.x && move.to.y === goal.target.y) {
+    const c = scene.camera, view = borderOnScreen(scene);
+    const x = goal.target.x * UNIT * c.scale + c.offsetX, y = goal.target.y * UNIT * c.scale + c.offsetY;
+    const inView = x >= view.x && y >= view.y && x + red.w * UNIT * c.scale <= view.x + view.width && y + red.h * UNIT * c.scale <= view.y + view.height;
+    if (!inView) {
+      flyTo({ x: goal.target.x + red.w / 2, y: goal.target.y + red.h / 2 });
+      animation.wait = true;
+    }
+  }
+}
+
 const gestures = new Gestures(scene, {
   onChange: () => {
     debugCode(null);
@@ -421,19 +440,7 @@ const gestures = new Gestures(scene, {
   },
   onPush: (move) => {
     debugCode(null);
-    animate(move);
-    // A tap that sends the red block onto its target: if the target is not all in view, the
-    // view glides there first and the block moves after, so the finish shows.
-    const goal = scene.goal, red = goal && scene.layout.byId(goal.id);
-    if (goal && red && animation && move.id === goal.id && move.to.x === goal.target.x && move.to.y === goal.target.y) {
-      const c = scene.camera, view = borderOnScreen(scene);
-      const x = goal.target.x * UNIT * c.scale + c.offsetX, y = goal.target.y * UNIT * c.scale + c.offsetY;
-      const inView = x >= view.x && y >= view.y && x + red.w * UNIT * c.scale <= view.x + view.width && y + red.h * UNIT * c.scale <= view.y + view.height;
-      if (!inView) {
-        flyTo({ x: goal.target.x + red.w / 2, y: goal.target.y + red.h / 2 });
-        animation.wait = true;
-      }
-    }
+    pushed(move);
   },
   onStuck: (id) => {
     if (debugCode(id === scene.goal?.id ? "red" : null)) forgetEverything();
@@ -642,6 +649,16 @@ function redraw(): void {
   queued = true;
   requestAnimationFrame((now) => {
     queued = false;
+    if (inspector?.open) return; // it draws the frames itself
+    const moving = advance(now);
+    paint(now, moving);
+    if (animation || sparkles.length || flight || throb || cue || ripples.length || shake || finish || pinThrob || fading()) redraw();
+  });
+}
+
+/** Move everything on to `now`: the view's glide, the slide, the goal reached, and the
+ * timed effects (what a frame does before it draws). */
+function advance(now: number): ReturnType<typeof sliding> {
     flying(now);
     placeView();
     cameraMoved();
@@ -659,7 +676,18 @@ function redraw(): void {
     if (shake && now > shake.born + SHAKE_MS) shake = null;
     if (pinThrob && pinThrob.born < 0) pinThrob.born = now;
     if (pinThrob && now > pinThrob.born + THROB_MS) pinThrob = null;
-    draw(canvas, scene, {
+    if (finish && now > finish.born + finish.end) {
+      const next = finish.next;
+      finish = null;
+      requestGoal(next);
+    }
+    sparkles = sparkles.filter((s) => now < s.born + s.life);
+    return moving;
+}
+
+/** Draw the board as it is at `now` (on `to`, the screen's canvas by default). */
+function paint(now: number, moving: ReturnType<typeof sliding>, to: HTMLCanvasElement = canvas, trace?: TraceEntry[]): void {
+    draw(to, scene, {
       fullscreen: fullscreenElement() !== null,
       density: slider?.ui === "density" ? slider.at : (tries - MIN_TRIES) / (MAX_TRIES - MIN_TRIES),
       fps: showingFps,
@@ -672,19 +700,13 @@ function redraw(): void {
       pinThrob,
       used: scene.goal ? movesSince(scene.goal.begun ?? 0) : 0,
       finish,
+      trace,
       now,
     });
-    if (finish && now > finish.born + finish.end) {
-      const next = finish.next;
-      finish = null;
-      requestGoal(next);
-    }
-    sparkles = sparkles.filter((s) => now < s.born + s.life);
+    if (to !== canvas) return;
     undoButton.disabled = scene.history.length === 0;
     const debug = (window as unknown as { unblock: { frames: { t: number; x: number; y: number }[] | null } }).unblock;
     if (debug.frames && moving) debug.frames.push({ t: now, x: moving.x, y: moving.y });
-    if (animation || sparkles.length || flight || throb || cue || ripples.length || shake || finish || pinThrob || fading()) redraw();
-  });
 }
 
 // Frames are counted here, not in redraw: redraw only runs while something changes, and the
@@ -855,6 +877,7 @@ const hitsArrow = (e: PointerEvent) => markerAt(e) !== null;
 let pinThrob: { pin: "red" | "ui"; born: number } | null = null;
 
 canvas.addEventListener("pointerdown", (e) => {
+  if (inspector?.open) return; // the board is a replay while it is open
   if (e.pointerType === "mouse" && e.button !== 0) return;
   canvas.setPointerCapture(e.pointerId);
   if (onArrow === null && hitsArrow(e)) {
@@ -912,8 +935,51 @@ canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 // page blocks the touch's moves (telegram-test.html showed touch-action alone is not enough).
 canvas.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
 addEventListener("resize", () => {
-  resize(scene, innerWidth, innerHeight);
-  redraw();
+  resize(scene, innerWidth, innerHeight - (inspector?.open ? inspector.height() : 0));
+  if (inspector?.open) inspector.show();
+  else redraw();
 });
+
+// On the testbed: the animation inspector, replaying the tap on the red block and its finish.
+/** Everything a replay changes (copied in and out whole). */
+const playState = () => ({
+  scene: { moved: scene.moved, history: scene.history, goal: scene.goal, done: scene.done, camera: scene.camera, circle: scene.circle },
+  state: { flight, animation, sparkles, throb, cue, ripples, shake, finish, pinThrob, testbedNext },
+});
+const inspector: Inspector | null = !testbed ? null : new Inspector({
+  open(bottom) {
+    // The board above the panel, with the red block and its target in the middle.
+    canvas.style.height = bottom ? `${innerHeight - bottom}px` : "";
+    resize(scene, innerWidth, innerHeight - bottom);
+    const goal = scene.goal, at = goal && whereIs(scene, goal.id), red = goal && scene.layout.byId(goal.id);
+    if (!bottom || !goal || !at || !red) return;
+    const x = ((at.x + goal.target.x + red.w) / 2) * UNIT, y = ((at.y + goal.target.y + red.h) / 2) * UNIT, c = scene.camera;
+    scene.camera = { scale: c.scale, offsetX: scene.width / 2 - x * c.scale, offsetY: scene.height / 2 - y * c.scale };
+  },
+  snapshot: () => structuredClone(playState()),
+  restore(snap) {
+    const { scene: s, state: t } = structuredClone(snap as ReturnType<typeof playState>);
+    Object.assign(scene, s, { dragging: null, stuckId: null });
+    ({ flight, animation, sparkles, throb, cue, ripples, shake, finish, pinThrob, testbedNext } = t);
+    random = Math.random;
+    resetFades();
+  },
+  pushRed() {
+    const goal = scene.goal, red = goal && scene.layout.byId(goal.id), at = goal && whereIs(scene, goal.id);
+    if (!goal || !red || !at) return false;
+    const to = quickPush(scene, { ...red, ...at });
+    if (!to) return false;
+    const move = { id: goal.id, from: at, to };
+    record(scene, move);
+    pushed(move);
+    return true;
+  },
+  advance,
+  paint: (now, moving, to, trace) => paint(now, moving as ReturnType<typeof sliding>, to, trace),
+  state: () => ({ sliding: !!animation && !(animation.wait && flight), gliding: !!flight, finishing: !!finish, goal: scene.goal?.id ?? null }),
+  seed(r) {
+    random = r;
+  },
+}, redraw);
 
 redraw();

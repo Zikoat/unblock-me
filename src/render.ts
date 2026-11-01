@@ -2,7 +2,7 @@
 // camera transform, so it all zooms and pans together.
 import { worldRect } from "./camera";
 import { intersects, UNIT, type Block } from "./layout";
-import { drawScoreTrack, FINISH, finishTimes } from "./score-track";
+import { drawScoreTrack, FINISH, finishTimes, type TraceEntry } from "./score-track";
 import { bestKnown, type Goal } from "./goal";
 import { borderOnScreen, latticeRect, quickPush, visibleBlocks, whereIs, type Scene } from "./scene";
 
@@ -36,6 +36,11 @@ const onTargetSince = new Map<string, { on: boolean; since: number }>();
 let areasFading = false;
 /** Whether a reached target's area is still fading (main.ts keeps frames coming). */
 export const fading = () => areasFading;
+/** Forget the targets' fades (the inspector replays from a snapshot). */
+export function resetFades(): void {
+  onTargetSince.clear();
+  areasFading = false;
+}
 const DOT_SIZE = 4.5; // world units across, one dot per lattice corner
 const GAP = 3; // world units between a block's edge and its lattice cells
 const TARGET_MARGIN = 3; // world units the target reaches past the red block's cells
@@ -61,7 +66,7 @@ const throbScale = (t: number) => (t <= 0 || t >= 1 ? 1 : 1 + 0.15 * Math.sin(Ma
 export function draw(
   canvas: HTMLCanvasElement,
   scene: Scene,
-  { fullscreen, density, fps = true, sliding, sparkles = [], throb = null, cue = null, ripples = [], shake = null, pinThrob = null, used = 0, finish = null, now = 0 }: {
+  { fullscreen, density, fps = true, sliding, sparkles = [], throb = null, cue = null, ripples = [], shake = null, pinThrob = null, used = 0, trace, finish = null, now = 0 }: {
     fullscreen: boolean;
     density: number;
     /** Whether the fps counter is showing. */
@@ -77,6 +82,8 @@ export function draw(
     ripples?: { at: { x: number; y: number }; born: number }[];
     /** A block that was tapped but cannot move, shaking since `born`. */
     shake?: { id: string; born: number } | null;
+    /** Collects the finishing goal's icons as drawn (the animation inspector). */
+    trace?: TraceEntry[];
     /** A tapped edge arrow, throbbing since `born`. */
     pinThrob?: { pin: "red" | "ui"; born: number } | null;
     /** Moves made on the current goal so far, for its score track. */
@@ -282,7 +289,7 @@ export function draw(
   // reached one's finish and then its row of stars.
   for (const { goal: g, cells } of targets) {
     if (g === goal) drawScoreTrack(ctx, trackRect(cells), fewestOf(g), used, { undone: g.undone });
-    else if (g.used !== undefined) drawScoreTrack(ctx, trackRect(cells), fewestOf(g), g.used, { t: finish?.id === g.id ? now - finish.born : Infinity, undone: g.undone });
+    else if (g.used !== undefined) drawScoreTrack(ctx, trackRect(cells), fewestOf(g), g.used, { t: finish?.id === g.id ? now - finish.born : Infinity, undone: g.undone, trace: finish?.id === g.id ? trace : undefined });
   }
   for (const s of sparkles) sparkle(ctx, s, now);
 

@@ -25,6 +25,10 @@ export function finishTimes(fewest: number, used: number): { kept: number; medal
   return { kept, medalAt, gather, end: gather + FINISH.GATHER_MS };
 }
 
+/** One icon as drawn: which, where along the track (world px), its size and opacity (for the
+ * animation inspector's curves). */
+export type TraceEntry = { name: string; along: number; scale: number; opacity: number };
+
 const clamp = (v: number) => Math.max(0, Math.min(1, v));
 const easeInOut = (t: number) => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2);
 /** A filled star's pop: a damped spring from and back to its size, up to about 1.25. */
@@ -121,7 +125,7 @@ export function drawScoreTrack(
   rect: { x: number; y: number; width: number; height: number },
   fewest: number,
   used: number,
-  { t = null, undone = false, radius = 12 }: { t?: number | null; undone?: boolean; radius?: number } = {},
+  { t = null, undone = false, radius = 12, trace }: { t?: number | null; undone?: boolean; radius?: number; trace?: TraceEntry[] } = {},
 ): void {
   const vertical = rect.height > rect.width;
   const L = vertical ? rect.height : rect.width, T = vertical ? rect.width : rect.height;
@@ -218,6 +222,7 @@ export function drawScoreTrack(
     ctx.save();
     upright(place(st.at, st.u), cv, () => star(ctx, 0, 0, size * scale, look, 1 - ease));
     ctx.restore();
+    trace?.push({ name: st.at === Infinity ? "Star (end)" : `Star ${st.at}`, along: place(st.at, st.u), scale: (size / s0) * scale, opacity: look === "gray" ? 0.45 + 0.5 * ease : 1 });
   }
   if (medalP !== null) {
     const u = place("medal", Math.min(used, span) * w), ms = size * 0.8;
@@ -248,6 +253,7 @@ export function drawScoreTrack(
         }
         ctx.restore();
       }
+      trace?.push({ name: "Medal", along: u, scale: scale * (size / s0), opacity: land < 1 ? clamp(land * 2.5) : 1 });
       ctx.save();
       ctx.globalAlpha = land < 1 ? clamp(land * 2.5) : 1;
       upright(u, cv, () => {
