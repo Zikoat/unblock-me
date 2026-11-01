@@ -94,6 +94,8 @@ const browser = await chromium.launch();
   const H = (id, x, y) => ({ id, x, y, w: 2, h: 1 });
   const V = (id, x, y) => ({ id, x, y, w: 1, h: 2 });
   const Wall = (x, y) => ({ id: `wall${x},${y}`, x, y, w: 1, h: 1, wall: true });
+  // UI blocks for placed boards (not the game's own layout: kept clear of the rows the
+  // placed boards use).
   const UI = [
     { id: "reset", x: -2, y: 3, w: 1, h: 1, ui: "reset" },
     { id: "fullscreen", x: 1, y: 0, w: 1, h: 1, ui: "fullscreen" },
@@ -127,22 +129,22 @@ const browser = await chromium.launch();
   await fresh();
   check(await page.evaluate(() => document.body.innerText.trim() === "" && getComputedStyle(document.querySelector("#fps")).display === "none"), "no text on the page: the fps counter starts off");
   // The fps toggle shows and hides the counter.
-  await tap(cell(2.5, 2.5));
+  await tap(cell(-0.5, 3.5));
   await page.waitForTimeout(100);
   const text = await page.evaluate(() => document.body.innerText.trim());
   check(/^\d+ fps · \d+[smhd] ago · [0-9a-f]{7,}\+?$/.test(text), `the fps toggle shows the debug counter: fps, build age and commit ("${text}")`);
   await page.waitForTimeout(1200);
   const idleFps = await page.evaluate(() => parseInt(document.querySelector("#fps").textContent));
   check(idleFps > 10, `with nothing moving the counter still counts frames (${idleFps} fps)`);
-  await tap(cell(2.5, 2.5));
+  await tap(cell(-0.5, 3.5));
   check(await page.evaluate(() => getComputedStyle(document.querySelector("#fps")).display === "none" && getComputedStyle(document.querySelector("#spin")).display === "none"), "and hides it again");
-  for (const [x, y, what] of [[-1.85, 2.15, "home"], [-1.85, 3.15, "reset"], [1.15, 0.15, "fullscreen"], [-0.85, 2.15, "density"], [0.15, 2.15, "border toggle"], [1.15, 2.15, "upload"], [2.15, 2.15, "fps toggle"], [3.15, 2.15, "reports"]]) {
+  for (const [x, y, what] of [[1.15, 3.15, "home"], [-0.85, 4.15, "reset"], [1.15, 0.15, "fullscreen"], [-0.85, 2.15, "density"], [0.15, 2.15, "border toggle"], [1.15, 2.15, "upload"], [-0.85, 3.15, "fps toggle"], [0.15, 3.15, "reports"]]) {
     await expectColor(page, cell(x, y), "reset", `the ${what} block is black`);
   }
   check((await colorAt(page, ...cell(0.5, 1.5))) !== "reset", "with an empty row between the game's row and the debug row");
   const iconPixels = await page.evaluate(() => {
     const c = document.querySelector("canvas"), d = c.width / c.clientWidth;
-    const data = c.getContext("2d").getImageData(50 * d, 550 * d, 60 * d, 60 * d).data;
+    const data = c.getContext("2d").getImageData(110 * d, 610 * d, 60 * d, 60 * d).data;
     let light = 0;
     for (let i = 0; i < data.length; i += 4) if (data[i] > 200) light++;
     return light / (data.length / 4);
@@ -174,7 +176,7 @@ const browser = await chromium.launch();
   await gesture([cell(1.5, 0.5)], [cell(2.5, 1.2)]); // dragging the fullscreen block pans
   await page.evaluate(() => localStorage.setItem("someone-else", "keep me"));
   const resetReload = page.waitForEvent("load", { timeout: 5000 }).then(() => true, () => false);
-  await tap(cell(-0.5, 4.2)); // the reset block, after the pan
+  await tap(cell(0.5, 5.2)); // the reset block, after the pan
   check(await resetReload, "tapping the reset block reloads the page");
   await frame(page);
   const seedAfter = await page.evaluate(() => unblock.seed());
@@ -201,7 +203,7 @@ const browser = await chromium.launch();
     "unblock-me:v6:seed": String(seedAfter),
   }), `storage holds only fresh defaults, and other pages' keys are left alone (${JSON.stringify(rest)})`);
   check(JSON.parse(storedGoal ?? "null")?.seed === seedAfter, "and a new goal for the new seed");
-  await expectColor(page, cell(-1.85, 3.15), "reset", "the reset block is still in its place");
+  await expectColor(page, cell(-0.85, 4.15), "reset", "the reset block is still in its place");
   await page.screenshot({ path: shots + "phone-2-after-reset.png" });
   const afterReset = await blockIds(page);
   await page.reload();
@@ -221,9 +223,9 @@ const browser = await chromium.launch();
 
   // Dragging a UI block pans instead.
   const cam = await page.evaluate(() => ({ ...unblock.scene.camera }));
-  await gesture([cell(-1.5, 3.5)], [cell(-0.5, 4.5)]);
+  await gesture([cell(-0.5, 4.5)], [cell(0.5, 5.5)]);
   const camAfter = await page.evaluate(() => ({ ...unblock.scene.camera }));
-  check(Math.abs(camAfter.offsetX - cam.offsetX - 60) < 0.5 && (await block(page, "reset")).x === -2, "dragging the reset block pans the board, the block stays");
+  check(Math.abs(camAfter.offsetX - cam.offsetX - 60) < 0.5 && (await block(page, "reset")).x === -1, "dragging the reset block pans the board, the block stays");
 
   // The border toggle: off by default, culling to the screen edge; on draws the smaller
   // border and culls to it.
@@ -310,7 +312,7 @@ const browser = await chromium.launch();
 
   // The reports block opens the list of reports, which links back to the game.
   await fresh();
-  await Promise.all([page.waitForURL("**/reports/"), tap(cell(3.5, 2.5))]);
+  await Promise.all([page.waitForURL("**/reports/"), tap(cell(0.5, 3.5))]);
   check((await page.textContent("h1")) === "Reports", `tapping the reports block opens the report list (${page.url()})`);
   check(await page.evaluate(() => [...document.querySelectorAll("ul.list a")].some((a) => a.textContent.startsWith("Play analysis"))), "which lists the play analysis");
   await Promise.all([page.waitForURL(url), page.click("a.back")]);
@@ -707,7 +709,7 @@ const browser = await chromium.launch();
 
   // The home block goes to the homepage (here the test server's root).
   const home = page.waitForEvent("load", { timeout: 5000 }).then(() => true, () => false);
-  await tap(cell(-1.5, 2.5));
+  await tap(cell(-1.5, 2.5)); // the placed board's home block
   check(await home && new URL(page.url()).pathname === "/", `the home block opens the homepage (${page.url()})`);
 
   // Pinch zooms and pans together; limits hold.

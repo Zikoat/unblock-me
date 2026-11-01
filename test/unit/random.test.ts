@@ -75,11 +75,11 @@ describe("random layout", () => {
       const near = randomLayout(seed, { debug: true }).blocksIn({ x: -5, y: -5, width: 10, height: 10 });
       expect(near.filter((b) => b.ui).map((b) => [b.ui, b.x, b.y, b.w, b.h])).toEqual([
         ["fullscreen", 1, 0, 1, 1],
-        ["density", -1, 2, 1, 1], ["border", 0, 2, 1, 1], ["upload", 1, 2, 1, 1], ["fps", 2, 2, 1, 1], ["reports", 3, 2, 1, 1], ["home", -2, 2, 1, 1], ["reset", -2, 3, 1, 1],
+        ["density", -1, 2, 1, 1], ["border", 0, 2, 1, 1], ["upload", 1, 2, 1, 1], ["fps", -1, 3, 1, 1], ["reports", 0, 3, 1, 1], ["home", 1, 3, 1, 1], ["reset", -1, 4, 1, 1],
       ]);
       for (const b of near) if (!b.ui) for (const c of cells(b)) {
         const [x, y] = c.split(",").map(Number) as [number, number];
-        expect(x >= -2 && x <= 3 && y >= 0 && y <= 3).toBe(false);
+        expect(x >= -1 && x <= 1 && y >= 0 && y <= 4).toBe(false);
       }
     }
   });
