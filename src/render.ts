@@ -2,7 +2,7 @@
 // camera transform, so it all zooms and pans together.
 import { worldRect } from "./camera";
 import { intersects, UNIT, type Block } from "./layout";
-import { drawScoreTrack } from "./score-track";
+import { drawScoreTrack, TRACK_COLORS } from "./score-track";
 import { bestKnown, type Goal } from "./goal";
 import { borderOnScreen, latticeRect, quickPush, visibleBlocks, whereIs, type Scene } from "./scene";
 
@@ -24,6 +24,23 @@ export const COLORS = {
   wall: "#5f5d57",
   icon: "#f3f2ee",
 };
+/** Colour themes for the goals (?theme=<name>, to compare them): the current target's area,
+ * a reached one's (empty: none, so no ring round its red block), a reached red block, and
+ * the score track's fill. */
+export const THEMES: Record<string, { target: string; doneTarget: string; done: string; fill: string }> = {
+  red: { target: "rgba(214, 69, 69, 0.14)", doneTarget: "rgba(120, 66, 60, 0.10)", done: "#8e3f3c", fill: "rgba(142, 63, 60, 0.78)" },
+  coral: { target: "rgba(255, 127, 95, 0.18)", doneTarget: "", done: "#e9765c", fill: "rgba(233, 108, 82, 0.8)" },
+  gold: { target: "rgba(240, 176, 40, 0.2)", doneTarget: "", done: "#d49a2a", fill: "rgba(205, 140, 20, 0.8)" },
+  teal: { target: "rgba(30, 160, 170, 0.16)", doneTarget: "", done: "#2a8f9d", fill: "rgba(28, 128, 140, 0.8)" },
+  violet: { target: "rgba(130, 95, 220, 0.16)", doneTarget: "", done: "#7a5cc4", fill: "rgba(110, 80, 190, 0.8)" },
+};
+export function applyTheme(name: string | null): void {
+  const t = THEMES[name ?? ""] ?? THEMES.red!;
+  COLORS.target = t.target;
+  COLORS.doneTarget = t.doneTarget;
+  COLORS.done = t.done;
+  TRACK_COLORS.fill = t.fill;
+}
 const DOT_SIZE = 4.5; // world units across, one dot per lattice corner
 const GAP = 3; // world units between a block's edge and its lattice cells
 const TARGET_MARGIN = 3; // world units the target reaches past the red block's cells
@@ -118,6 +135,7 @@ export function draw(
   };
   const drawTarget = (i: number) => {
     const { goal: g, cells } = targets[i]!;
+    if (g !== goal && !COLORS.doneTarget) return; // reached targets drawn only under their row
     const own = new Path2D();
     area(cells, own);
     ctx.save();
@@ -520,6 +538,21 @@ function edgeArrow(scene: Scene, target: ScreenRect): EdgeArrow | null {
   return { x: cx + dx * k, y: cy + dy * k, angle: Math.atan2(dy, dx) };
 }
 
+/** Both edge pins; when they would overlap, they step apart along the edge they sit on. */
+function pins(scene: Scene): { ui: EdgeArrow | null; red: EdgeArrow | null } {
+  const ui = uiArrowAlone(scene), red = redArrowAlone(scene);
+  if (!ui || !red) return { ui, red };
+  const apart = 40;
+  if (Math.hypot(ui.x - red.x, ui.y - red.y) >= apart) return { ui, red };
+  const view = borderOnScreen(scene);
+  const midX = (ui.x + red.x) / 2, midY = (ui.y + red.y) / 2;
+  // On the top or bottom edge they move sideways; on the left or right one, up and down.
+  const flat = Math.min(Math.abs(midY - view.y), Math.abs(midY - view.y - view.height)) < Math.min(Math.abs(midX - view.x), Math.abs(midX - view.x - view.width));
+  const first = flat ? ui.x <= red.x : ui.y <= red.y; // keep their order
+  const step = (s: number) => (flat ? { x: midX + s * apart / 2, y: midY } : { x: midX, y: midY + s * apart / 2 });
+  return { ui: { ...ui, ...step(first ? -1 : 1) }, red: { ...red, ...step(first ? 1 : -1) } };
+}
+
 type Cells = { x: number; y: number; w: number; h: number };
 
 /** The cells a goal's target covers: the red block's size at the target. */
@@ -530,6 +563,9 @@ function targetCells(scene: Scene, goal: Goal): Cells | null {
 
 /** The arrow to the red block, when it is out of view (tapping it goes there). */
 export function redArrow(scene: Scene): EdgeArrow | null {
+  return pins(scene).red;
+}
+function redArrowAlone(scene: Scene): EdgeArrow | null {
   const goal = scene.goal;
   const red = goal && scene.layout.byId(goal.id);
   const at = goal && whereIs(scene, goal.id);
@@ -601,6 +637,9 @@ function drawBand(ctx: CanvasRenderingContext2D, b: Band, dpr: number): void {
 /** The arrow to the fullscreen block, when it is out of view (tapping it goes there); none
  * where there is no fullscreen block. */
 export function uiArrow(scene: Scene): EdgeArrow | null {
+  return pins(scene).ui;
+}
+function uiArrowAlone(scene: Scene): EdgeArrow | null {
   const b = scene.layout.byId("fullscreen");
   return b ? edgeArrow(scene, onScreen(scene, { x: b.x, y: b.y, width: b.w, height: b.h })) : null;
 }
