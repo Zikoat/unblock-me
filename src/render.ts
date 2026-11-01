@@ -119,8 +119,9 @@ export function draw(
     }
   }
   ctx.fill();
-  // Targets side by side overlap by their margins: each is filled only where no earlier one
-  // was, so touching targets read as one shape.
+  // Reached targets side by side overlap by their margins: each is filled only where no
+  // earlier one was, so touching ones read as one shape. The current target is drawn whole,
+  // over them.
   const area = (c: Cells, path: Path2D) => path.roundRect(c.x * UNIT - TARGET_MARGIN, c.y * UNIT - TARGET_MARGIN, c.w * UNIT + 2 * TARGET_MARGIN, c.h * UNIT + 2 * TARGET_MARGIN, 12);
   const outside = (others: typeof targets) => {
     const clip = new Path2D();
@@ -136,15 +137,16 @@ export function draw(
     // with an outline, faded out while its block stands on it (no ring round the block).
     const shown = g === goal ? 1 : areaShown(g, now);
     if (shown <= 0) return;
+    const reached = (j: number) => targets[j]!.goal !== goal;
     ctx.save();
     ctx.globalAlpha = shown;
-    outside(targets.slice(0, i));
+    if (g !== goal) outside(targets.slice(0, i).filter((_, j) => reached(j)));
     ctx.fillStyle = g === goal ? COLORS.target : COLORS.doneTarget;
     ctx.fill(own);
     ctx.restore();
     ctx.save();
     ctx.globalAlpha = shown;
-    outside(targets.filter((_, j) => j !== i));
+    if (g !== goal) outside(targets.filter((_, j) => j !== i && reached(j)));
     ctx.strokeStyle = g === goal ? COLORS.targetLine : COLORS.doneLine;
     ctx.lineWidth = 2;
     ctx.stroke(own);

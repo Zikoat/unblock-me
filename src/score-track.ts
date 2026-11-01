@@ -48,7 +48,7 @@ function star(ctx: CanvasRenderingContext2D, x: number, y: number, s: number, lo
   if (look === "filled") {
     ctx.fillStyle = STAR;
     ctx.fill();
-    ctx.lineWidth = s * 0.06;
+    ctx.lineWidth = s * 0.09; // as thick as an outline star's
     ctx.strokeStyle = STAR_EDGE;
   } else {
     if (look === "gray") {
