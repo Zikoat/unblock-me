@@ -2,7 +2,7 @@
 // camera transform, so it all zooms and pans together.
 import { worldRect } from "./camera";
 import { intersects, UNIT, type Block } from "./layout";
-import { drawScoreTrack } from "./score-track";
+import { drawScoreTrack, FINISH, finishTimes } from "./score-track";
 import { bestKnown, type Goal } from "./goal";
 import { borderOnScreen, latticeRect, quickPush, visibleBlocks, whereIs, type Scene } from "./scene";
 
@@ -150,9 +150,12 @@ export function draw(
     ctx.stroke(own);
     ctx.restore();
   };
-  /** How much of a reached target's area shows: none with its block on it, all without. */
+  /** How much of a reached target's area shows: none with its block on it, all without. It
+   * starts fading as soon as a tap sends the block there, and back as soon as a drag moves
+   * it a little off. */
   const areaShown = (g: Goal, now: number) => {
-    const at = whereIs(scene, g.id), on = !!at && at.x === g.target.x && at.y === g.target.y && sliding?.id !== g.id;
+    const at = scene.dragging?.id === g.id ? scene.dragging : whereIs(scene, g.id);
+    const on = !!at && Math.abs(at.x - g.target.x) + Math.abs(at.y - g.target.y) < 0.15;
     let s = onTargetSince.get(g.id);
     if (!s) onTargetSince.set(g.id, (s = { on, since: -Infinity }));
     if (s.on !== on) onTargetSince.set(g.id, (s = { on, since: now }));
@@ -163,6 +166,14 @@ export function draw(
   areasFading = false;
   const trackRect = (c: Cells) => ({ x: c.x * UNIT - TARGET_MARGIN, y: c.y * UNIT - TARGET_MARGIN, width: c.w * UNIT + 2 * TARGET_MARGIN, height: c.h * UNIT + 2 * TARGET_MARGIN });
   const fewestOf = (g: Goal) => bestKnown(g) ?? g.solution.length;
+  /** A reached block's colour: red until its finish gathers the stars, fading to gold
+   * as they gather. */
+  const doneColor = (id: string) => {
+    const g = finish?.id === id ? scene.done.find((d) => d.id === id) : null;
+    if (!g || g.used === undefined) return COLORS.done;
+    const k = Math.max(0, Math.min(1, (now - finish!.born - finishTimes(fewestOf(g), g.used).gather) / FINISH.GATHER_MS));
+    return mix(COLORS.goal, COLORS.done, k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2);
+  };
   // Reached targets go under the blocks (their red blocks sit on them); the current one goes
   // over them, so it shows even where blocks stand on it.
   targets.forEach((t, i) => t.goal !== goal && drawTarget(i));
@@ -205,7 +216,7 @@ export function draw(
       : block.id === scene.dragging?.id ? COLORS.dragging
       : block.id === scene.stuckId ? COLORS.stuck
       : isGoal ? COLORS.goal
-      : wasGoal ? COLORS.done
+      : wasGoal ? doneColor(block.id)
       : block.moved ? COLORS.moved
       : COLORS.block;
     const beat = throb?.id === block.id ? throbScale((now - throb.born) / THROB_MS) : 1;
@@ -312,6 +323,12 @@ export function draw(
       if (toChange) drawPin(ctx, toChange, COLORS.moved, 11, dpr);
     }
   }
+}
+
+/** Between two #rrggbb colours, `k` of the way from `a` to `b`. */
+function mix(a: string, b: string, k: number): string {
+  const c = (h: string, i: number) => parseInt(h.slice(1 + 2 * i, 3 + 2 * i), 16);
+  return `rgb(${[0, 1, 2].map((i) => Math.round(c(a, i) + (c(b, i) - c(a, i)) * k)).join(", ")})`;
 }
 
 /** A circular arrow in the middle of the block. */

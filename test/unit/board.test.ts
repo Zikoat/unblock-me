@@ -244,6 +244,13 @@ describe("quick push: tapping a block", () => {
     expect(at("r").x).toBe(0);
   });
 
+  test("so does a reached goal's block, back to its target", () => {
+    const { scene, g, at } = row(H(4, 0, "d"));
+    scene.done = [{ id: "d", target: { x: 1, y: 0 }, solution: [] }];
+    tap(g, cell(5, 0.5));
+    expect(at("d").x).toBe(1);
+  });
+
   test("a block that cannot move either way is not moved, and is reported to shake", () => {
     const stuck: string[] = [];
     const scene = newScene(1200, 1200, { layout: fixedLayout([W(-1, 0), H(0, 0, "a"), W(2, 0)]) });

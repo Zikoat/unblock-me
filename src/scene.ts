@@ -101,9 +101,9 @@ export function quickPush(scene: Scene, block: Block): Point | null {
   const lo = s.before ? s.lo : Math.max(s.lo, pos - QUICK_PUSH_MAX);
   const hi = s.after ? s.hi : Math.min(s.hi, pos + QUICK_PUSH_MAX);
   if (lo === pos && hi === pos) return null;
-  // The red block goes towards its target first, and stops on it. Others go up or right
-  // first (up is towards lower y, right towards higher x).
-  const goal = scene.goal?.id === block.id ? scene.goal : null;
+  // The red block (or a reached goal's block) goes towards its target first, and stops on
+  // it. Others go up or right first (up is towards lower y, right towards higher x).
+  const goal = scene.goal?.id === block.id ? scene.goal : (scene.done.find((g) => g.id === block.id) ?? null);
   const target = goal && (isHorizontal(block) ? (goal.target.y === block.y ? goal.target.x : null) : goal.target.x === block.x ? goal.target.y : null);
   const preferLow = target !== null && target !== pos ? target < pos : !isHorizontal(block);
   const toLow = preferLow ? lo !== pos : hi === pos;
