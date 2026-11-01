@@ -5,7 +5,7 @@
 // that stays on the target.
 import { scoreTrack } from "./stars";
 
-const STAR = "#fdd835", STAR_EDGE = "#e07b00", LINE = "rgba(80, 82, 86, 0.25)";
+const STAR = "#fdd835", STAR_EDGE = "#e07b00", LINE = "rgba(150, 40, 40, 0.45)";
 /** The moves' fill (the red block's red, lighter: the same hue), and the outline of a star
  * not won (light, to show on the fill). */
 const TRACK_COLORS = { fill: "rgba(232, 115, 115, 0.85)", gray: "#c9ccd1" };

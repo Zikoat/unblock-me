@@ -105,7 +105,10 @@ export function quickPush(scene: Scene, block: Block): Point | null {
   // it. Others go up or right first (up is towards lower y, right towards higher x).
   const goal = scene.goal?.id === block.id ? scene.goal : (scene.done.find((g) => g.id === block.id) ?? null);
   const target = goal && (isHorizontal(block) ? (goal.target.y === block.y ? goal.target.x : null) : goal.target.x === block.x ? goal.target.y : null);
-  const preferLow = target !== null && target !== pos ? target < pos : !isHorizontal(block);
+  // Just pushed onto its target (the last move), it goes on the way it was going, not back.
+  const last = scene.history.at(-1);
+  const arrived = target !== null && target === pos && last?.id === block.id ? (isHorizontal(block) ? last.from.x : last.from.y) : null;
+  const preferLow = target !== null && target !== pos ? target < pos : arrived !== null && arrived !== pos ? arrived > pos : !isHorizontal(block);
   const toLow = preferLow ? lo !== pos : hi === pos;
   let to = toLow ? lo : hi;
   if (target !== null && (toLow ? target < pos && target >= to : target > pos && target <= to)) to = target;

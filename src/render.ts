@@ -19,10 +19,10 @@ export const COLORS = {
   // score track's fill is in score-track.ts); reached goals are gold: the block, and its target's area and outline,
   // which show where it was once the block has moved away.
   target: "rgba(232, 115, 115, 0.18)",
-  targetLine: "rgba(214, 69, 69, 0.55)",
+  targetLine: "#e06666",
   done: "#d49a2a",
   doneTarget: "rgba(240, 176, 40, 0.2)",
-  doneLine: "rgba(205, 140, 20, 0.6)",
+  doneLine: "#dcaa45",
   star: "#f2b632",
   ui: "#1d1d1f",
   wall: "#5f5d57",

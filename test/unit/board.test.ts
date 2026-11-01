@@ -237,11 +237,11 @@ describe("quick push: tapping a block", () => {
     scene.goal = { id: "r", target: { x: 1, y: 0 }, solution: [] };
     tap(g, cell(5, 0.5));
     expect(at("r").x).toBe(1); // left, though right is free, and not on to the wall at 0
-    tap(g, cell(2, 0.5)); // on its target: the usual way, right
-    expect(at("r").x).toBe(6);
-    scene.goal = { id: "r", target: { x: 2, y: 3 }, solution: [] }; // not in its lane
-    tap(g, cell(7, 0.5));
+    tap(g, cell(2, 0.5)); // just pushed onto its target: on the way it was going, left
     expect(at("r").x).toBe(0);
+    scene.goal = { id: "r", target: { x: 2, y: 3 }, solution: [] }; // not in its lane
+    tap(g, cell(1, 0.5));
+    expect(at("r").x).toBe(6);
   });
 
   test("so does a reached goal's block, back to its target", () => {
@@ -249,6 +249,19 @@ describe("quick push: tapping a block", () => {
     scene.done = [{ id: "d", target: { x: 1, y: 0 }, solution: [] }];
     tap(g, cell(5, 0.5));
     expect(at("d").x).toBe(1);
+  });
+
+  test("pushed onto its target, the next tap carries it on the way it was going", () => {
+    const { scene, g, at } = row(H(6, 0, "d"), V(2, 1, "v"));
+    scene.done = [{ id: "d", target: { x: 3, y: 0 }, solution: [] }];
+    tap(g, cell(7, 0.5)); // onto its target from the right
+    expect(at("d").x).toBe(3);
+    tap(g, cell(4, 0.5)); // just pushed there: on to the left (blocks go right first otherwise)
+    expect(at("d").x).toBe(0);
+    tap(g, cell(1, 0.5)); // back onto it from the left
+    tap(g, cell(2.5, 2)); // another block moves in between
+    tap(g, cell(4, 0.5)); // so the usual way again: right
+    expect(at("d").x).toBe(6);
   });
 
   test("a block that cannot move either way is not moved, and is reported to shake", () => {
