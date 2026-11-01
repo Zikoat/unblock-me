@@ -15,11 +15,11 @@ export const COLORS = {
   dragging: "#e0823d",
   stuck: "#8d97a3",
   goal: "#d64545",
-  // The goal in play is coral (its target's area; the score track's fill is in
-  // score-track.ts); reached goals are gold: the block, and its target's area and outline,
+  // The goal in play is a lighter shade of the red block's red (its target's area; the
+  // score track's fill is in score-track.ts); reached goals are gold: the block, and its target's area and outline,
   // which show where it was once the block has moved away.
-  target: "rgba(255, 127, 95, 0.18)",
-  targetLine: "rgba(233, 108, 82, 0.7)",
+  target: "rgba(232, 115, 115, 0.18)",
+  targetLine: "rgba(214, 69, 69, 0.55)",
   done: "#d49a2a",
   doneTarget: "rgba(240, 176, 40, 0.2)",
   doneLine: "rgba(205, 140, 20, 0.6)",
