@@ -324,17 +324,17 @@ describe("taps on the background", () => {
 });
 
 describe("UI blocks", () => {
-  // The fullscreen block (1,0); with the debug UI reset (0,0), an empty row, and the debug row: density
-  // (-1,2), border (0,2), upload (1,2), fps (2,2), reports (3,2), home (-2,2).
+  // The fullscreen block (1,0); with the debug UI an empty row, then density (-1,2), border
+  // (0,2), upload (1,2), fps (2,2), reports (3,2), home (-2,2) and reset (-2,3).
   const ui = () => UI_BLOCKS.map((b) => ({ ...b }));
   const spots = [
-    ["home", -1.5, 2.5], ["reset", 0.5, 0.5], ["fullscreen", 1.5, 0.5], ["fps", 2.5, 2.5], ["border", 0.5, 2.5],
+    ["home", -1.5, 2.5], ["reset", -1.5, 3.5], ["fullscreen", 1.5, 0.5], ["fps", 2.5, 2.5], ["border", 0.5, 2.5],
   ] as const;
 
   test("they are 1x1: a row for the game, a gap, and a row of debug blocks", () => {
     expect(ui().map((b) => [b.id, b.x, b.y, b.w, b.h])).toEqual([
-      ["fullscreen", 1, 0, 1, 1], ["reset", 0, 0, 1, 1],
-      ["density", -1, 2, 1, 1], ["border", 0, 2, 1, 1], ["upload", 1, 2, 1, 1], ["fps", 2, 2, 1, 1], ["reports", 3, 2, 1, 1], ["home", -2, 2, 1, 1],
+      ["fullscreen", 1, 0, 1, 1],
+      ["density", -1, 2, 1, 1], ["border", 0, 2, 1, 1], ["upload", 1, 2, 1, 1], ["fps", 2, 2, 1, 1], ["reports", 3, 2, 1, 1], ["home", -2, 2, 1, 1], ["reset", -2, 3, 1, 1],
     ]);
   });
 
@@ -361,13 +361,13 @@ describe("UI blocks", () => {
 
   test("they block other blocks", () => {
     // a in row 0 right of the game row; b in column 2 below the debug row;
-    // c above the reset block.
-    const { g, at } = board(...ui(), H(4, 0, "a"), V(2, 5, "b"), V(0, -4, "c"));
+    // c above the fullscreen block.
+    const { g, at } = board(...ui(), H(4, 0, "a"), V(2, 5, "b"), V(1, -4, "c"));
     drag(g, cell(5, 0.5), cell(-5, 0.5));
     expect(at("a").x).toBe(2);
     drag(g, cell(2.5, 6), cell(2.5, -5));
     expect(at("b").y).toBe(3);
-    drag(g, cell(0.5, -3), cell(0.5, 5));
+    drag(g, cell(1.5, -3), cell(1.5, 5));
     expect(at("c").y).toBe(-2);
   });
 

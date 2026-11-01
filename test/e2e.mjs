@@ -95,7 +95,7 @@ const browser = await chromium.launch();
   const V = (id, x, y) => ({ id, x, y, w: 1, h: 2 });
   const Wall = (x, y) => ({ id: `wall${x},${y}`, x, y, w: 1, h: 1, wall: true });
   const UI = [
-    { id: "reset", x: 0, y: 0, w: 1, h: 1, ui: "reset" },
+    { id: "reset", x: -2, y: 3, w: 1, h: 1, ui: "reset" },
     { id: "fullscreen", x: 1, y: 0, w: 1, h: 1, ui: "fullscreen" },
     { id: "fps", x: 2, y: 2, w: 1, h: 1, ui: "fps" },
     { id: "reports", x: 3, y: 2, w: 1, h: 1, ui: "reports" },
@@ -136,13 +136,13 @@ const browser = await chromium.launch();
   check(idleFps > 10, `with nothing moving the counter still counts frames (${idleFps} fps)`);
   await tap(cell(2.5, 2.5));
   check(await page.evaluate(() => getComputedStyle(document.querySelector("#fps")).display === "none" && getComputedStyle(document.querySelector("#spin")).display === "none"), "and hides it again");
-  for (const [x, y, what] of [[-1.85, 2.15, "home"], [0.15, 0.15, "reset"], [1.15, 0.15, "fullscreen"], [-0.85, 2.15, "density"], [0.15, 2.15, "border toggle"], [1.15, 2.15, "upload"], [2.15, 2.15, "fps toggle"], [3.15, 2.15, "reports"]]) {
+  for (const [x, y, what] of [[-1.85, 2.15, "home"], [-1.85, 3.15, "reset"], [1.15, 0.15, "fullscreen"], [-0.85, 2.15, "density"], [0.15, 2.15, "border toggle"], [1.15, 2.15, "upload"], [2.15, 2.15, "fps toggle"], [3.15, 2.15, "reports"]]) {
     await expectColor(page, cell(x, y), "reset", `the ${what} block is black`);
   }
   check((await colorAt(page, ...cell(0.5, 1.5))) !== "reset", "with an empty row between the game's row and the debug row");
   const iconPixels = await page.evaluate(() => {
     const c = document.querySelector("canvas"), d = c.width / c.clientWidth;
-    const data = c.getContext("2d").getImageData(170 * d, 370 * d, 60 * d, 60 * d).data;
+    const data = c.getContext("2d").getImageData(50 * d, 550 * d, 60 * d, 60 * d).data;
     let light = 0;
     for (let i = 0; i < data.length; i += 4) if (data[i] > 200) light++;
     return light / (data.length / 4);
@@ -171,10 +171,10 @@ const browser = await chromium.launch();
   check((await page.evaluate(() => unblock.seed())) === seedBefore && (await block(page, movable.id))?.moved, "the seed and the move survive a reload");
   // Turn the border on, pan, and leave another page's key on this origin, then reset.
   await tap(cell(0.5, 2.5));
-  await gesture([cell(0.5, 0.5)], [cell(1.5, 1.2)]);
+  await gesture([cell(1.5, 0.5)], [cell(2.5, 1.2)]); // dragging the fullscreen block pans
   await page.evaluate(() => localStorage.setItem("someone-else", "keep me"));
   const resetReload = page.waitForEvent("load", { timeout: 5000 }).then(() => true, () => false);
-  await tap(cell(1.5, 1.2)); // the reset block, after the pan
+  await tap(cell(-0.5, 4.2)); // the reset block, after the pan
   check(await resetReload, "tapping the reset block reloads the page");
   await frame(page);
   const seedAfter = await page.evaluate(() => unblock.seed());
@@ -201,7 +201,7 @@ const browser = await chromium.launch();
     "unblock-me:v6:seed": String(seedAfter),
   }), `storage holds only fresh defaults, and other pages' keys are left alone (${JSON.stringify(rest)})`);
   check(JSON.parse(storedGoal ?? "null")?.seed === seedAfter, "and a new goal for the new seed");
-  await expectColor(page, cell(0.15, 0.15), "reset", "the reset block is still in the middle");
+  await expectColor(page, cell(-1.85, 3.15), "reset", "the reset block is still in its place");
   await page.screenshot({ path: shots + "phone-2-after-reset.png" });
   const afterReset = await blockIds(page);
   await page.reload();
@@ -221,9 +221,9 @@ const browser = await chromium.launch();
 
   // Dragging a UI block pans instead.
   const cam = await page.evaluate(() => ({ ...unblock.scene.camera }));
-  await gesture([cell(0.5, 0.5)], [cell(1.5, 1.5)]);
+  await gesture([cell(-1.5, 3.5)], [cell(-0.5, 4.5)]);
   const camAfter = await page.evaluate(() => ({ ...unblock.scene.camera }));
-  check(Math.abs(camAfter.offsetX - cam.offsetX - 60) < 0.5 && (await block(page, "reset")).x === 0, "dragging the reset block pans the board, the block stays");
+  check(Math.abs(camAfter.offsetX - cam.offsetX - 60) < 0.5 && (await block(page, "reset")).x === -2, "dragging the reset block pans the board, the block stays");
 
   // The border toggle: off by default, culling to the screen edge; on draws the smaller
   // border and culls to it.
@@ -350,8 +350,8 @@ const browser = await chromium.launch();
   check((await colorAt(page, ...[200 + 60, 400 + 60 + 0.5 * 60 - 30])) !== "stuck", "it is back to its colour after letting go");
   await page.evaluate(() => { unblock.scene.camera = { scale: 1, offsetX: 170, offsetY: 370 }; unblock.redraw(); });
 
-  await place([...UI, H("a", 2, 1), V("b", 0, 2)]);
-  await gesture([cell(0.5, 3)], [cell(0.5, -3)]);
+  await place([...UI, H("a", 2, 1), V("b", 1, 3)]);
+  await gesture([cell(1.5, 4)], [cell(1.5, -3)]);
   check((await block(page, "b")).y === 1, "the UI blocks block other blocks");
 
   // Quick push: a tap slides a block to the end of its room. Row 4, walls at x -2 and 3.

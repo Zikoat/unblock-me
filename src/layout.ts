@@ -46,19 +46,19 @@ export function fixedLayout(placed: Placed[]): Layout {
 }
 
 /** The UI blocks in the middle of the random layout: the fullscreen block (where the
- * browser can go full screen); with the debug UI on, reset beside it, an empty row, and a
- * row of debug blocks (home among them). */
+ * browser can go full screen); with the debug UI on, an empty row and two rows of debug
+ * blocks (home and reset among them). */
 export const GAME_UI: Placed[] = [
   { id: "fullscreen", x: 1, y: 0, w: 1, h: 1, ui: "fullscreen" },
 ];
 export const DEBUG_UI: Placed[] = [
-  { id: "reset", x: 0, y: 0, w: 1, h: 1, ui: "reset" },
   { id: "density", x: -1, y: 2, w: 1, h: 1, ui: "density" },
   { id: "border", x: 0, y: 2, w: 1, h: 1, ui: "border" },
   { id: "upload", x: 1, y: 2, w: 1, h: 1, ui: "upload" },
   { id: "fps", x: 2, y: 2, w: 1, h: 1, ui: "fps" },
   { id: "reports", x: 3, y: 2, w: 1, h: 1, ui: "reports" },
   { id: "home", x: -2, y: 2, w: 1, h: 1, ui: "home" },
+  { id: "reset", x: -2, y: 3, w: 1, h: 1, ui: "reset" },
 ];
 export const UI_BLOCKS: Placed[] = [...GAME_UI, ...DEBUG_UI];
 export type UiShown = { debug?: boolean; fullscreen?: boolean };
@@ -67,7 +67,7 @@ export type UiShown = { debug?: boolean; fullscreen?: boolean };
 export function uiBlocks({ debug = false, fullscreen = true }: UiShown): Placed[] {
   return [...(fullscreen ? GAME_UI : []), ...(debug ? DEBUG_UI : [])];
 }
-export const uiArea = ({ debug = false, fullscreen = true }: UiShown) => (debug ? { x: -2, y: 0, width: 6, height: 3 } : fullscreen ? { x: 1, y: 0, width: 1, height: 1 } : null);
+export const uiArea = ({ debug = false, fullscreen = true }: UiShown) => (debug ? { x: -2, y: 0, width: 6, height: 4 } : fullscreen ? { x: 1, y: 0, width: 1, height: 1 } : null);
 
 /** The lattice is cut into chunks of CHUNK x CHUNK cells. Each chunk tries `tries` random
  * blocks and keeps those that fit, so blocks stay inside their chunk and never overlap.
