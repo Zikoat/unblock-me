@@ -30,7 +30,7 @@ export function listen(w: typeof window_): void {
   window_ = w;
 }
 
-export type Sound = "thud" | "chime" | "fall" | "drumroll" | "boom" | "confetti" | "fanfare" | "cheer" | "firework" | "whoosh" | "land" | "jingle" | "twinkle" | "incoming" | "soul";
+export type Sound = "thud" | "glitch" | "heartbeat" | "riser" | "zap" | "stamp" | "beat" | "chime" | "fall" | "drumroll" | "boom" | "confetti" | "fanfare" | "cheer" | "firework" | "whoosh" | "land" | "jingle" | "twinkle" | "incoming" | "soul";
 
 /** Play `sound` (the moment it belongs to is `at`; `n` picks a variant, e.g. which star). */
 export function play(sound: Sound, at: number, n = 0): void {
@@ -93,6 +93,55 @@ const PENTA = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21];
 const note = (base: number, step: number) => base * 2 ** (PENTA[step % PENTA.length]! / 12 + Math.floor(step / PENTA.length));
 
 const SOUNDS: Record<Sound, Make> = {
+  glitch(a, out, t, n) {
+    // Digital blips, square and choppy.
+    for (let i = 0; i < (n ? 10 : 4); i++) {
+      const f = 200 + Math.random() * 2400;
+      tone(a, out, t + i * 0.028, f, f * (0.5 + Math.random()), 0.03, n ? 0.07 : 0.04, "square", 0.002);
+    }
+  },
+  heartbeat(a, out, t) {
+    for (let i = 0; i < 3; i++) {
+      tone(a, out, t + i * 0.42, 70, 40, 0.16, 0.7);
+      tone(a, out, t + i * 0.42 + 0.17, 60, 35, 0.14, 0.5);
+    }
+  },
+  riser(a, out, t, n) {
+    // A cymbal swell (rising noise) cut off at the hit.
+    const len = n / 1000;
+    const s = a.createBufferSource(), f = a.createBiquadFilter(), g = a.createGain();
+    if (!noiseBuffer) noise(a, out, t, 0.01, 0.0001, "lowpass", 100, 100);
+    s.buffer = noiseBuffer;
+    f.type = "highpass";
+    f.frequency.setValueAtTime(800, t);
+    f.frequency.exponentialRampToValueAtTime(7000, t + len);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.35, t + len);
+    g.gain.setValueAtTime(0.0001, t + len + 0.01);
+    s.connect(f).connect(g).connect(out);
+    s.start(t);
+    s.stop(t + len + 0.05);
+    tone(a, out, t, 200, 800, len, 0.06, "sawtooth", len * 0.8);
+  },
+  zap(a, out, t) {
+    for (let i = 0; i < 6; i++) tone(a, out, t + i * 0.05 + Math.random() * 0.03, 1800 + Math.random() * 2000, 100, 0.09, 0.08, "sawtooth", 0.002);
+    noise(a, out, t, 0.5, 0.25, "highpass", 5000, 2000, 0.002);
+  },
+  stamp(a, out, t) {
+    tone(a, out, t, 130, 55, 0.2, 0.8);
+    noise(a, out, t, 0.12, 0.5, "lowpass", 3000, 400, 0.002);
+    noise(a, out, t + 0.02, 0.35, 0.12, "bandpass", 600, 300, 0.05, 1);
+  },
+  beat(a, out, t, n) {
+    // A dance beat (kick, hi-hat, clap) till the stars gather.
+    const len = n / 1000, step = 0.4;
+    for (let at = 0, i = 0; at < len; at += step / 2, i++) {
+      const fade = Math.min(1, (len - at) / 0.3);
+      if (i % 2 === 0) tone(a, out, t + at, 120, 45, 0.18, 0.55 * fade);
+      noise(a, out, t + at + (i % 2 ? 0 : step / 4), 0.04, 0.08 * fade, "highpass", 7000, 8000, 0.001);
+      if (i % 4 === 2) noise(a, out, t + at, 0.12, 0.25 * fade, "bandpass", 1500, 1200, 0.002, 1);
+    }
+  },
   thud(a, out, t) {
     tone(a, out, t, 150, 45, 0.28, 0.9);
     noise(a, out, t, 0.18, 0.5, "lowpass", 900, 150);

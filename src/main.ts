@@ -5,6 +5,7 @@ import { MAX_STARS, medalWon, scoreTrack, starsEarned } from "./stars";
 import { finishTimes, type TraceEntry } from "./score-track";
 import { Inspector } from "./inspector";
 import { finishCues, finishParts, SOUL, timeWarp } from "./finish-fx";
+import { moreCues, moreParts } from "./finish-fx2";
 import * as sfx from "./sfx";
 import { bestKnown, medal, viewCentre, type Goal } from "./goal";
 import type { GoalRequest } from "./goal-worker";
@@ -708,7 +709,7 @@ function advance(now: number): ReturnType<typeof sliding> {
       if (g && g.used !== undefined) {
         const times = finishTimes(bestKnown(g) ?? g.solution.length, g.used), medal = times.medalAt !== null && !g.undone;
         const t = timeWarp(times, medal).warp(now - finish.born);
-        for (const cue of finishCues({ times, medal })) if (cue.at > finish.heard && cue.at <= t) sfx.play(cue.sound, now, cue.n);
+        for (const cue of [...finishCues({ times, medal }), ...moreCues({ times, medal })]) if (cue.at > finish.heard && cue.at <= t) sfx.play(cue.sound, now, cue.n);
         finish.heard = t;
       }
     }
@@ -1021,7 +1022,7 @@ const inspector: Inspector | null = !testbed ? null : new Inspector({
     const times = g && g.used !== undefined ? finishTimes(bestKnown(g) ?? g.solution.length, g.used) : null;
     const medal = !!times && times.medalAt !== null && !g!.undone, raw = times ? timeWarp(times, medal).raw : (t: number) => t;
     // On the inspector's time line in real time (slow motion takes longer).
-    const parts = g && times ? finishParts({ times, medal }).map((p) => ({ ...p, from: raw(p.from), to: raw(p.to) })) : [];
+    const parts = g && times ? [...finishParts({ times, medal }), ...moreParts({ times, medal })].map((p) => ({ ...p, from: raw(p.from), to: raw(p.to) })) : [];
     return { sliding: !!animation && !(animation.wait && flight), gliding: !!flight, finishing: !!finish, souling: !!soul, goal: scene.goal?.id ?? null, parts };
   },
   seed(r) {

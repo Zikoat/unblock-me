@@ -87,7 +87,7 @@ function star(ctx: CanvasRenderingContext2D, x: number, y: number, s: number, lo
 }
 
 /** The blue rosette, its disc about `s` across, centred with its tails on (x, y). */
-function rosette(ctx: CanvasRenderingContext2D, x: number, y0: number, s: number, gray: boolean): void {
+export function rosette(ctx: CanvasRenderingContext2D, x: number, y0: number, s: number, gray: boolean): void {
   const r = s / 2, y = y0 - r * 0.335;
   const tail = (side: number, fill: string) => {
     ctx.fillStyle = gray ? "#8a8d91" : fill;

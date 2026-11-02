@@ -23,6 +23,8 @@ export type Fx = {
   zoom: number;
   /** The stars won, in the order they fill (world px). */
   stars: Point[];
+  /** The moves it took. */
+  used: number;
 };
 
 /** How much bigger (in world px) the effects are drawn so they keep their size on the screen
@@ -496,8 +498,8 @@ function confetti(ctx: CanvasRenderingContext2D, fx: Fx): void {
 }
 
 const wordFor = (fx: Pick<Fx, "medal" | "times">) => (fx.medal ? "PERFECT!" : fx.times.kept >= 5 ? "AWESOME!" : fx.times.kept >= 4 ? "GREAT!" : fx.times.kept >= 3 ? "NICE!" : "DONE!");
-const wordAt = (fx: Pick<Fx, "medal" | "times">) => (fx.medal && fx.times.medalHit !== null ? fx.times.medalHit + 60 : fx.times.starsEnd);
-const confettiAt = (fx: Pick<Fx, "medal" | "times">) => (fx.medal && fx.times.medalHit !== null ? fx.times.medalHit : fx.times.starsEnd - 150);
+export const wordAt = (fx: Pick<Fx, "medal" | "times">) => (fx.medal && fx.times.medalHit !== null ? fx.times.medalHit + 60 : fx.times.starsEnd);
+export const confettiAt = (fx: Pick<Fx, "medal" | "times">) => (fx.medal && fx.times.medalHit !== null ? fx.times.medalHit : fx.times.starsEnd - 150);
 const CONFETTI_MS = 2600;
 
 /** The finish's parts and when each plays (ms from the goal reached), for the animation
