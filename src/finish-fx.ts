@@ -30,6 +30,38 @@ export type Fx = {
 export const big = (zoom: number) => Math.max(1, 0.9 / zoom);
 /** When each star won fills (ms from the goal reached). */
 export const fillAt = (k: number) => FINISH.START_MS + k * FINISH.STAR_MS;
+/** Slow motion as the medal falls (time runs at RATE), then a frozen moment on its hit:
+ * the finish's own time `t` against the time since the goal was reached (`raw`). */
+const SLOW = { RATE: 0.35, FREEZE_MS: 130 };
+export function timeWarp(times: ReturnType<typeof finishTimes>, medal: boolean): { warp: (raw: number) => number; raw: (t: number) => number; extra: number } {
+  if (!medal || times.medalAt === null || times.medalHit === null) return { warp: (r) => r, raw: (t) => t, extra: 0 };
+  const a = times.medalAt, h = times.medalHit, slow = (h - a) / SLOW.RATE, extra = slow - (h - a) + SLOW.FREEZE_MS;
+  return {
+    warp: (r) => (r <= a ? r : r <= a + slow ? a + (r - a) * SLOW.RATE : r <= a + slow + SLOW.FREEZE_MS ? h : r - extra),
+    raw: (t) => (t <= a ? t : t < h ? a + (t - a) / SLOW.RATE : t === h ? a + slow : t + extra),
+    extra,
+  };
+}
+
+/** The shock waves through the board: from the landing, each star, the medal and the row. */
+function waves(fx: Fx): { at: number; strength: number }[] {
+  return [...hits(fx), ...fx.stars.map((_, k) => ({ at: fillAt(k), strength: 0.35 }))];
+}
+/** How the waves move a point of the board (world px) now: pushed out from the block
+ * (dx, dy) and how high it is lifted (`lift`, world px). */
+export function wave(fx: Fx, x: number, y: number): { dx: number; dy: number; lift: number } {
+  const B = big(fx.zoom), r = fx.rect, cx = r.x + r.width / 2, cy = r.y + r.height / 2;
+  const d = Math.hypot(x - cx, y - cy) || 1;
+  let push = 0;
+  for (const { at, strength } of waves(fx)) {
+    const k = fx.t - at;
+    if (k < 0 || k > 1600) continue;
+    const front = k * UNIT * 0.014 * B, width = UNIT * 0.9 * B;
+    push += strength * UNIT * 0.22 * B * Math.exp(-k / 700) * Math.exp(-(((d - front) / width) ** 2));
+  }
+  return { dx: ((x - cx) / d) * push, dy: ((y - cy) / d) * push, lift: push };
+}
+
 /** Stars fly in from the edge of the screen this long before their star fills. */
 const INCOMING_MS = 520;
 
@@ -95,6 +127,28 @@ export function under(ctx: CanvasRenderingContext2D, fx: Fx): void {
   g.addColorStop(1, "rgba(255, 214, 90, 0)");
   ctx.fillStyle = g;
   ctx.fillRect(cx - R, cy - R, 2 * R, 2 * R);
+  // Giant light rays turning behind everything while the word shows.
+  const k = t - wordAt(fx), out = clamp((t - times.gather - FINISH.GATHER_MS * 0.5) / 500);
+  if (k > 0 && out < 1) {
+    const reach = Math.hypot(fx.view.width, fx.view.height);
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(t / 2500);
+    const rg = ctx.createRadialGradient(0, 0, 0, 0, 0, reach);
+    const a2 = (fx.medal ? 0.22 : 0.14) * clamp(k / 300) * (1 - out);
+    rg.addColorStop(0, `rgba(255, 220, 110, ${a2})`);
+    rg.addColorStop(1, "rgba(255, 220, 110, 0)");
+    ctx.fillStyle = rg;
+    ctx.beginPath();
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2;
+      ctx.moveTo(0, 0);
+      ctx.arc(0, 0, reach, a, a + Math.PI / 20);
+      ctx.closePath();
+    }
+    ctx.fill();
+    ctx.restore();
+  }
 }
 
 /** Over the block itself (clipped to it by the caller): the landing's white flash, a gold
@@ -140,11 +194,89 @@ export function over(ctx: CanvasRenderingContext2D, fx: Fx): void {
       ctx.restore();
     }
   }
+  orbit(ctx, fx);
   streaks(ctx, fx);
   incoming(ctx, fx);
+  plusOnes(ctx, fx);
   confetti(ctx, fx);
   fireworks(ctx, fx);
+  rain(ctx, fx);
   word(ctx, fx);
+}
+
+/** Small stars circling the block (two rings the opposite ways with the medal) from the
+ * last star till the stars gather. */
+function orbit(ctx: CanvasRenderingContext2D, fx: Fx): void {
+  const { t, times, rect: r } = fx, B = big(fx.zoom);
+  const a = clamp((t - times.starsEnd + 200) / 400) * (1 - clamp((t - times.gather) / (FINISH.GATHER_MS * 0.5)));
+  if (a <= 0) return;
+  const cx = r.x + r.width / 2, cy = r.y + r.height / 2;
+  const rings = fx.medal ? [1, -1.4] : [1];
+  rings.forEach((dir, ring) => {
+    const n = 10 + ring * 4, rx = r.width / 2 + UNIT * (0.6 + ring * 0.45) * B, ry = r.height / 2 + UNIT * (0.5 + ring * 0.4) * B;
+    for (let i = 0; i < n; i++) {
+      for (let g = 3; g >= 0; g--) {
+        const ang = (i / n) * Math.PI * 2 + dir * (t - g * 25) / 420;
+        ctx.save();
+        ctx.globalAlpha = a * (g ? 0.25 / g : 1);
+        ctx.fillStyle = i % 3 ? "#ffd23f" : "#ffffff";
+        starShape(ctx, cx + Math.cos(ang) * rx, cy + Math.sin(ang) * ry, UNIT * 0.1 * B * (1 + 0.3 * Math.sin(t / 90 + i)));
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+  });
+}
+
+/** A "+1" floating up from each star as it fills. */
+function plusOnes(ctx: CanvasRenderingContext2D, fx: Fx): void {
+  const B = big(fx.zoom), size = UNIT * 0.36 * B;
+  fx.stars.forEach((s, k) => {
+    const p = (fx.t - fillAt(k)) / 800;
+    if (p < 0 || p >= 1) return;
+    const pop = 1 + 0.6 * Math.exp(-8 * p) * Math.sin(p * 20);
+    ctx.save();
+    ctx.globalAlpha = 1 - clamp((p - 0.6) / 0.4);
+    ctx.translate(s.x + UNIT * 0.15 * B, s.y - UNIT * 0.35 * B - UNIT * 0.8 * B * easeOut(p));
+    ctx.scale(pop, pop);
+    ctx.font = `900 ${size}px system-ui, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.lineJoin = "round";
+    ctx.lineWidth = size * 0.22;
+    ctx.strokeStyle = "#9a4a00";
+    ctx.strokeText("+1", 0, 0);
+    ctx.fillStyle = "#ffe066";
+    ctx.fillText("+1", 0, 0);
+    ctx.restore();
+  });
+}
+
+/** Star rain: gold stars falling from the top of the screen as the row lands (a medal or
+ * all five stars; a few for four). */
+const rainCount = (fx: Pick<Fx, "medal" | "times">) => (fx.medal ? 46 : fx.times.kept >= 5 ? 30 : fx.times.kept >= 4 ? 14 : 0);
+const rainAt = (fx: Pick<Fx, "times">) => fx.times.landed - 300;
+function rain(ctx: CanvasRenderingContext2D, fx: Fx): void {
+  const { t, view: v } = fx, B = big(fx.zoom), n = rainCount(fx);
+  for (let i = 0; i < n; i++) {
+    const h = (k: number) => hash(i * 5 + k + 300);
+    const s = (t - rainAt(fx) - h(1) * 900) / 1000;
+    if (s < 0) continue;
+    const y = v.y - UNIT * B + (UNIT * 3 * B + UNIT * 9 * B * s) * s;
+    if (y > v.y + v.height + UNIT * B) continue;
+    const x = v.x + v.width * h(2) + Math.sin(s * 4 + h(3) * 6) * UNIT * 0.3 * B;
+    ctx.save();
+    ctx.globalAlpha = 0.9;
+    ctx.translate(x, y);
+    ctx.rotate(s * (3 + 4 * h(4)) * (h(5) < 0.5 ? -1 : 1));
+    ctx.fillStyle = i % 4 ? "#ffd23f" : "#ffffff";
+    ctx.strokeStyle = "#e07b00";
+    ctx.lineWidth = 1.5 * B;
+    starShape(ctx, 0, 0, UNIT * (0.12 + 0.1 * h(6)) * B);
+    ctx.fill();
+    if (i % 4) ctx.stroke();
+    ctx.restore();
+  }
 }
 
 function starShape(ctx: CanvasRenderingContext2D, x: number, y: number, r: number): void {
@@ -297,7 +429,12 @@ export function punch(fx: Fx): number {
     return k < 0 ? 0 : k < 50 ? (amp * k) / 50 : amp * Math.exp(-(k - 50) / 160);
   };
   let f = kick(0, 0.035) + fx.stars.reduce((sum, _, k) => sum + kick(fillAt(k), 0.018), 0) + kick(times.landed, 0.025);
-  if (fx.medal && times.medalHit !== null) f += kick(times.medalHit, 0.08);
+  if (fx.medal && times.medalHit !== null && times.medalAt !== null) {
+    // The view creeps in as the medal falls in slow motion, and snaps on the hit.
+    const q = clamp((t - times.medalAt) / (times.medalHit - times.medalAt));
+    f += t <= times.medalHit ? 0.12 * q * q : 0.12 * Math.exp(-(t - times.medalHit) / 220);
+    f += kick(times.medalHit, 0.08);
+  }
   return 1 + f;
 }
 
@@ -308,7 +445,10 @@ export function finishCues(fx: Pick<Fx, "medal" | "times">): { at: number; sound
     { at: 0, sound: "thud" },
     { at: fillAt(0) - INCOMING_MS, sound: "incoming" },
     ...Array.from({ length: times.kept }, (_, k) => ({ at: fillAt(k), sound: "chime" as const, n: k })),
-    ...(times.medalAt !== null && fx.medal ? [{ at: times.medalAt, sound: "fall" as const }, { at: times.medalHit!, sound: "boom" as const }] : []),
+    ...(times.medalAt !== null && fx.medal ? [{ at: times.medalAt, sound: "fall" as const }, { at: times.medalAt, sound: "drumroll" as const, n: (times.medalHit! - times.medalAt) / SLOW.RATE }, { at: times.medalHit!, sound: "boom" as const }] : []),
+    { at: wordAt(fx), sound: "cheer", n: fx.medal ? 1 : 0 },
+    ...(rainCount(fx) ? [{ at: rainAt(fx), sound: "twinkle" as const }] : []),
+    { at: times.landed + 120, sound: "jingle" },
     { at: confettiAt(fx), sound: "confetti" },
     { at: wordAt(fx), sound: "fanfare", n: fx.medal || times.kept >= 5 ? 1 : 0 },
     ...fireworkTimes(fx).map((at) => ({ at, sound: "firework" as const })),
@@ -369,6 +509,12 @@ export function finishParts(fx: Pick<Fx, "medal" | "times">): { name: string; fr
     { name: "Stars fly in from the edges", from: fillAt(0) - INCOMING_MS, to: fillAt(times.kept - 1) },
     { name: "Stars fill (pop, spin, burst, streaks)", from: FINISH.START_MS, to: times.starsEnd },
     ...(times.medalAt !== null ? [{ name: fx.medal ? "Medal falls, hits, sun rays" : "Medal (undone: gray)", from: times.medalAt, to: times.gather + FINISH.GATHER_MS * 0.6 }] : []),
+    ...(fx.medal && times.medalAt !== null ? [{ name: "Slow motion, dolly in, hit-stop", from: times.medalAt, to: times.medalHit! + 300 }] : []),
+    { name: "Shock waves through the grid; blocks hop", from: 0, to: times.landed + 1600 },
+    { name: "+1s float up", from: fillAt(0), to: fillAt(times.kept - 1) + 800 },
+    { name: "Orbiting stars", from: times.starsEnd - 200, to: times.gather + FINISH.GATHER_MS * 0.5 },
+    { name: "Giant light rays", from: wordAt(fx), to: times.gather + FINISH.GATHER_MS * 0.5 + 500 },
+    ...(rainCount(fx) ? [{ name: "Star rain", from: rainAt(fx), to: rainAt(fx) + 2000 }] : []),
     { name: "Confetti", from: confettiAt(fx), to: Math.min(times.end, confettiAt(fx) + CONFETTI_MS) },
     { name: "Fireworks", from: fireworkTimes(fx)[0]!, to: fireworkTimes(fx).at(-1)! + ROCKET_MS + BLOOM_MS },
     { name: `Word: ${wordFor(fx)}`, from: wordAt(fx), to: times.gather + FINISH.GATHER_MS * 0.4 + 500 },
@@ -424,6 +570,13 @@ function word(ctx: CanvasRenderingContext2D, fx: Fx): void {
     g.addColorStop(1, "#f29a0b");
     ctx.fillStyle = g;
     ctx.fillText(c, 0, 0);
+    // A shine runs along the letters, again and again.
+    const shine = Math.max(0, Math.sin(k / 160 - i * 0.55)) ** 10;
+    if (shine > 0.01) {
+      ctx.globalAlpha *= shine * 0.85;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(c, 0, 0);
+    }
     ctx.restore();
   });
   ctx.restore();

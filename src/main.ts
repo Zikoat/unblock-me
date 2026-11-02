@@ -4,7 +4,7 @@ import type { Difficulty } from "./difficulty";
 import { MAX_STARS, medalWon, scoreTrack, starsEarned } from "./stars";
 import { finishTimes, type TraceEntry } from "./score-track";
 import { Inspector } from "./inspector";
-import { finishCues, finishParts, SOUL } from "./finish-fx";
+import { finishCues, finishParts, SOUL, timeWarp } from "./finish-fx";
 import * as sfx from "./sfx";
 import { bestKnown, medal, viewCentre, type Goal } from "./goal";
 import type { GoalRequest } from "./goal-worker";
@@ -389,7 +389,8 @@ function reachGoal(now: number): void {
   // The way it slid in, for the landing's squash and jolt.
   const last = scene.history.at(-1);
   const dir = last?.id === goal.id ? { x: Math.sign(last.to.x - last.from.x), y: Math.sign(last.to.y - last.from.y) } : { x: 0, y: 0 };
-  finish = { id: goal.id, born: now, end: finishTimes(bestKnown(goal) ?? goal.solution.length, goal.used).end, next: goal.target, dir, heard: -1 };
+  const times = finishTimes(bestKnown(goal) ?? goal.solution.length, goal.used);
+  finish = { id: goal.id, born: now, end: timeWarp(times, times.medalAt !== null && !goal.undone).raw(times.end), next: goal.target, dir, heard: -1 };
   const red = scene.layout.byId(goal.id)!;
   const at = whereIs(scene, goal.id)!;
   const cx = (at.x + red.w / 2) * UNIT;
@@ -703,12 +704,13 @@ function advance(now: number): ReturnType<typeof sliding> {
     if (pinThrob && now > pinThrob.born + THROB_MS) pinThrob = null;
     if (finish) {
       // Its sounds, each once, as the finish gets to it.
-      const g = scene.done.find((d) => d.id === finish!.id), t = now - finish.born;
+      const g = scene.done.find((d) => d.id === finish!.id);
       if (g && g.used !== undefined) {
-        const times = finishTimes(bestKnown(g) ?? g.solution.length, g.used);
-        for (const cue of finishCues({ times, medal: times.medalAt !== null && !g.undone })) if (cue.at > finish.heard && cue.at <= t) sfx.play(cue.sound, now, cue.n);
+        const times = finishTimes(bestKnown(g) ?? g.solution.length, g.used), medal = times.medalAt !== null && !g.undone;
+        const t = timeWarp(times, medal).warp(now - finish.born);
+        for (const cue of finishCues({ times, medal })) if (cue.at > finish.heard && cue.at <= t) sfx.play(cue.sound, now, cue.n);
+        finish.heard = t;
       }
-      finish.heard = t;
     }
     if (finish && now > finish.born + finish.end) {
       const next = finish.next;
@@ -1017,7 +1019,9 @@ const inspector: Inspector | null = !testbed ? null : new Inspector({
   state: () => {
     const g = finish && scene.done.find((d) => d.id === finish!.id);
     const times = g && g.used !== undefined ? finishTimes(bestKnown(g) ?? g.solution.length, g.used) : null;
-    const parts = g && times ? finishParts({ times, medal: times.medalAt !== null && !g.undone }) : [];
+    const medal = !!times && times.medalAt !== null && !g!.undone, raw = times ? timeWarp(times, medal).raw : (t: number) => t;
+    // On the inspector's time line in real time (slow motion takes longer).
+    const parts = g && times ? finishParts({ times, medal }).map((p) => ({ ...p, from: raw(p.from), to: raw(p.to) })) : [];
     return { sliding: !!animation && !(animation.wait && flight), gliding: !!flight, finishing: !!finish, souling: !!soul, goal: scene.goal?.id ?? null, parts };
   },
   seed(r) {

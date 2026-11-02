@@ -4,7 +4,7 @@ import { worldRect } from "./camera";
 import { intersects, UNIT, type Block } from "./layout";
 import { drawScoreTrack, FINISH, finishTimes, starPoints, type TraceEntry } from "./score-track";
 import { bestKnown, type Goal } from "./goal";
-import { onBlock, over, punch, quake, screenFlash, soul as drawSoul, SOUL, squash, under, type Fx } from "./finish-fx";
+import { onBlock, over, punch, quake, screenFlash, soul as drawSoul, SOUL, squash, timeWarp, under, wave, type Fx } from "./finish-fx";
 import { borderOnScreen, latticeRect, quickPush, visibleBlocks, whereIs, type Scene } from "./scene";
 
 export const COLORS = {
@@ -134,8 +134,10 @@ export function draw(
   for (let x = Math.floor(view.x / UNIT) * UNIT; x < view.x + view.width + UNIT; x += UNIT) {
     for (let y = Math.floor(view.y / UNIT) * UNIT; y < view.y + view.height + UNIT; y += UNIT) {
       if (onTarget(x, y)) continue;
-      ctx.moveTo(x + DOT_SIZE / 2, y);
-      ctx.arc(x, y, DOT_SIZE / 2, 0, Math.PI * 2);
+      // The finish's shock waves ripple through the dots.
+      const w = fx ? wave(fx, x, y) : null, dx = x + (w?.dx ?? 0), dy = y + (w?.dy ?? 0), r = DOT_SIZE / 2 + (w ? Math.min(DOT_SIZE, w.lift * 0.15) : 0);
+      ctx.moveTo(dx + r, dy);
+      ctx.arc(dx, dy, r, 0, Math.PI * 2);
     }
   }
   ctx.fill();
@@ -194,7 +196,7 @@ export function draw(
   const doneColor = (id: string) => {
     const g = finish?.id === id ? scene.done.find((d) => d.id === id) : null;
     if (!g || g.used === undefined) return COLORS.done;
-    const k = Math.max(0, Math.min(1, (now - finish!.born - finishTimes(fewestOf(g), g.used).gather) / FINISH.GATHER_MS));
+    const k = Math.max(0, Math.min(1, (finishClock(scene, finish, now)! - finishTimes(fewestOf(g), g.used).gather) / FINISH.GATHER_MS));
     return mix(COLORS.goal, COLORS.done, k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2);
   };
   // Reached targets go under the blocks (their red blocks sit on them); the current one goes
@@ -247,6 +249,15 @@ export function draw(
     // A stuck block shakes along its axis, a few px each way, dying down.
     const st = shake?.id === block.id ? (now - shake.born) / SHAKE_MS : 1;
     const jolt = st >= 0 && st < 1 ? Math.sin(st * Math.PI * 4) * 4 * (1 - st) : 0; // two wiggles
+    // The other blocks hop as a shock wave passes under them.
+    const hop = fx && block.id !== finish?.id ? wave(fx, (block.x + block.w / 2) * UNIT, (block.y + block.h / 2) * UNIT).lift : 0;
+    if (hop > 0.3) {
+      const bx = (block.x + block.w / 2) * UNIT, by = (block.y + block.h) * UNIT, k = Math.min(0.25, hop / UNIT);
+      ctx.save();
+      ctx.translate(bx, by - hop * 1.2);
+      ctx.scale(1 - k * 0.3, 1 + k * 0.5);
+      ctx.translate(-bx, -by);
+    }
     const squashed = fx && block.id === finish?.id ? squash(fx) : null;
     if (squashed) {
       ctx.save();
@@ -281,6 +292,7 @@ export function draw(
     else if (block.ui === "home") homeIcon(ctx, block);
     if (beat !== 1 || jolt) ctx.restore();
     if (squashed) ctx.restore();
+    if (hop > 0.3) ctx.restore();
   }
 
   // The new red block's way to its target: a red trail growing from it along its lane,
@@ -317,7 +329,7 @@ export function draw(
   // reached one's finish and then its row of stars.
   for (const { goal: g, cells } of targets) {
     if (g === goal) drawScoreTrack(ctx, trackRect(cells), fewestOf(g), used, { undone: g.undone });
-    else if (g.used !== undefined) drawScoreTrack(ctx, trackRect(cells), fewestOf(g), g.used, { t: finish?.id === g.id ? now - finish.born : Infinity, undone: g.undone, trace: finish?.id === g.id ? trace : undefined });
+    else if (g.used !== undefined) drawScoreTrack(ctx, trackRect(cells), fewestOf(g), g.used, { t: finish?.id === g.id ? (finishClock(scene, finish, now) ?? Infinity) : Infinity, undone: g.undone, trace: finish?.id === g.id ? trace : undefined });
   }
   for (const s of sparkles) sparkle(ctx, s, now);
   if (fx) over(ctx, fx);
@@ -373,13 +385,22 @@ export function draw(
   }
 }
 
+/** The finishing goal's own time at `now` (ms since it was reached, slowed and stopped
+ * round the medal's hit: timeWarp), or null. */
+function finishClock(scene: Scene, finish: { id: string; born: number } | null, now: number): number | null {
+  const g = finish && scene.done.find((d) => d.id === finish.id);
+  if (!finish || !g || g.used === undefined) return null;
+  const times = finishTimes(bestKnown(g) ?? g.solution.length, g.used);
+  return timeWarp(times, times.medalAt !== null && !g.undone).warp(now - finish.born);
+}
+
 /** The finishing goal's effects at `now`, if one is finishing and its block shows. */
 function finishFx(scene: Scene, finish: { id: string; born: number; dir?: { x: number; y: number } } | null, now: number, view: Fx["view"], zoom: number): Fx | null {
   const g = finish && scene.done.find((d) => d.id === finish.id);
   const block = g && scene.layout.byId(g.id), at = g && whereIs(scene, g.id);
   if (!finish || !g || g.used === undefined || !block || !at) return null;
   const times = finishTimes(bestKnown(g) ?? g.solution.length, g.used);
-  const t = now - finish.born;
+  const t = finishClock(scene, finish, now)!;
   if (t < 0 || t > times.end) return null;
   return {
     t,

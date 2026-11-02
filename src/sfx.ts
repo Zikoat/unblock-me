@@ -30,7 +30,7 @@ export function listen(w: typeof window_): void {
   window_ = w;
 }
 
-export type Sound = "thud" | "chime" | "fall" | "boom" | "confetti" | "fanfare" | "firework" | "whoosh" | "land" | "incoming" | "soul";
+export type Sound = "thud" | "chime" | "fall" | "drumroll" | "boom" | "confetti" | "fanfare" | "cheer" | "firework" | "whoosh" | "land" | "jingle" | "twinkle" | "incoming" | "soul";
 
 /** Play `sound` (the moment it belongs to is `at`; `n` picks a variant, e.g. which star). */
 export function play(sound: Sound, at: number, n = 0): void {
@@ -108,7 +108,41 @@ const SOUNDS: Record<Sound, Make> = {
   fall(a, out, t) {
     tone(a, out, t, 1800, 500, 0.35, 0.12, "sine", 0.05);
   },
+  drumroll(a, out, t, n) {
+    // Snare hits coming faster and louder up to the hit (`n` ms long).
+    const len = n / 1000;
+    let at = 0, i = 0;
+    while (at < len) {
+      const q = at / len;
+      noise(a, out, t + at, 0.07, 0.08 + 0.3 * q * q, "bandpass", 2200, 1800, 0.002, 0.8);
+      tone(a, out, t + at, 220, 150, 0.05, 0.05 + 0.12 * q);
+      at += 0.09 - 0.065 * q;
+      i++;
+    }
+  },
+  cheer(a, out, t, n) {
+    // A crowd: bands of noise swelling and falling, and a few "whoo"s.
+    const len = n ? 2.6 : 1.8;
+    for (const f of [700, 1300, 2400]) noise(a, out, t, len, 0.09 + 0.03 * n, "bandpass", f, f * 1.15, 0.35, 1.5);
+    for (let i = 0; i < (n ? 6 : 3); i++) {
+      const at = t + 0.1 + Math.random() * 0.8, f = 380 + Math.random() * 250;
+      tone(a, out, at, f, f * 1.7, 0.45, 0.025, "sawtooth", 0.08);
+    }
+  },
+  jingle(a, out, t) {
+    // A short victory tune.
+    const tune: [number, number, number][] = [[0, 0, 0.12], [3, 0.12, 0.12], [4, 0.24, 0.12], [5, 0.36, 0.28], [4, 0.66, 0.12], [5, 0.8, 0.6]];
+    for (const [s, at, len] of tune) {
+      const f = note(523, s);
+      tone(a, out, t + at, f, f, len + 0.08, 0.12, "square", 0.008);
+      tone(a, out, t + at, f / 2, f / 2, len + 0.08, 0.1, "triangle", 0.008);
+    }
+  },
+  twinkle(a, out, t) {
+    for (let i = 0; i < 16; i++) bell(a, out, t + Math.random() * 1.4, note(1568, Math.floor(Math.random() * 8)), 0.35, 0.05);
+  },
   boom(a, out, t) {
+    tone(a, out, t, 55, 30, 1.6, 0.9); // the drop
     tone(a, out, t, 110, 32, 0.8, 1);
     noise(a, out, t, 1.1, 0.45, "highpass", 3000, 6000);
     noise(a, out, t, 0.4, 0.6, "lowpass", 1500, 100);
