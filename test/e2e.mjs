@@ -123,7 +123,7 @@ const browser = await chromium.launch();
   await frame(page);
   await page.waitForTimeout(300);
   const uis = await page.evaluate(() => [unblock.visibleBlocks().filter((b) => b.ui).length, localStorage.getItem("unblock-me:debug")]);
-  check(uis[0] === 8 && uis[1] === "true", `and turn the debug UI on, reset among it (${uis})`);
+  check(uis[0] === 9 && uis[1] === "true", `and turn the debug UI on, reset among it (${uis})`);
 
   // Random layout with the UI blocks in the middle.
   await fresh();

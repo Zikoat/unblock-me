@@ -483,6 +483,8 @@ const gestures = new Gestures(scene, {
       location.href = location.port ? "/" : `${location.protocol}//${location.hostname}:8000/`;
     } else if (ui === "reports") {
       location.href = "reports/";
+    } else if (ui === "testbed") {
+      location.href = "?testbed";
     } else if (ui === "upload") {
       void sendPlayData();
     } else if (ui === "fps") {
@@ -785,6 +787,7 @@ function tooltip(ui: Ui): string | null {
     case "reset": return "Reset";
     case "fps": return "Debug: Show or hide the fps counter";
     case "reports": return "Reports";
+    case "testbed": return "Debug: The testbed, a small board for trying the finish's animations";
     case "upload": return "Debug: Send play data to the VM for analysis";
     default: return null;
   }

@@ -305,6 +305,7 @@ export function draw(
     else if (block.ui === "fullscreen") fullscreenIcon(ctx, block, fullscreen);
     else if (block.ui === "upload") uploadIcon(ctx, block);
     else if (block.ui === "reports") reportsIcon(ctx, block);
+    else if (block.ui === "testbed") testbedIcon(ctx, block);
     else if (block.ui === "fps") fpsIcon(ctx, block, fps);
     else if (block.ui === "density") densityIcon(ctx, block, density);
     else if (block.ui === "home") homeIcon(ctx, block);
@@ -591,6 +592,36 @@ function reportsIcon(ctx: CanvasRenderingContext2D, block: Block): void {
     ctx.roundRect(left + i * (bar + gap), base - height * UNIT, bar, height * UNIT, [2, 2, 0, 0]);
     ctx.fill();
   });
+}
+
+/** A lab flask: the testbed. */
+function testbedIcon(ctx: CanvasRenderingContext2D, block: Block): void {
+  const x = block.x * UNIT, y = block.y * UNIT, u = UNIT;
+  ctx.strokeStyle = COLORS.icon;
+  ctx.fillStyle = COLORS.icon;
+  ctx.lineWidth = u * 0.06;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(x + u * 0.42, y + u * 0.22);
+  ctx.lineTo(x + u * 0.42, y + u * 0.42);
+  ctx.lineTo(x + u * 0.26, y + u * 0.74);
+  ctx.lineTo(x + u * 0.74, y + u * 0.74);
+  ctx.lineTo(x + u * 0.58, y + u * 0.42);
+  ctx.lineTo(x + u * 0.58, y + u * 0.22);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x + u * 0.36, y + u * 0.22);
+  ctx.lineTo(x + u * 0.64, y + u * 0.22);
+  ctx.stroke();
+  // The liquid in it.
+  ctx.beginPath();
+  ctx.moveTo(x + u * 0.33, y + u * 0.6);
+  ctx.lineTo(x + u * 0.67, y + u * 0.6);
+  ctx.lineTo(x + u * 0.74, y + u * 0.74);
+  ctx.lineTo(x + u * 0.26, y + u * 0.74);
+  ctx.closePath();
+  ctx.fill();
 }
 
 /** "fps" with a switch under it, like the border toggle's. */

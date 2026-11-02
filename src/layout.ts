@@ -1,7 +1,7 @@
 import type { Rect } from "./camera";
 
 /** A 1x1 control on the board: it never slides, a tap runs it. */
-export type Ui = "home" | "reset" | "fullscreen" | "reports" | "density" | "border" | "upload" | "fps";
+export type Ui = "home" | "reset" | "fullscreen" | "reports" | "density" | "border" | "upload" | "fps" | "testbed";
 
 /** A block on the lattice, in lattice units: 2x1 slides horizontally, 1x2 vertically.
  * UI blocks and walls never slide. */
@@ -59,6 +59,7 @@ export const DEBUG_UI: Placed[] = [
   { id: "reports", x: 0, y: 3, w: 1, h: 1, ui: "reports" },
   { id: "home", x: 1, y: 3, w: 1, h: 1, ui: "home" },
   { id: "reset", x: -1, y: 4, w: 1, h: 1, ui: "reset" },
+  { id: "testbed", x: 0, y: 4, w: 1, h: 1, ui: "testbed" },
 ];
 export const UI_BLOCKS: Placed[] = [...GAME_UI, ...DEBUG_UI];
 export type UiShown = { debug?: boolean; fullscreen?: boolean };
