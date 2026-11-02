@@ -4,6 +4,7 @@
 // a medal falls in if it was won, then the track goes and the five stars gather in a row
 // that stays on the target.
 import { scoreTrack } from "./stars";
+import { glow, sprite, wedges } from "./sprites";
 
 const STAR = "#fdd835", STAR_EDGE = "#e07b00", LINE = "rgba(150, 40, 40, 0.45)";
 /** The moves' fill (the red block's red, lighter: the same hue), and the outline of a star
@@ -130,12 +131,7 @@ function sparkle(ctx: CanvasRenderingContext2D, x: number, y: number, r: number)
 
 /** A soft gold glow, `r` across, behind a star. */
 function halo(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, alpha: number): void {
-  if (alpha <= 0) return;
-  const g = ctx.createRadialGradient(x, y, 0, x, y, r);
-  g.addColorStop(0, `rgba(255, 236, 140, ${alpha})`);
-  g.addColorStop(1, "rgba(255, 220, 90, 0)");
-  ctx.fillStyle = g;
-  ctx.fillRect(x - r, y - r, 2 * r, 2 * r);
+  glow(ctx, "halo", x, y, r, alpha);
 }
 
 /** A star's fill: a white ring spreading from it and six sparkles thrown out (`p` 0..1). */
@@ -157,23 +153,16 @@ function burst(ctx: CanvasRenderingContext2D, x: number, y: number, s: number, p
 }
 
 /** Sun rays: wedges of light turning slowly round (x, y), `r` long. */
-function rays(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, alpha: number, turn: number): void {
+function sunRays(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, alpha: number, turn: number): void {
   if (alpha <= 0) return;
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(turn);
-  const g = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
-  g.addColorStop(0, `rgba(255, 230, 120, ${alpha})`);
-  g.addColorStop(1, "rgba(255, 210, 80, 0)");
-  ctx.fillStyle = g;
-  ctx.beginPath();
-  for (let i = 0; i < 12; i++) {
-    const a = (i / 12) * Math.PI * 2;
-    ctx.moveTo(0, 0);
-    ctx.arc(0, 0, r, a, a + Math.PI / 14);
-    ctx.closePath();
-  }
-  ctx.fill();
+  ctx.fillStyle = "rgb(255, 225, 110)";
+  ctx.globalAlpha *= alpha * 0.6;
+  wedges(ctx, r, 12, Math.PI / 14);
+  ctx.globalAlpha *= 0.8;
+  wedges(ctx, r * 0.55, 12, Math.PI / 14);
   ctx.restore();
 }
 
@@ -187,7 +176,7 @@ export function drawScoreTrack(
   rect: { x: number; y: number; width: number; height: number },
   fewest: number,
   used: number,
-  { t = null, undone = false, radius = 12, trace }: { t?: number | null; undone?: boolean; radius?: number; trace?: TraceEntry[] } = {},
+  { t = null, undone = false, radius = 12, trace, detail = 1 }: { t?: number | null; undone?: boolean; radius?: number; trace?: TraceEntry[]; detail?: number } = {},
 ): void {
   const vertical = rect.height > rect.width;
   const L = vertical ? rect.height : rect.width, T = vertical ? rect.width : rect.height;
@@ -246,18 +235,26 @@ export function drawScoreTrack(
     ctx.restore();
     // The move count, white with a shadow, at the start of the track.
     const size = Math.min(T * 0.42, Math.max(8, ((fewest - 1) * w - T * 0.3) / (0.62 * String(used).length)));
+    // A picture made once (text with a shadow drawn every frame was slow).
+    const text = String(used), font = `700 ${size}px system-ui, sans-serif`;
     ctx.save();
     ctx.globalAlpha = 1 - collapse;
-    ctx.shadowColor = "rgba(0, 0, 0, 0.55)";
-    ctx.shadowBlur = 2;
-    ctx.shadowOffsetY = 0.6;
-    ctx.fillStyle = "#ffffff";
-    ctx.font = `700 ${size}px system-ui, sans-serif`;
-    // Digits sit on the baseline; a cap height is about 0.72 of the size, so this centres
-    // them on the stars' line.
-    ctx.textBaseline = "alphabetic";
-    ctx.textAlign = vertical ? "center" : "left";
-    upright(vertical ? size * 0.9 : T * 0.18, cv, () => ctx.fillText(String(used), 0, size * 0.36));
+    ctx.font = font;
+    const tw = ctx.measureText(text).width, bw = tw + size * 0.4, bh = size * 1.4;
+    upright(vertical ? size * 0.9 : T * 0.18 + tw / 2, cv, () =>
+      sprite(ctx, `count:${text}:${size}`, bw, bh, null, (c) => {
+        c.shadowColor = "rgba(0, 0, 0, 0.55)";
+        c.shadowBlur = 2;
+        c.shadowOffsetY = 0.6;
+        c.fillStyle = "#ffffff";
+        c.font = font;
+        // Digits sit on the baseline; a cap height is about 0.72 of the size, so this
+        // centres them on the stars' line.
+        c.textBaseline = "alphabetic";
+        c.textAlign = "center";
+        c.fillText(text, 0, size * 0.36);
+      }),
+    );
     ctx.restore();
   }
 
@@ -295,7 +292,7 @@ export function drawScoreTrack(
     // It spins in as it fills, and turns once more on its way to the row.
     const turn = (filled ? -(1 - easeOut(clamp(since / (FINISH.POP_MS * 1.6)))) * Math.PI * 1.2 : 0) + ease * Math.PI * 2 * (filled ? 1 : 0);
     // Gathering, a filled star trails ghosts of itself.
-    if (gathering && filled) {
+    if (gathering && filled && detail >= 1) {
       for (let j = 3; j >= 1; j--) {
         const e = easeInOut(clamp(collapse - j * 0.045));
         ctx.save();
@@ -305,7 +302,7 @@ export function drawScoreTrack(
       }
     }
     // A won star glows while the stars are shown, a slow pulse each out of step.
-    if (filled && collapse < 1) {
+    if (filled && collapse < 1 && detail >= 0.5) {
       const glow = clamp(since / 200) * (0.55 + 0.25 * Math.sin(t / 140 + k * 1.3)) * (1 - collapse);
       halo(ctx, u, v, size * 1.15, glow);
     }
@@ -358,7 +355,7 @@ export function drawScoreTrack(
       // Sun rays turn behind it from its hit until the row has gathered.
       if (land >= 1) {
         const k = medalP < 1 ? settle : 1, fade = 1 - clamp((collapse - 0.6) / 0.4);
-        rays(ctx, u, mv, ms * (1.2 + 1.6 * easeOut(clamp(k * 2))), 0.42 * fade * clamp(k * 3), (t ?? 0) / 1400);
+        sunRays(ctx, u, mv, ms * (1.2 + 1.6 * easeOut(clamp(k * 2))), 0.42 * fade * clamp(k * 3), (t ?? 0) / 1400);
       }
       trace?.push({ name: "Medal", along: u, scale: scale * (size / s0), opacity: land < 1 ? clamp(land * 2.5) : 1 });
       ctx.save();

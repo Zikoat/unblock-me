@@ -7,6 +7,8 @@ import { UNIT } from "./layout";
 import { FINISH, rosette } from "./score-track";
 import { big, wordAt, confettiAt, type Fx } from "./finish-fx";
 import type { Sound } from "./sfx";
+import { timed } from "./perf";
+import { glow, sprite } from "./sprites";
 
 const clamp = (v: number) => Math.max(0, Math.min(1, v));
 const easeOut = (t: number) => 1 - (1 - t) ** 3;
@@ -49,10 +51,7 @@ export const lit = (lift: number, fx: Fx) => lift > 3 * big(fx.zoom);
 /** On the board (world px), over everything: lightning, the giant medal, the stamp and the
  * emoji burst. */
 export function overMore(ctx: CanvasRenderingContext2D, fx: Fx): void {
-  lightning(ctx, fx);
-  ghostMedal(ctx, fx);
-  emoji(ctx, fx);
-  stamp(ctx, fx);
+  for (const [name, layer] of [["lightning", lightning], ["ghostMedal", ghostMedal], ["emoji", emoji], ["stamp", stamp]] as const) timed(ctx, name, () => layer(ctx, fx));
 }
 
 /** Jagged bolts from the medal to each star and out round it, flickering, on its hit. */
@@ -105,15 +104,28 @@ function ghostMedal(ctx: CanvasRenderingContext2D, fx: Fx): void {
 }
 
 const EMOJI = ["🎉", "⭐", "✨", "🏆", "🔥", "💯", "🥳", "💥"];
+const EMOJI_FONT = `system-ui, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
+
+/** Draw the emoji and the heavy text once, out of sight, while nothing is going on: the
+ * first use of the colour emoji font loads it, which stalled a finish for a few hundred ms.
+ * The soft lights are made then too. */
+export function warmUp(): void {
+  const c = document.createElement("canvas").getContext("2d");
+  if (!c) return;
+  c.font = `20px ${EMOJI_FONT}`;
+  c.fillText(EMOJI.join(""), 0, 10);
+  c.font = "900 20px system-ui, sans-serif";
+  c.fillText("PERFECT!AWESOME GREAT NICE DONE RECORD MOVES +1", 0, 10);
+  // And the soft lights, made once on first use.
+  for (const kind of ["gold", "halo", "white", "soul"] as const) glow(c, kind, 0, 0, 1, 1);
+}
 /** Emoji thrown out with the confetti, tumbling and falling. */
 function emoji(ctx: CanvasRenderingContext2D, fx: Fx): void {
   const { t, times, rect: r } = fx, B = big(fx.zoom), s = (t - confettiAt(fx) - 60) / 1000;
   if (s < 0 || s > 2.2) return;
-  const n = fx.medal ? 14 : times.kept >= 5 ? 9 : 5, cx = r.x + r.width / 2, cy = r.y + r.height / 2;
+  const n = Math.round((fx.medal ? 14 : times.kept >= 5 ? 9 : 5) * fx.detail), cx = r.x + r.width / 2, cy = r.y + r.height / 2;
+  const size = UNIT * 0.55 * B;
   ctx.save();
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.font = `${UNIT * 0.55 * B}px system-ui, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
   for (let i = 0; i < n; i++) {
     const h = (k: number) => hash(i * 11 + k + 500);
     const ang = -Math.PI / 2 + (h(1) - 0.5) * 2.6, speed = UNIT * B * (5 + 4 * h(2)), drag = 1.6, g = UNIT * 8 * B;
@@ -125,7 +137,13 @@ function emoji(ctx: CanvasRenderingContext2D, fx: Fx): void {
     ctx.translate(x, y);
     ctx.rotate((h(3) - 0.5) * 6 * s);
     ctx.scale(pop, pop);
-    ctx.fillText(EMOJI[i % EMOJI.length]!, 0, 0);
+    const e = EMOJI[i % EMOJI.length]!;
+    sprite(ctx, `emoji:${e}:${size}`, size * 1.4, size * 1.4, fx.zoom * devicePixelRatio, (l) => {
+      l.textAlign = "center";
+      l.textBaseline = "middle";
+      l.font = `${size}px ${EMOJI_FONT}`;
+      l.fillText(e, 0, 0);
+    });
     ctx.restore();
   }
   ctx.restore();
@@ -163,74 +181,86 @@ function stamp(ctx: CanvasRenderingContext2D, fx: Fx): void {
   ctx.rotate(-0.16);
   ctx.scale(scale, scale);
   ctx.font = `900 ${size}px system-ui, sans-serif`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
   const w = ctx.measureText(text).width + size * 0.9, h = size * 1.6, ink = fx.medal ? "#2f5bb3" : "#c62828";
-  ctx.strokeStyle = ink;
-  ctx.lineWidth = size * 0.14;
-  ctx.beginPath();
-  ctx.roundRect(-w / 2, -h / 2, w, h, size * 0.3);
-  ctx.stroke();
-  ctx.lineWidth = size * 0.05;
-  ctx.beginPath();
-  ctx.roundRect(-w / 2 + size * 0.16, -h / 2 + size * 0.16, w - size * 0.32, h - size * 0.32, size * 0.2);
-  ctx.stroke();
-  ctx.fillStyle = ink;
-  ctx.fillText(text, 0, size * 0.05);
+  sprite(ctx, `stamp:${text}:${size}`, w + size * 0.2, h + size * 0.2, fx.zoom * devicePixelRatio, (l) => {
+    l.font = `900 ${size}px system-ui, sans-serif`;
+    l.textAlign = "center";
+    l.textBaseline = "middle";
+    l.strokeStyle = ink;
+    l.lineWidth = size * 0.14;
+    l.beginPath();
+    l.roundRect(-w / 2, -h / 2, w, h, size * 0.3);
+    l.stroke();
+    l.lineWidth = size * 0.05;
+    l.beginPath();
+    l.roundRect(-w / 2 + size * 0.16, -h / 2 + size * 0.16, w - size * 0.32, h - size * 0.32, size * 0.2);
+    l.stroke();
+    l.fillStyle = ink;
+    l.fillText(text, 0, size * 0.05);
+  });
   ctx.restore();
 }
 
-/** Over the screen (screen px), before the pins: the film look (vignette, letterbox bars,
- * speed lines rushing in round the edges). */
+/** Over the screen (screen px), before the pins: the film look (letterbox bars, speed lines
+ * rushing in round the edges; a vignette over the whole screen cost too much). */
 export function cinemaOverlay(ctx: CanvasRenderingContext2D, fx: Fx, width: number, height: number): void {
   const c = cinema(fx);
   if (c <= 0) return;
-  const g = ctx.createRadialGradient(width / 2, height / 2, Math.min(width, height) * 0.3, width / 2, height / 2, Math.hypot(width, height) / 2);
-  g.addColorStop(0, "rgba(0, 0, 0, 0)");
-  g.addColorStop(1, `rgba(10, 5, 0, ${0.55 * c})`);
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, width, height);
+  if (fx.detail < 0.3) return drawBars(ctx, c, width, height);
   // Speed lines: from just inside the screen's edge towards the middle, a new set every few frames.
   const set = Math.floor(fx.t / 40), R = Math.hypot(width, height) / 2;
+  // In three strokes (thin, mid, thick), each with its own lines.
   ctx.save();
   ctx.strokeStyle = "#ffffff";
   ctx.lineCap = "round";
-  for (let i = 0; i < 48; i++) {
-    const h = (k: number) => hash(i * 3 + k + set * 211);
-    const ang = (i / 48) * Math.PI * 2 + h(1) * 0.12, inner = R * (0.55 + 0.25 * h(2));
-    ctx.globalAlpha = 0.55 * c * h(3);
-    ctx.lineWidth = 1 + 3 * h(4);
+  for (let band = 0; band < 3; band++) {
     ctx.beginPath();
-    ctx.moveTo(width / 2 + Math.cos(ang) * inner, height / 2 + Math.sin(ang) * inner);
-    ctx.lineTo(width / 2 + Math.cos(ang) * R * 1.1, height / 2 + Math.sin(ang) * R * 1.1);
+    for (let i = band; i < 48; i += 3) {
+      const h = (k: number) => hash(i * 3 + k + set * 211);
+      const ang = (i / 48) * Math.PI * 2 + h(1) * 0.12, inner = R * (0.55 + 0.25 * h(2));
+      ctx.moveTo(width / 2 + Math.cos(ang) * inner, height / 2 + Math.sin(ang) * inner);
+      ctx.lineTo(width / 2 + Math.cos(ang) * R * 1.1, height / 2 + Math.sin(ang) * R * 1.1);
+    }
+    ctx.globalAlpha = 0.45 * c;
+    ctx.lineWidth = 1 + band * 1.5;
     ctx.stroke();
   }
   ctx.restore();
-  const bar = height * 0.11 * easeOut(c);
+  drawBars(ctx, c, width, height);
+}
+
+/** The letterbox bars, `c` of the way in. */
+function drawBars(ctx: CanvasRenderingContext2D, c: number, width: number, height: number): void {
+  const bar = height * 0.12 * easeOut(c);
   ctx.fillStyle = "#000000";
   ctx.fillRect(0, 0, width, bar);
   ctx.fillRect(0, height - bar, width, bar);
 }
 
-/** The screen glitching on the hits: strips of the picture torn sideways, tinted (device
- * px, the canvas drawn onto itself). */
-export function glitch(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, fx: Fx): void {
-  const { t, times } = fx;
-  const hits = [{ at: 0, len: 140, n: 3 }, ...(fx.medal && times.medalHit !== null ? [{ at: times.medalHit, len: 320, n: 8 }] : [])];
-  for (const { at, len, n } of hits) {
-    const k = t - at;
+const GLITCHES = (fx: Fx) => [{ at: 0, len: 140, n: 3 }, ...(fx.medal && fx.times.medalHit !== null ? [{ at: fx.times.medalHit, len: 320, n: 8 }] : [])];
+
+/** On the hits the picture jumps sideways a few times (world px, added to the jolt). */
+export function glitchShift(fx: Fx): number {
+  for (const { at, len } of GLITCHES(fx)) {
+    const k = fx.t - at;
+    if (k >= 0 && k <= len) return (hash(Math.floor(k / 35) * 7 + at) - 0.5) * fx.view.width * 0.05 * (1 - k / len);
+  }
+  return 0;
+}
+
+/** The screen glitching on the hits: tinted strips across it, a new set every few frames
+ * (screen px; the picture's jumps are glitchShift). */
+export function glitch(ctx: CanvasRenderingContext2D, fx: Fx, width: number, height: number): void {
+  for (const { at, len, n } of GLITCHES(fx)) {
+    const k = fx.t - at;
     if (k < 0 || k > len) continue;
-    const set = Math.floor(k / 35), W = canvas.width, H = canvas.height, power = 1 - k / len;
-    ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    const set = Math.floor(k / 35), power = 1 - k / len;
     for (let i = 0; i < n; i++) {
       const h = (q: number) => hash(i * 5 + q + set * 97 + at);
-      const y = Math.floor(h(1) * H), sh = Math.max(2, Math.floor(H * (0.01 + 0.05 * h(2)))), dx = Math.round((h(3) - 0.5) * W * 0.12 * power);
-      ctx.drawImage(canvas, 0, y, W, sh, dx, y, W, sh);
-      ctx.fillStyle = i % 2 ? `rgba(0, 255, 255, ${0.18 * power})` : `rgba(255, 0, 140, ${0.18 * power})`;
-      ctx.fillRect(0, y, W, sh);
+      const y = h(1) * height, sh = Math.max(2, height * (0.01 + 0.05 * h(2)));
+      ctx.fillStyle = i % 3 === 2 ? `rgba(255, 255, 255, ${0.3 * power})` : i % 2 ? `rgba(0, 255, 255, ${0.22 * power})` : `rgba(255, 0, 140, ${0.22 * power})`;
+      ctx.fillRect((h(3) - 0.5) * width * 0.1 * power, y, width, sh);
     }
-    ctx.restore();
   }
 }
 

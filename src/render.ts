@@ -4,7 +4,8 @@ import { worldRect } from "./camera";
 import { intersects, UNIT, type Block } from "./layout";
 import { drawScoreTrack, FINISH, finishTimes, starPoints, type TraceEntry } from "./score-track";
 import { bestKnown, type Goal } from "./goal";
-import { cinemaOverlay, dance, glitch, lit, overMore, tilt } from "./finish-fx2";
+import { timed } from "./perf";
+import { cinemaOverlay, dance, glitch, glitchShift, lit, overMore, tilt } from "./finish-fx2";
 import { onBlock, over, punch, quake, screenFlash, soul as drawSoul, SOUL, squash, timeWarp, under, wave, type Fx } from "./finish-fx";
 import { borderOnScreen, latticeRect, quickPush, visibleBlocks, whereIs, type Scene } from "./scene";
 
@@ -68,7 +69,7 @@ const throbScale = (t: number) => (t <= 0 || t >= 1 ? 1 : 1 + 0.15 * Math.sin(Ma
 export function draw(
   canvas: HTMLCanvasElement,
   scene: Scene,
-  { fullscreen, density, fps = true, sliding, sparkles = [], throb = null, cue = null, ripples = [], shake = null, pinThrob = null, used = 0, trace, finish = null, soul = null, now = 0 }: {
+  { fullscreen, density, fps = true, sliding, sparkles = [], throb = null, cue = null, ripples = [], shake = null, pinThrob = null, used = 0, trace, finish = null, soul = null, pixelRatio = 2, detail = 1, now = 0 }: {
     fullscreen: boolean;
     density: number;
     /** Whether the fps counter is showing. */
@@ -94,11 +95,15 @@ export function draw(
     finish?: { id: string; born: number; dir?: { x: number; y: number } } | null;
     /** The last red block's soul flying to the new one (world px), and when it set off. */
     soul?: { from: { x: number; y: number; width: number; height: number }; toId: string; born: number } | null;
+    /** Device px per CSS px at most, and how much of the finish's detail to draw (both less
+     * when frames come late: main.ts). */
+    pixelRatio?: number;
+    detail?: number;
     now?: number;
   },
 ): void {
   const ctx = canvas.getContext("2d")!;
-  const dpr = devicePixelRatio || 1;
+  const dpr = Math.min(pixelRatio, devicePixelRatio || 1);
   const { width, height, camera } = scene;
   if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr)) {
     canvas.width = Math.round(width * dpr);
@@ -110,12 +115,12 @@ export function draw(
 
   ctx.setTransform(dpr * camera.scale, 0, 0, dpr * camera.scale, dpr * camera.offsetX, dpr * camera.offsetY);
   // The finish's effects round the block (finish-fx.ts); its hits jolt the whole board.
-  const fx = finishFx(scene, finish, now, worldRect(camera, { x: 0, y: 0, width, height }), camera.scale);
+  const fx = finishFx(scene, finish, now, worldRect(camera, { x: 0, y: 0, width, height }), camera.scale, detail);
   // The soul still on its way: the new red block shows as it was until it arrives.
   const soulK = soul ? now - soul.born : Infinity;
   if (fx) {
-    const q = quake(fx), f = punch(fx), cx = fx.rect.x + fx.rect.width / 2, cy = fx.rect.y + fx.rect.height / 2;
-    ctx.translate(q.x + cx, q.y + cy);
+    const q = quake(fx), f = punch(fx), jump = glitchShift(fx), cx = fx.rect.x + fx.rect.width / 2, cy = fx.rect.y + fx.rect.height / 2;
+    ctx.translate(q.x + jump + cx, q.y + cy);
     ctx.scale(f, f);
     ctx.rotate(tilt(fx));
     ctx.translate(-cx, -cy);
@@ -132,32 +137,34 @@ export function draw(
   const onTarget = (x: number, y: number) => targets.some(({ cells: c }) => x >= c.x * UNIT - TARGET_MARGIN && x <= (c.x + c.w) * UNIT + TARGET_MARGIN && y >= c.y * UNIT - TARGET_MARGIN && y <= (c.y + c.h) * UNIT + TARGET_MARGIN);
   const litDots: number[] = [];
   // Round dots at the lattice corners (not on targets), all in one path so they cost one fill.
-  ctx.fillStyle = COLORS.dot;
-  ctx.beginPath();
-  for (let x = Math.floor(view.x / UNIT) * UNIT; x < view.x + view.width + UNIT; x += UNIT) {
-    for (let y = Math.floor(view.y / UNIT) * UNIT; y < view.y + view.height + UNIT; y += UNIT) {
-      if (onTarget(x, y)) continue;
-      // The finish's shock waves ripple through the dots.
-      const w = fx ? wave(fx, x, y) : null, dx = x + (w?.dx ?? 0), dy = y + (w?.dy ?? 0), r = DOT_SIZE / 2 + (w ? Math.min(DOT_SIZE, w.lift * 0.15) : 0);
-      // Lit gold where a wave is passing (drawn after, in one path of their own).
-      if (w && fx && lit(w.lift, fx)) {
-        litDots.push(dx, dy, r * 1.6);
-        continue;
-      }
-      ctx.moveTo(dx + r, dy);
-      ctx.arc(dx, dy, r, 0, Math.PI * 2);
-    }
-  }
-  ctx.fill();
-  if (litDots.length) {
-    ctx.fillStyle = "#ffcf3f";
+  timed(ctx, "dots", () => {
+    ctx.fillStyle = COLORS.dot;
     ctx.beginPath();
-    for (let i = 0; i < litDots.length; i += 3) {
-      ctx.moveTo(litDots[i]! + litDots[i + 2]!, litDots[i + 1]!);
-      ctx.arc(litDots[i]!, litDots[i + 1]!, litDots[i + 2]!, 0, Math.PI * 2);
+    for (let x = Math.floor(view.x / UNIT) * UNIT; x < view.x + view.width + UNIT; x += UNIT) {
+      for (let y = Math.floor(view.y / UNIT) * UNIT; y < view.y + view.height + UNIT; y += UNIT) {
+        if (onTarget(x, y)) continue;
+        // The finish's shock waves ripple through the dots.
+        const w = fx ? wave(fx, x, y) : null, dx = x + (w?.dx ?? 0), dy = y + (w?.dy ?? 0), r = DOT_SIZE / 2 + (w ? Math.min(DOT_SIZE, w.lift * 0.15) : 0);
+        // Lit gold where a wave is passing (drawn after, in one path of their own).
+        if (w && fx && lit(w.lift, fx)) {
+          litDots.push(dx, dy, r * 1.6);
+          continue;
+        }
+        ctx.moveTo(dx + r, dy);
+        ctx.arc(dx, dy, r, 0, Math.PI * 2);
+      }
     }
     ctx.fill();
-  }
+    if (litDots.length) {
+      ctx.fillStyle = "#ffcf3f";
+      ctx.beginPath();
+      for (let i = 0; i < litDots.length; i += 3) {
+        ctx.moveTo(litDots[i]! + litDots[i + 2]!, litDots[i + 1]!);
+        ctx.arc(litDots[i]!, litDots[i + 1]!, litDots[i + 2]!, 0, Math.PI * 2);
+      }
+      ctx.fill();
+    }
+  });
   // Reached targets side by side overlap by their margins: each is filled only where no
   // earlier one was, so touching ones read as one shape. The current target is drawn whole,
   // over them.
@@ -219,7 +226,7 @@ export function draw(
   // Reached targets go under the blocks (their red blocks sit on them); the current one goes
   // over them, so it shows even where blocks stand on it.
   targets.forEach((t, i) => t.goal !== goal && drawTarget(i));
-  if (fx) under(ctx, fx);
+  if (fx) timed(ctx, "under", () => under(ctx, fx));
 
   // The sliding block is drawn until its slide ends, even when it ends outside the view and
   // culling would leave it out.
@@ -249,70 +256,72 @@ export function draw(
 
   // A throbbing block grows over its neighbours, so it goes on top.
   if (throb) blocks.sort((a, b) => Number(a.id === throb.id) - Number(b.id === throb.id));
-  for (const shown of blocks) {
-    const block = shown.id === sliding?.id ? { ...shown, x: sliding.x, y: sliding.y } : shown;
-    // Red blocks stay red after their goal is reached, a darker red.
-    const isGoal = block.id === goal?.id;
-    const wasGoal = !isGoal && scene.done.some((g) => g.id === block.id);
-    ctx.fillStyle = block.ui ? COLORS.ui
-      : block.wall ? COLORS.wall
-      : block.id === scene.dragging?.id ? COLORS.dragging
-      : block.id === scene.stuckId ? COLORS.stuck
-      : isGoal ? (soulK < SOUL.TRAVEL_MS && block.id === soul?.toId ? mix(block.moved ? COLORS.moved : COLORS.block, COLORS.goal, Math.max(0, (soulK / SOUL.TRAVEL_MS - 0.85) / 0.15)) : COLORS.goal)
-      : wasGoal ? doneColor(block.id)
-      : block.moved ? COLORS.moved
-      : COLORS.block;
-    const beat = throb?.id === block.id ? throbScale((now - throb.born) / THROB_MS) : 1;
-    // A stuck block shakes along its axis, a few px each way, dying down.
-    const st = shake?.id === block.id ? (now - shake.born) / SHAKE_MS : 1;
-    const jolt = st >= 0 && st < 1 ? Math.sin(st * Math.PI * 4) * 4 * (1 - st) : 0; // two wiggles
-    // The other blocks hop as a shock wave passes under them.
-    // And all dance to the beat for a while.
-    const hop = fx && block.id !== finish?.id ? wave(fx, (block.x + block.w / 2) * UNIT, (block.y + block.h / 2) * UNIT).lift + dance(fx, blocks.indexOf(shown), block.x * UNIT) : 0;
-    if (hop > 0.3) {
-      const bx = (block.x + block.w / 2) * UNIT, by = (block.y + block.h) * UNIT, k = Math.min(0.25, hop / UNIT);
-      ctx.save();
-      ctx.translate(bx, by - hop * 1.2);
-      ctx.scale(1 - k * 0.3, 1 + k * 0.5);
-      ctx.translate(-bx, -by);
+  timed(ctx, "blocks", () => {
+    for (const shown of blocks) {
+      const block = shown.id === sliding?.id ? { ...shown, x: sliding.x, y: sliding.y } : shown;
+      // Red blocks stay red after their goal is reached, a darker red.
+      const isGoal = block.id === goal?.id;
+      const wasGoal = !isGoal && scene.done.some((g) => g.id === block.id);
+      ctx.fillStyle = block.ui ? COLORS.ui
+        : block.wall ? COLORS.wall
+        : block.id === scene.dragging?.id ? COLORS.dragging
+        : block.id === scene.stuckId ? COLORS.stuck
+        : isGoal ? (soulK < SOUL.TRAVEL_MS && block.id === soul?.toId ? mix(block.moved ? COLORS.moved : COLORS.block, COLORS.goal, Math.max(0, (soulK / SOUL.TRAVEL_MS - 0.85) / 0.15)) : COLORS.goal)
+        : wasGoal ? doneColor(block.id)
+        : block.moved ? COLORS.moved
+        : COLORS.block;
+      const beat = throb?.id === block.id ? throbScale((now - throb.born) / THROB_MS) : 1;
+      // A stuck block shakes along its axis, a few px each way, dying down.
+      const st = shake?.id === block.id ? (now - shake.born) / SHAKE_MS : 1;
+      const jolt = st >= 0 && st < 1 ? Math.sin(st * Math.PI * 4) * 4 * (1 - st) : 0; // two wiggles
+      // The other blocks hop as a shock wave passes under them.
+      // And all dance to the beat for a while.
+      const hop = fx && block.id !== finish?.id ? wave(fx, (block.x + block.w / 2) * UNIT, (block.y + block.h / 2) * UNIT).lift + dance(fx, blocks.indexOf(shown), block.x * UNIT) : 0;
+      if (hop > 0.3) {
+        const bx = (block.x + block.w / 2) * UNIT, by = (block.y + block.h) * UNIT, k = Math.min(0.25, hop / UNIT);
+        ctx.save();
+        ctx.translate(bx, by - hop * 1.2);
+        ctx.scale(1 - k * 0.3, 1 + k * 0.5);
+        ctx.translate(-bx, -by);
+      }
+      const squashed = fx && block.id === finish?.id ? squash(fx) : null;
+      if (squashed) {
+        ctx.save();
+        ctx.translate(squashed.about.x, squashed.about.y);
+        ctx.scale(squashed.sx, squashed.sy);
+        ctx.translate(-squashed.about.x, -squashed.about.y);
+      }
+      if (beat !== 1 || jolt) {
+        ctx.save();
+        if (jolt) ctx.translate(block.w > block.h ? jolt : 0, block.w > block.h ? 0 : jolt);
+        const cx = (block.x + block.w / 2) * UNIT, cy = (block.y + block.h / 2) * UNIT;
+        ctx.translate(cx, cy);
+        ctx.scale(beat, beat);
+        ctx.translate(-cx, -cy);
+      }
+      ctx.beginPath();
+      ctx.roundRect(block.x * UNIT + GAP, block.y * UNIT + GAP, block.w * UNIT - 2 * GAP, block.h * UNIT - 2 * GAP, block.wall ? 3 : 8);
+      ctx.fill();
+      if (squashed) {
+        ctx.save();
+        ctx.clip();
+        onBlock(ctx, fx!);
+        ctx.restore();
+      }
+      if (block.ui === "reset") resetIcon(ctx, block);
+      else if (block.ui === "border") borderIcon(ctx, block, scene.border);
+      else if (block.ui === "fullscreen") fullscreenIcon(ctx, block, fullscreen);
+      else if (block.ui === "upload") uploadIcon(ctx, block);
+      else if (block.ui === "reports") reportsIcon(ctx, block);
+      else if (block.ui === "testbed") testbedIcon(ctx, block);
+      else if (block.ui === "fps") fpsIcon(ctx, block, fps);
+      else if (block.ui === "density") densityIcon(ctx, block, density);
+      else if (block.ui === "home") homeIcon(ctx, block);
+      if (beat !== 1 || jolt) ctx.restore();
+      if (squashed) ctx.restore();
+      if (hop > 0.3) ctx.restore();
     }
-    const squashed = fx && block.id === finish?.id ? squash(fx) : null;
-    if (squashed) {
-      ctx.save();
-      ctx.translate(squashed.about.x, squashed.about.y);
-      ctx.scale(squashed.sx, squashed.sy);
-      ctx.translate(-squashed.about.x, -squashed.about.y);
-    }
-    if (beat !== 1 || jolt) {
-      ctx.save();
-      if (jolt) ctx.translate(block.w > block.h ? jolt : 0, block.w > block.h ? 0 : jolt);
-      const cx = (block.x + block.w / 2) * UNIT, cy = (block.y + block.h / 2) * UNIT;
-      ctx.translate(cx, cy);
-      ctx.scale(beat, beat);
-      ctx.translate(-cx, -cy);
-    }
-    ctx.beginPath();
-    ctx.roundRect(block.x * UNIT + GAP, block.y * UNIT + GAP, block.w * UNIT - 2 * GAP, block.h * UNIT - 2 * GAP, block.wall ? 3 : 8);
-    ctx.fill();
-    if (squashed) {
-      ctx.save();
-      ctx.clip();
-      onBlock(ctx, fx!);
-      ctx.restore();
-    }
-    if (block.ui === "reset") resetIcon(ctx, block);
-    else if (block.ui === "border") borderIcon(ctx, block, scene.border);
-    else if (block.ui === "fullscreen") fullscreenIcon(ctx, block, fullscreen);
-    else if (block.ui === "upload") uploadIcon(ctx, block);
-    else if (block.ui === "reports") reportsIcon(ctx, block);
-    else if (block.ui === "testbed") testbedIcon(ctx, block);
-    else if (block.ui === "fps") fpsIcon(ctx, block, fps);
-    else if (block.ui === "density") densityIcon(ctx, block, density);
-    else if (block.ui === "home") homeIcon(ctx, block);
-    if (beat !== 1 || jolt) ctx.restore();
-    if (squashed) ctx.restore();
-    if (hop > 0.3) ctx.restore();
-  }
+  });
 
   // The new red block's way to its target: a red trail growing from it along its lane,
   // over the blocks in the way.
@@ -346,18 +355,20 @@ export function draw(
 
   // Each target's score track, over the blocks: the current goal's as it is played, a
   // reached one's finish and then its row of stars.
-  for (const { goal: g, cells } of targets) {
-    if (g === goal) drawScoreTrack(ctx, trackRect(cells), fewestOf(g), used, { undone: g.undone });
-    else if (g.used !== undefined) drawScoreTrack(ctx, trackRect(cells), fewestOf(g), g.used, { t: finish?.id === g.id ? (finishClock(scene, finish, now) ?? Infinity) : Infinity, undone: g.undone, trace: finish?.id === g.id ? trace : undefined });
-  }
-  for (const s of sparkles) sparkle(ctx, s, now);
+  timed(ctx, "score tracks", () => {
+    for (const { goal: g, cells } of targets) {
+      if (g === goal) drawScoreTrack(ctx, trackRect(cells), fewestOf(g), used, { undone: g.undone });
+      else if (g.used !== undefined) drawScoreTrack(ctx, trackRect(cells), fewestOf(g), g.used, { t: finish?.id === g.id ? (finishClock(scene, finish, now) ?? Infinity) : Infinity, undone: g.undone, trace: finish?.id === g.id ? trace : undefined, detail });
+    }
+  });
+  timed(ctx, "sparkles", () => sparkles.forEach((s) => sparkle(ctx, s, now)));
   if (fx) {
     over(ctx, fx);
     overMore(ctx, fx);
   }
   if (soul && soulK >= 0) {
     const to = scene.layout.byId(soul.toId), at = whereIs(scene, soul.toId);
-    if (to && at) drawSoul(ctx, soul.from, { x: at.x * UNIT + GAP, y: at.y * UNIT + GAP, width: to.w * UNIT - 2 * GAP, height: to.h * UNIT - 2 * GAP }, soulK, camera.scale);
+    if (to && at) drawSoul(ctx, soul.from, { x: at.x * UNIT + GAP, y: at.y * UNIT + GAP, width: to.w * UNIT - 2 * GAP, height: to.h * UNIT - 2 * GAP }, soulK, camera.scale, detail);
   }
 
   // A tap on the background: one small yellow ring spreading out and fading, like a drop
@@ -376,8 +387,8 @@ export function draw(
 
   if (fx) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    screenFlash(ctx, fx, width, height);
-    cinemaOverlay(ctx, fx, width, height);
+    timed(ctx, "screenFlash", () => screenFlash(ctx, fx, width, height));
+    timed(ctx, "cinema", () => cinemaOverlay(ctx, fx, width, height));
   }
 
   // The culling border is a screen thing, so it is drawn in screen pixels.
@@ -406,7 +417,10 @@ export function draw(
       if (toChange) drawPin(ctx, toChange, COLORS.moved, 11, dpr);
     }
   }
-  if (fx) glitch(ctx, canvas, fx);
+  if (fx) {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    timed(ctx, "glitch", () => glitch(ctx, fx, width, height));
+  }
 }
 
 /** The finishing goal's own time at `now` (ms since it was reached, slowed and stopped
@@ -419,7 +433,7 @@ function finishClock(scene: Scene, finish: { id: string; born: number } | null, 
 }
 
 /** The finishing goal's effects at `now`, if one is finishing and its block shows. */
-function finishFx(scene: Scene, finish: { id: string; born: number; dir?: { x: number; y: number } } | null, now: number, view: Fx["view"], zoom: number): Fx | null {
+function finishFx(scene: Scene, finish: { id: string; born: number; dir?: { x: number; y: number } } | null, now: number, view: Fx["view"], zoom: number, detail: number): Fx | null {
   const g = finish && scene.done.find((d) => d.id === finish.id);
   const block = g && scene.layout.byId(g.id), at = g && whereIs(scene, g.id);
   if (!finish || !g || g.used === undefined || !block || !at) return null;
@@ -435,6 +449,7 @@ function finishFx(scene: Scene, finish: { id: string; born: number; dir?: { x: n
     view,
     zoom,
     used: g.used,
+    detail,
     stars: starPoints({ x: g.target.x * UNIT - TARGET_MARGIN, y: g.target.y * UNIT - TARGET_MARGIN, width: block.w * UNIT + 2 * TARGET_MARGIN, height: block.h * UNIT + 2 * TARGET_MARGIN }, bestKnown(g) ?? g.solution.length, g.used),
   };
 }

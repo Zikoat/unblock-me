@@ -5,8 +5,9 @@ import { MAX_STARS, medalWon, scoreTrack, starsEarned } from "./stars";
 import { finishTimes, type TraceEntry } from "./score-track";
 import { Inspector } from "./inspector";
 import { finishCues, finishParts, SOUL, timeWarp } from "./finish-fx";
-import { moreCues, moreParts } from "./finish-fx2";
+import { moreCues, moreParts, warmUp } from "./finish-fx2";
 import * as sfx from "./sfx";
+import { timedFrame } from "./perf";
 import { bestKnown, medal, viewCentre, type Goal } from "./goal";
 import type { GoalRequest } from "./goal-worker";
 import { Gestures } from "./gestures";
@@ -28,7 +29,8 @@ const TRIES_KEY = "unblock-me:tries";
 const CAMERA_KEY = "unblock-me:camera"; // where the view is, kept across reloads
 const LOG_KEY = "unblock-me:log"; // the play log; kept across resets
 const DEVICE_KEY = "unblock-me:device"; // names this browser's automatic uploads; kept across resets
-const DEBUG_KEY = "unblock-me:debug"; // whether the debug UI row is on; kept across resets
+const DEBUG_KEY = "unblock-me:debug";
+const SHARPNESS_KEY = "unblock-me:sharpness"; // how far drawing has stepped down on this device (see pace) // whether the debug UI row is on; kept across resets
 /** With the red block stuck, tapping the empty board and then the red block (which shakes)
  * this many times over, with nothing else between, turns the debug UI on (for good) and
  * resets, since its blocks change the board. Unlikely by accident. */
@@ -275,6 +277,9 @@ function showGoal(goal: Goal | null): void {
   if (scene.goal) cue = { id: scene.goal.id, born: -1 };
   save();
   redraw();
+// The finish's fonts loaded ahead, as soon as the page is idle.
+if ("requestIdleCallback" in window) requestIdleCallback(warmUp, { timeout: 1000 });
+else setTimeout(warmUp, 300);
   goalWaiters.forEach((resolve) => resolve());
   goalWaiters = [];
 };
@@ -416,6 +421,9 @@ function takeBack(): void {
   animate({ id: move.id, from: move.to, to: move.from });
   save();
   redraw();
+// The finish's fonts loaded ahead, as soon as the page is idle.
+if ("requestIdleCallback" in window) requestIdleCallback(warmUp, { timeout: 1000 });
+else setTimeout(warmUp, 300);
 }
 undoButton.addEventListener("click", takeBack);
 
@@ -467,6 +475,9 @@ const gestures = new Gestures(scene, {
     if (debugCode(id === scene.goal?.id ? "red" : null)) forgetEverything();
     shake = { id, born: -1 };
     redraw();
+// The finish's fonts loaded ahead, as soon as the page is idle.
+if ("requestIdleCallback" in window) requestIdleCallback(warmUp, { timeout: 1000 });
+else setTimeout(warmUp, 300);
   },
   onUi: (ui) => {
     debugCode(null);
@@ -568,6 +579,8 @@ Object.assign(window, {
     onScreen: () => blocksIn(scene.layout, latticeRect(scene, { x: 0, y: 0, width: scene.width, height: scene.height }), scene),
     slideRange: (id: string) => slideRange(scene.layout, visibleBlocks(scene).find((b) => b.id === id)!, scene),
     redraw: () => redraw(),
+    /** The adaptive sharpness step (0 full; see pace). */
+    sharpness: () => sharpness,
     /** Forget everything stored, like the reset block but without reloading (for tests). */
     forget: () => forget(),
     playLog,
@@ -586,6 +599,9 @@ Object.assign(window, {
       scene.goal = goal;
       lookAhead();
       redraw();
+// The finish's fonts loaded ahead, as soon as the page is idle.
+if ("requestIdleCallback" in window) requestIdleCallback(warmUp, { timeout: 1000 });
+else setTimeout(warmUp, 300);
     },
   },
 });
@@ -673,10 +689,55 @@ function redraw(): void {
   requestAnimationFrame((now) => {
     queued = false;
     if (inspector?.open) return; // it draws the frames itself
+    pace(now);
     const moving = advance(now);
     paint(now, moving);
     if (animation || sparkles.length || flight || throb || cue || ripples.length || shake || finish || soul || pinThrob || fading()) redraw();
   });
+}
+
+// Sharpness that adapts: when frames come late (a slow phone in a busy finish), the canvas
+// is drawn with fewer pixels, a step at a time (most of a frame's cost is filling pixels);
+// after a long run of frames on time it steps back up.
+// Past the fewest pixels, the finish draws less (fewer particles, no trails).
+const SHARPNESS = [
+  { px: 2, detail: 1 }, { px: 1.5, detail: 1 }, { px: 1.25, detail: 1 }, { px: 1, detail: 1 }, // device px per CSS px, at most
+  { px: 1, detail: 0.6 }, { px: 1, detail: 0.35 }, { px: 0.75, detail: 0.2 },
+];
+let sharpness = Math.min(SHARPNESS.length - 1, Math.max(0, load<number>(SHARPNESS_KEY, 0)));
+let lastFrame = 0, onTime = 0, late: number[] = [];
+const recent: number[] = []; // the last frames' lengths, for the screen's frame time
+function pace(now: number): void {
+  const dt = now - lastFrame;
+  lastFrame = now;
+  if (dt > 250) return; // the first frame after a rest
+  recent.push(dt);
+  if (recent.length > 60) recent.shift();
+  if (recent.length < 20) return;
+  // The screen's frame time: the median frame (most frames come on time).
+  const vsync = [...recent].sort((a, b) => a - b)[recent.length >> 1]!;
+  if (dt > vsync * 1.7) {
+    // Two late frames within a second step down, or one that missed two frames or more.
+    late = [...late.filter((t) => now - t < 1000), now];
+    onTime = 0;
+    if ((late.length >= 2 || dt > vsync * 2.7) && sharpness < SHARPNESS.length - 1) {
+      sharpness++;
+      late = [];
+      keepSharpness();
+    }
+  } else if (++onTime > 600 && sharpness > 0) {
+    sharpness--;
+    onTime = 0;
+    keepSharpness();
+  }
+}
+/** The step is kept for next time, so a slow phone starts where it got to. */
+function keepSharpness(): void {
+  try {
+    localStorage.setItem(SHARPNESS_KEY, String(sharpness));
+  } catch {
+    // No storage: it adapts again next time.
+  }
 }
 
 /** Move everything on to `now`: the view's glide, the slide, the goal reached, and the
@@ -728,23 +789,27 @@ function advance(now: number): ReturnType<typeof sliding> {
 
 /** Draw the board as it is at `now` (on `to`, the screen's canvas by default). */
 function paint(now: number, moving: ReturnType<typeof sliding>, to: HTMLCanvasElement = canvas, trace?: TraceEntry[]): void {
-    draw(to, scene, {
-      fullscreen: fullscreenElement() !== null,
-      density: slider?.ui === "density" ? slider.at : (tries - MIN_TRIES) / (MAX_TRIES - MIN_TRIES),
-      fps: showingFps,
-      sliding: moving,
-      sparkles,
-      throb,
-      cue,
-      ripples,
-      shake,
-      pinThrob,
-      used: scene.goal ? movesSince(scene.goal.begun ?? 0) : 0,
-      finish,
-      soul,
-      trace,
-      now,
-    });
+    timedFrame(to.getContext("2d")!, () =>
+      draw(to, scene, {
+        fullscreen: fullscreenElement() !== null,
+        density: slider?.ui === "density" ? slider.at : (tries - MIN_TRIES) / (MAX_TRIES - MIN_TRIES),
+        fps: showingFps,
+        sliding: moving,
+        sparkles,
+        throb,
+        cue,
+        ripples,
+        shake,
+        pinThrob,
+        used: scene.goal ? movesSince(scene.goal.begun ?? 0) : 0,
+        finish,
+        soul,
+        trace,
+        now,
+        pixelRatio: SHARPNESS[sharpness]!.px,
+        detail: SHARPNESS[sharpness]!.detail,
+      }),
+    );
     if (to !== canvas) return;
     undoButton.disabled = scene.history.length === 0;
     const debug = (window as unknown as { unblock: { frames: { t: number; x: number; y: number }[] | null } }).unblock;
@@ -775,6 +840,9 @@ function showFpsCounter(): void {
     requestAnimationFrame(tick);
   }
   redraw();
+// The finish's fonts loaded ahead, as soon as the page is idle.
+if ("requestIdleCallback" in window) requestIdleCallback(warmUp, { timeout: 1000 });
+else setTimeout(warmUp, 300);
 }
 showFpsCounter();
 
@@ -890,6 +958,9 @@ canvas.addEventListener("pointerleave", () => {
   if (performance.now() >= noteUntil) tip.style.display = "none";
   scene.hover = null;
   redraw();
+// The finish's fonts loaded ahead, as soon as the page is idle.
+if ("requestIdleCallback" in window) requestIdleCallback(warmUp, { timeout: 1000 });
+else setTimeout(warmUp, 300);
 });
 /** A resting mouse over a sliding block hints where a click would send it. */
 function hoverAt(e: PointerEvent): void {
@@ -937,6 +1008,9 @@ canvas.addEventListener("pointerdown", (e) => {
   }
   gestures.down(e.pointerId, point(e));
   redraw();
+// The finish's fonts loaded ahead, as soon as the page is idle.
+if ("requestIdleCallback" in window) requestIdleCallback(warmUp, { timeout: 1000 });
+else setTimeout(warmUp, 300);
 });
 canvas.addEventListener("pointermove", (e) => {
   showTip(e);
@@ -944,6 +1018,9 @@ canvas.addEventListener("pointermove", (e) => {
   if (e.pointerId === onArrow) return;
   gestures.move(e.pointerId, point(e));
   redraw();
+// The finish's fonts loaded ahead, as soon as the page is idle.
+if ("requestIdleCallback" in window) requestIdleCallback(warmUp, { timeout: 1000 });
+else setTimeout(warmUp, 300);
 });
 canvas.addEventListener("pointerup", (e) => {
   if (e.pointerId === onArrow) {
@@ -954,6 +1031,9 @@ canvas.addEventListener("pointerup", (e) => {
       flyTo(to, 160);
     }
     redraw();
+// The finish's fonts loaded ahead, as soon as the page is idle.
+if ("requestIdleCallback" in window) requestIdleCallback(warmUp, { timeout: 1000 });
+else setTimeout(warmUp, 300);
     return;
   }
   const tapped = scene.circle;
@@ -963,16 +1043,25 @@ canvas.addEventListener("pointerup", (e) => {
     if (debugCode("tap")) forgetEverything();
   }
   redraw();
+// The finish's fonts loaded ahead, as soon as the page is idle.
+if ("requestIdleCallback" in window) requestIdleCallback(warmUp, { timeout: 1000 });
+else setTimeout(warmUp, 300);
 });
 canvas.addEventListener("pointercancel", (e) => {
   if (e.pointerId === onArrow) onArrow = null;
   gestures.cancel(e.pointerId);
   redraw();
+// The finish's fonts loaded ahead, as soon as the page is idle.
+if ("requestIdleCallback" in window) requestIdleCallback(warmUp, { timeout: 1000 });
+else setTimeout(warmUp, 300);
 });
 canvas.addEventListener("wheel", (e) => {
   e.preventDefault();
   gestures.wheel(point(e), e.deltaMode === WheelEvent.DOM_DELTA_LINE ? e.deltaY * 16 : e.deltaY);
   redraw();
+// The finish's fonts loaded ahead, as soon as the page is idle.
+if ("requestIdleCallback" in window) requestIdleCallback(warmUp, { timeout: 1000 });
+else setTimeout(warmUp, 300);
 }, { passive: false });
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 // Telegram's in-app browser on iPhone takes swipes right and down to close itself unless the
@@ -982,6 +1071,9 @@ addEventListener("resize", () => {
   resize(scene, innerWidth, innerHeight - (inspector?.open ? inspector.height() : 0));
   if (inspector?.open) inspector.show();
   else redraw();
+// The finish's fonts loaded ahead, as soon as the page is idle.
+if ("requestIdleCallback" in window) requestIdleCallback(warmUp, { timeout: 1000 });
+else setTimeout(warmUp, 300);
 });
 
 // On the testbed: the animation inspector, replaying the tap on the red block and its finish.
@@ -1031,6 +1123,10 @@ const inspector: Inspector | null = !testbed ? null : new Inspector({
   seed(r) {
     random = r;
   },
+  pace,
 }, redraw);
 
 redraw();
+// The finish's fonts loaded ahead, as soon as the page is idle.
+if ("requestIdleCallback" in window) requestIdleCallback(warmUp, { timeout: 1000 });
+else setTimeout(warmUp, 300);

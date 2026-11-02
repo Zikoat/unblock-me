@@ -23,6 +23,8 @@ export type InspectorHooks = {
   state(): { sliding: boolean; gliding: boolean; finishing: boolean; souling: boolean; goal: string | null; parts: { name: string; from: number; to: number }[] };
   /** The sparkles' random numbers. */
   seed(random: () => number): void;
+  /** A frame is being played (its real time): the drawing adapts to how late frames come. */
+  pace(now: number): void;
 };
 
 const STEP_MS = 16, BASE = 1_000_000, NS = "http://www.w3.org/2000/svg";
@@ -214,9 +216,11 @@ export class Inspector {
     this.drawTimeline();
     this.drawCurves();
     this.hooks.restore(this.before);
+    this.replayedTo = -1;
     this.hooks.open(this.height());
     this.snap = this.hooks.snapshot();
     this.playing = false;
+    this.drawnFor = "";
     this.show();
   }
 
@@ -228,6 +232,7 @@ export class Inspector {
     this.panel.classList.remove("open");
     this.hooks.open(0);
     this.hooks.restore(this.before);
+    this.replayedTo = -1;
     sfx.listen("all");
     this.redraw();
   }
@@ -245,7 +250,17 @@ export class Inspector {
   }
 
   /** From the snapshot to `t` ms after the tap. */
+  /** How far the game has been replayed to (ms), while nothing else has changed it: playing
+   * on, the replay carries on from there instead of starting over (-1: start over). */
+  private replayedTo = -1;
   private replay(t: number, each?: (at: number) => void): unknown {
+    if (!each && this.replayedTo >= 0 && t >= this.replayedTo) {
+      let moving: unknown = null;
+      for (let at = (Math.floor(this.replayedTo / STEP_MS) + 1) * STEP_MS; at <= t; at += STEP_MS) moving = this.hooks.advance(BASE + at);
+      this.replayedTo = t;
+      return this.hooks.advance(BASE + t) ?? moving;
+    }
+    this.replayedTo = each ? -1 : t;
     this.hooks.restore(this.snap);
     this.hooks.seed(seeded(7));
     if (!this.hooks.pushRed()) return null;
@@ -301,6 +316,7 @@ export class Inspector {
   show(): void {
     if (!this.open) return;
     if (this.playing) {
+      this.hooks.pace(performance.now());
       this.t = Math.min(this.total, performance.now() - this.playFrom);
       if (this.t >= this.total) this.playing = false;
     }
@@ -316,9 +332,29 @@ export class Inspector {
     // Playing past the edge of a zoomed time line pages it on.
     const span = this.v1 - this.v0;
     if (this.t > this.v1 || this.t < this.v0) this.v0 = Math.max(0, Math.min(this.total - span, this.t - span * 0.1)), (this.v1 = this.v0 + span);
-    this.drawTimeline();
-    this.drawCurves();
+    // The charts are drawn again only when their view changed; otherwise the head moves.
+    const drawn = `${this.v0},${this.v1},${this.width()}`;
+    if (drawn !== this.drawnFor) {
+      this.drawTimeline();
+      this.drawCurves();
+      this.drawnFor = drawn;
+    } else this.moveHead();
     if (this.playing) requestAnimationFrame(() => this.show());
+  }
+
+  /** The view the charts were last drawn for. */
+  private drawnFor = "";
+
+  /** Move the play head on the charts already drawn. */
+  private moveHead(): void {
+    const hx = this.x(this.t), shown = hx >= PAD - 1 && hx <= this.width() - PAD + 1;
+    for (const line of this.panel.querySelectorAll<SVGLineElement>(".head")) {
+      line.setAttribute("x1", String(hx));
+      line.setAttribute("x2", String(hx));
+    }
+    const handle = this.panel.querySelector<SVGPathElement>(".handle");
+    handle?.setAttribute("transform", `translate(${hx},0)`);
+    for (const e of this.panel.querySelectorAll(".head, .handle")) e.setAttribute("visibility", shown ? "visible" : "hidden");
   }
 
   /** The charts' width: their width on the screen, so text keeps its size on a phone. */
@@ -364,11 +400,9 @@ export class Inspector {
     this.spans.forEach((s, i) => {
       el("text", { x: PAD, y: RULER + i * rh + 12, "font-size": 12, fill: "#e8e6df" }, svg).textContent = s.name;
     });
-    const hx = this.x(this.t);
-    if (hx >= PAD - 1 && hx <= W - PAD + 1) {
-      el("line", { x1: hx, x2: hx, y1: RULER - 2, y2: H, stroke: "#ff5a5a", "stroke-width": 2 }, svg);
-      el("path", { d: `M${hx - 8},2 h16 v8 l-8,9 l-8,-9 z`, fill: "#ff5a5a" }, svg);
-    }
+    const hx = this.x(this.t), shown = hx >= PAD - 1 && hx <= W - PAD + 1 ? "visible" : "hidden";
+    el("line", { class: "head", x1: hx, x2: hx, y1: RULER - 2, y2: H, stroke: "#ff5a5a", "stroke-width": 2, visibility: shown }, svg);
+    el("path", { class: "handle", d: "M-8,2 h16 v8 l-8,9 l-8,-9 z", transform: `translate(${hx},0)`, fill: "#ff5a5a", visibility: shown }, svg);
   }
 
   /** Each icon's place along the track, size and opacity over time. */
@@ -418,7 +452,7 @@ export class Inspector {
         }
         el("path", { d, fill: "none", stroke: color(n), "stroke-width": 1.5 }, g);
       }
-      el("line", { x1: this.x(this.t), x2: this.x(this.t), y1: top, y2: top + ph, stroke: "#ff5a5a", "stroke-width": 2 }, g);
+      el("line", { class: "head", x1: this.x(this.t), x2: this.x(this.t), y1: top, y2: top + ph, stroke: "#ff5a5a", "stroke-width": 2 }, g);
     });
   }
 }

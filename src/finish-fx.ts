@@ -7,6 +7,8 @@ import type { Point } from "./camera";
 import { UNIT } from "./layout";
 import { FINISH, type finishTimes } from "./score-track";
 import type { Sound } from "./sfx";
+import { timed } from "./perf";
+import { glow, sprite, wedges } from "./sprites";
 
 export type Fx = {
   /** ms since the goal was reached. */
@@ -25,6 +27,9 @@ export type Fx = {
   stars: Point[];
   /** The moves it took. */
   used: number;
+  /** How much detail (1 all; less on a slow phone, see main.ts): particle counts scale with
+   * it, and below 1 the trails go. */
+  detail: number;
 };
 
 /** How much bigger (in world px) the effects are drawn so they keep their size on the screen
@@ -124,31 +129,19 @@ export function under(ctx: CanvasRenderingContext2D, fx: Fx): void {
   const a = clamp(t / 150) * (0.18 + 0.25 * stars + (fx.medal && times.medalHit !== null && t > times.medalHit ? 0.15 : 0)) * fade * (0.85 + 0.15 * Math.sin(t / 160));
   if (a <= 0) return;
   const cx = r.x + r.width / 2, cy = r.y + r.height / 2, R = Math.max(r.width, r.height) * (0.9 + 0.25 * stars) * Math.sqrt(big(fx.zoom));
-  const g = ctx.createRadialGradient(cx, cy, Math.min(r.width, r.height) * 0.3, cx, cy, R);
-  g.addColorStop(0, `rgba(255, 214, 90, ${a})`);
-  g.addColorStop(1, "rgba(255, 214, 90, 0)");
-  ctx.fillStyle = g;
-  ctx.fillRect(cx - R, cy - R, 2 * R, 2 * R);
-  // Giant light rays turning behind everything while the word shows.
+  if (fx.detail < 0.3) return; // the least detail: no glow nor rays
+  glow(ctx, "gold", cx, cy, R, a);
+  // Giant light rays turning behind everything while the word shows, out to about the
+  // screen's edge (beyond, the light has faded anyway).
   const k = t - wordAt(fx), out = clamp((t - times.gather - FINISH.GATHER_MS * 0.5) / 500);
   if (k > 0 && out < 1) {
-    const reach = Math.hypot(fx.view.width, fx.view.height);
+    const reach = Math.hypot(fx.view.width, fx.view.height) * 0.34, a2 = (fx.medal ? 0.2 : 0.13) * clamp(k / 300) * (1 - out);
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(t / 2500);
-    const rg = ctx.createRadialGradient(0, 0, 0, 0, 0, reach);
-    const a2 = (fx.medal ? 0.22 : 0.14) * clamp(k / 300) * (1 - out);
-    rg.addColorStop(0, `rgba(255, 220, 110, ${a2})`);
-    rg.addColorStop(1, "rgba(255, 220, 110, 0)");
-    ctx.fillStyle = rg;
-    ctx.beginPath();
-    for (let i = 0; i < 16; i++) {
-      const a = (i / 16) * Math.PI * 2;
-      ctx.moveTo(0, 0);
-      ctx.arc(0, 0, reach, a, a + Math.PI / 20);
-      ctx.closePath();
-    }
-    ctx.fill();
+    ctx.fillStyle = "rgb(255, 220, 110)";
+    ctx.globalAlpha = a2 * 0.6;
+    wedges(ctx, reach, 14, Math.PI / 28);
     ctx.restore();
   }
 }
@@ -196,14 +189,7 @@ export function over(ctx: CanvasRenderingContext2D, fx: Fx): void {
       ctx.restore();
     }
   }
-  orbit(ctx, fx);
-  streaks(ctx, fx);
-  incoming(ctx, fx);
-  plusOnes(ctx, fx);
-  confetti(ctx, fx);
-  fireworks(ctx, fx);
-  rain(ctx, fx);
-  word(ctx, fx);
+  for (const [name, layer] of [["orbit", orbit], ["streaks", streaks], ["incoming", incoming], ["plusOnes", plusOnes], ["confetti", confetti], ["fireworks", fireworks], ["rain", rain], ["word", word]] as const) timed(ctx, name, () => layer(ctx, fx));
 }
 
 /** Small stars circling the block (two rings the opposite ways with the medal) from the
@@ -211,23 +197,28 @@ export function over(ctx: CanvasRenderingContext2D, fx: Fx): void {
 function orbit(ctx: CanvasRenderingContext2D, fx: Fx): void {
   const { t, times, rect: r } = fx, B = big(fx.zoom);
   const a = clamp((t - times.starsEnd + 200) / 400) * (1 - clamp((t - times.gather) / (FINISH.GATHER_MS * 0.5)));
-  if (a <= 0) return;
+  if (a <= 0 || fx.detail < 0.3) return;
   const cx = r.x + r.width / 2, cy = r.y + r.height / 2;
   const rings = fx.medal ? [1, -1.4] : [1];
-  rings.forEach((dir, ring) => {
-    const n = 10 + ring * 4, rx = r.width / 2 + UNIT * (0.6 + ring * 0.45) * B, ry = r.height / 2 + UNIT * (0.5 + ring * 0.4) * B;
-    for (let i = 0; i < n; i++) {
-      for (let g = 3; g >= 0; g--) {
-        const ang = (i / n) * Math.PI * 2 + dir * (t - g * 25) / 420;
-        ctx.save();
-        ctx.globalAlpha = a * (g ? 0.25 / g : 1);
-        ctx.fillStyle = i % 3 ? "#ffd23f" : "#ffffff";
-        starShape(ctx, cx + Math.cos(ang) * rx, cy + Math.sin(ang) * ry, UNIT * 0.1 * B * (1 + 0.3 * Math.sin(t / 90 + i)));
-        ctx.fill();
-        ctx.restore();
-      }
+  // Batched: one fill per colour and trail step (a fill per star was slow).
+  ctx.save();
+  for (let g = fx.detail < 1 ? 0 : 1; g >= 0; g--) {
+    ctx.globalAlpha = a * (g ? 0.3 : 1);
+    for (const white of [false, true]) {
+      ctx.beginPath();
+      rings.forEach((dir, ring) => {
+        const n = Math.round((10 + ring * 4) * fx.detail), rx = r.width / 2 + UNIT * (0.6 + ring * 0.45) * B, ry = r.height / 2 + UNIT * (0.5 + ring * 0.4) * B;
+        for (let i = 0; i < n; i++) {
+          if ((i % 3 === 0) !== white) continue;
+          const ang = (i / n) * Math.PI * 2 + (dir * (t - g * 40)) / 420;
+          starTo(ctx, cx + Math.cos(ang) * rx, cy + Math.sin(ang) * ry, UNIT * 0.1 * B * (1 + 0.3 * Math.sin(t / 90 + i)));
+        }
+      });
+      ctx.fillStyle = white ? "#ffffff" : "#ffd23f";
+      ctx.fill();
     }
-  });
+  }
+  ctx.restore();
 }
 
 /** A "+1" floating up from each star as it fills. */
@@ -241,15 +232,17 @@ function plusOnes(ctx: CanvasRenderingContext2D, fx: Fx): void {
     ctx.globalAlpha = 1 - clamp((p - 0.6) / 0.4);
     ctx.translate(s.x + UNIT * 0.15 * B, s.y - UNIT * 0.35 * B - UNIT * 0.8 * B * easeOut(p));
     ctx.scale(pop, pop);
-    ctx.font = `900 ${size}px system-ui, sans-serif`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.lineJoin = "round";
-    ctx.lineWidth = size * 0.22;
-    ctx.strokeStyle = "#9a4a00";
-    ctx.strokeText("+1", 0, 0);
-    ctx.fillStyle = "#ffe066";
-    ctx.fillText("+1", 0, 0);
+    sprite(ctx, `plus:${size}`, size * 1.8, size * 1.4, fx.zoom * devicePixelRatio, (l) => {
+      l.font = `900 ${size}px system-ui, sans-serif`;
+      l.textAlign = "center";
+      l.textBaseline = "middle";
+      l.lineJoin = "round";
+      l.lineWidth = size * 0.22;
+      l.strokeStyle = "#9a4a00";
+      l.strokeText("+1", 0, 0);
+      l.fillStyle = "#ffe066";
+      l.fillText("+1", 0, 0);
+    });
     ctx.restore();
   });
 }
@@ -259,7 +252,10 @@ function plusOnes(ctx: CanvasRenderingContext2D, fx: Fx): void {
 const rainCount = (fx: Pick<Fx, "medal" | "times">) => (fx.medal ? 46 : fx.times.kept >= 5 ? 30 : fx.times.kept >= 4 ? 14 : 0);
 const rainAt = (fx: Pick<Fx, "times">) => fx.times.landed - 300;
 function rain(ctx: CanvasRenderingContext2D, fx: Fx): void {
-  const { t, view: v } = fx, B = big(fx.zoom), n = rainCount(fx);
+  const { t, view: v } = fx, B = big(fx.zoom), n = Math.round(rainCount(fx) * fx.detail);
+  if (!n || t < rainAt(fx)) return;
+  // Batched: the gold ones (outlined) in one path, the white ones in another.
+  const gold = new Path2D(), white = new Path2D();
   for (let i = 0; i < n; i++) {
     const h = (k: number) => hash(i * 5 + k + 300);
     const s = (t - rainAt(fx) - h(1) * 900) / 1000;
@@ -267,18 +263,28 @@ function rain(ctx: CanvasRenderingContext2D, fx: Fx): void {
     const y = v.y - UNIT * B + (UNIT * 3 * B + UNIT * 9 * B * s) * s;
     if (y > v.y + v.height + UNIT * B) continue;
     const x = v.x + v.width * h(2) + Math.sin(s * 4 + h(3) * 6) * UNIT * 0.3 * B;
-    ctx.save();
-    ctx.globalAlpha = 0.9;
-    ctx.translate(x, y);
-    ctx.rotate(s * (3 + 4 * h(4)) * (h(5) < 0.5 ? -1 : 1));
-    ctx.fillStyle = i % 4 ? "#ffd23f" : "#ffffff";
-    ctx.strokeStyle = "#e07b00";
-    ctx.lineWidth = 1.5 * B;
-    starShape(ctx, 0, 0, UNIT * (0.12 + 0.1 * h(6)) * B);
-    ctx.fill();
-    if (i % 4) ctx.stroke();
-    ctx.restore();
+    starTo(i % 4 ? gold : white, x, y, UNIT * (0.12 + 0.1 * h(6)) * B, s * (3 + 4 * h(4)) * (h(5) < 0.5 ? -1 : 1));
   }
+  ctx.save();
+  ctx.globalAlpha = 0.9;
+  ctx.fillStyle = "#ffd23f";
+  ctx.fill(gold);
+  ctx.strokeStyle = "#e07b00";
+  ctx.lineWidth = 1.5 * B;
+  ctx.stroke(gold);
+  ctx.fillStyle = "#ffffff";
+  ctx.fill(white);
+  ctx.restore();
+}
+
+/** Add a star to the current path (turned `turn`), so many can be filled at once. */
+function starTo(ctx: CanvasRenderingContext2D | Path2D, x: number, y: number, r: number, turn = 0): void {
+  for (let i = 0; i < 10; i++) {
+    const a = -Math.PI / 2 + turn + (i * Math.PI) / 5, rr = i % 2 ? r * 0.45 : r;
+    if (i) ctx.lineTo(x + rr * Math.cos(a), y + rr * Math.sin(a));
+    else ctx.moveTo(x + rr * Math.cos(a), y + rr * Math.sin(a));
+  }
+  ctx.closePath();
 }
 
 function starShape(ctx: CanvasRenderingContext2D, x: number, y: number, r: number): void {
@@ -295,7 +301,7 @@ function starShape(ctx: CanvasRenderingContext2D, x: number, y: number, r: numbe
 function incoming(ctx: CanvasRenderingContext2D, fx: Fx): void {
   const { t, view: v } = fx, B = big(fx.zoom);
   fx.stars.forEach((to, k) => {
-    for (let j = 0; j < 3; j++) {
+    for (let j = 0; j < (fx.detail < 1 ? 1 : 3); j++) {
       const h = (n: number) => hash(k * 31 + j * 7 + n);
       const dur = INCOMING_MS - j * 70, p = (t - (fillAt(k) - dur)) / dur;
       if (p < 0 || p >= 1) continue;
@@ -307,7 +313,7 @@ function incoming(ctx: CanvasRenderingContext2D, fx: Fx): void {
         const e = q * q * q; // speeding up into the star
         return { x: from.x + dx * e - dy * bend * Math.sin(Math.PI * e), y: from.y + dy * e + dx * bend * Math.sin(Math.PI * e) };
       };
-      for (let g = 5; g >= 0; g--) {
+      for (let g = fx.detail < 1 ? 0 : 5; g >= 0; g--) {
         const q = Math.max(0, p - g * 0.035), pt = at(q);
         ctx.save();
         ctx.globalAlpha = g ? 0.35 * (1 - g / 6) : 1;
@@ -333,15 +339,19 @@ function streaks(ctx: CanvasRenderingContext2D, fx: Fx): void {
     if (p < 0 || p >= 1) return;
     ctx.save();
     ctx.lineCap = "round";
-    for (let i = 0; i < n; i++) {
-      const a = (i / n) * Math.PI * 2 + turn, out = easeOut(p) * reach * (0.8 + 0.4 * hash(i + turn * 10));
-      const len = length * (1 - p);
-      ctx.globalAlpha = (1 - p) * (i % 2 ? 0.7 : 1);
-      ctx.strokeStyle = i % 3 ? "#fff3b0" : "#ffffff";
-      ctx.lineWidth = width * (1 - p * 0.7);
+    // In one stroke per colour.
+    ctx.globalAlpha = 1 - p;
+    ctx.lineWidth = width * (1 - p * 0.7);
+    for (const white of [false, true]) {
       ctx.beginPath();
-      ctx.moveTo(x + Math.cos(a) * out, y + Math.sin(a) * out);
-      ctx.lineTo(x + Math.cos(a) * (out + len), y + Math.sin(a) * (out + len));
+      for (let i = 0; i < n; i++) {
+        if ((i % 3 === 0) !== white) continue;
+        const a = (i / n) * Math.PI * 2 + turn, out = easeOut(p) * reach * (0.8 + 0.4 * hash(i + turn * 10));
+        const len = length * (1 - p);
+        ctx.moveTo(x + Math.cos(a) * out, y + Math.sin(a) * out);
+        ctx.lineTo(x + Math.cos(a) * (out + len), y + Math.sin(a) * (out + len));
+      }
+      ctx.strokeStyle = white ? "#ffffff" : "#fff3b0";
       ctx.stroke();
     }
     ctx.restore();
@@ -349,7 +359,7 @@ function streaks(ctx: CanvasRenderingContext2D, fx: Fx): void {
   fx.stars.forEach((s, k) => burst(s.x, s.y, 10, (t - fillAt(k)) / 380, UNIT * 1.6 * B, UNIT * 0.9 * B, 3 * B, k * 0.4));
   if (fx.medal && times.medalHit !== null) {
     const reach = Math.hypot(v.width, v.height);
-    burst(r.x + r.width / 2, r.y + r.height / 2, 28, (t - times.medalHit) / 650, reach * 0.8, reach * 0.35, 5 * B, 0.1);
+    burst(r.x + r.width / 2, r.y + r.height / 2, Math.round(28 * fx.detail), (t - times.medalHit) / 650, reach * 0.8, reach * 0.35, 5 * B, 0.1);
   }
   // The row landing: a smaller burst from the block.
   burst(r.x + r.width / 2, r.y + r.height / 2, 16, (t - times.landed) / 450, UNIT * 2.5 * B, UNIT * B, 3 * B, 0.3);
@@ -391,12 +401,7 @@ function fireworks(ctx: CanvasRenderingContext2D, fx: Fx): void {
       const s = (k - ROCKET_MS) / 1000, p = (k - ROCKET_MS) / BLOOM_MS;
       // The bang: a flash.
       if (p < 0.15) {
-        ctx.globalAlpha = 1 - p / 0.15;
-        const g = ctx.createRadialGradient(to.x, to.y, 0, to.x, to.y, UNIT * 1.2 * B);
-        g.addColorStop(0, "rgba(255, 255, 255, 0.9)");
-        g.addColorStop(1, "rgba(255, 255, 255, 0)");
-        ctx.fillStyle = g;
-        ctx.fillRect(to.x - UNIT * 1.2 * B, to.y - UNIT * 1.2 * B, UNIT * 2.4 * B, UNIT * 2.4 * B);
+        glow(ctx, "white", to.x, to.y, UNIT * 1.2 * B, 1 - p / 0.15);
       }
       const drag = 2.2, gravity = UNIT * 2.6 * B;
       const pos = (j: number, s: number) => {
@@ -404,17 +409,19 @@ function fireworks(ctx: CanvasRenderingContext2D, fx: Fx): void {
         const f = (1 - Math.exp(-drag * s)) / drag;
         return { x: to.x + Math.cos(a) * speed * f, y: to.y + Math.sin(a) * speed * f + (gravity / drag) * (s - f) };
       };
+      // Each spark streaks (a line from where it just was); batched in four groups that
+      // twinkle in turn, white and coloured.
       ctx.lineCap = "round";
-      for (let j = 0; j < 56; j++) {
-        // Each spark streaks (a line from where it just was), twinkling as it goes out.
-        const a = pos(j, Math.max(0, s - 0.07)), b = pos(j, s);
-        const tw = 0.6 + 0.4 * Math.sin(k / 30 + j * 2.1);
-        ctx.globalAlpha = (1 - p) ** 1.2 * tw;
-        ctx.strokeStyle = j % 4 === 0 ? "#ffffff" : color;
-        ctx.lineWidth = UNIT * 0.09 * B * (1 - p * 0.6);
+      ctx.lineWidth = UNIT * 0.09 * B * (1 - p * 0.6);
+      for (let group = 0; group < 4; group++) {
         ctx.beginPath();
-        ctx.moveTo(a.x, a.y);
-        ctx.lineTo(b.x, b.y);
+        for (let j = group; j < 56 * fx.detail; j += 4) {
+          const a = pos(j, Math.max(0, s - 0.07)), b = pos(j, s);
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
+        }
+        ctx.globalAlpha = (1 - p) ** 1.2 * (0.6 + 0.4 * Math.sin(k / 30 + group * 1.6));
+        ctx.strokeStyle = group === 0 ? "#ffffff" : color;
         ctx.stroke();
       }
     }
@@ -464,37 +471,46 @@ const CONFETTI = ["#ffcf3f", "#d64545", "#3b6fd4", "#2f9e6e", "#e66bb0", "#fffff
 function confetti(ctx: CanvasRenderingContext2D, fx: Fx): void {
   const { t, times, rect: r } = fx;
   const from = confettiAt(fx);
-  const count = fx.medal ? 110 : times.kept >= 5 ? 70 : times.kept >= 3 ? 36 : 18;
+  const count = Math.round((fx.medal ? 110 : times.kept >= 5 ? 70 : times.kept >= 3 ? 36 : 18) * fx.detail);
   const life = CONFETTI_MS, s = (t - from) / 1000;
   if (s < 0 || s * 1000 > life) return;
   const cx = r.x + r.width / 2, cy = r.y + r.height / 2;
   const B = big(fx.zoom), drag = 1.8, gravity = UNIT * 7 * B;
+  // Batched: a path per colour (a fill per piece was slow); the pieces turned and fluttered
+  // by working out their corners here.
+  const paths = CONFETTI.map(() => new Path2D());
   for (let i = 0; i < count; i++) {
     const h = (k: number) => hash(i * 7 + k);
     // Up and out, a fan wider for the bigger bursts.
     const angle = -Math.PI / 2 + (h(1) - 0.5) * (fx.medal ? 3.4 : 2.4);
     const speed = UNIT * B * (4 + 7 * h(2)) * (fx.medal ? 1.25 : 1);
-    const delay = h(3) * 0.08, k = Math.max(0, s - delay);
+    const k = Math.max(0, s - h(3) * 0.08);
     const f = (1 - Math.exp(-drag * k)) / drag;
     const x = cx + Math.cos(angle) * speed * f + Math.sin(k * (3 + 3 * h(4)) + h(5) * 6) * UNIT * B * 0.18 * k;
     const y = cy + Math.sin(angle) * speed * f + (gravity / drag) * (k - f);
-    const fade = 1 - clamp((k * 1000 - (life - 700)) / 700);
-    if (fade <= 0) continue;
-    ctx.save();
-    ctx.globalAlpha = fade;
-    ctx.translate(x, y);
-    ctx.rotate(h(6) * 6 + k * (4 + 8 * h(7)) * (h(8) < 0.5 ? -1 : 1));
-    // Flutters: seen edge on and face on in turn.
-    ctx.scale(1, Math.cos(k * (8 + 10 * h(9))));
-    ctx.fillStyle = CONFETTI[i % CONFETTI.length]!;
-    const w = UNIT * B * (0.1 + 0.08 * h(10)), hh = UNIT * B * 0.06;
+    const path = paths[i % CONFETTI.length]!, w = UNIT * B * (0.1 + 0.08 * h(10));
     if (i % 5 === 0) {
-      ctx.beginPath();
-      ctx.arc(0, 0, w * 0.45, 0, Math.PI * 2);
-      ctx.fill();
-    } else ctx.fillRect(-w / 2, -hh / 2, w, hh);
-    ctx.restore();
+      path.moveTo(x + w * 0.45, y);
+      path.arc(x, y, w * 0.45, 0, Math.PI * 2);
+      continue;
+    }
+    // Flutters: seen edge on and face on in turn.
+    const turn = h(6) * 6 + k * (4 + 8 * h(7)) * (h(8) < 0.5 ? -1 : 1), flat = Math.cos(k * (8 + 10 * h(9)));
+    const ux = Math.cos(turn) * (w / 2), uy = Math.sin(turn) * (w / 2);
+    const vx = -Math.sin(turn) * UNIT * B * 0.03 * flat, vy = Math.cos(turn) * UNIT * B * 0.03 * flat;
+    path.moveTo(x - ux - vx, y - uy - vy);
+    path.lineTo(x + ux - vx, y + uy - vy);
+    path.lineTo(x + ux + vx, y + uy + vy);
+    path.lineTo(x - ux + vx, y - uy + vy);
+    path.closePath();
   }
+  ctx.save();
+  ctx.globalAlpha = 1 - clamp((s * 1000 - (life - 700)) / 700);
+  paths.forEach((p, i) => {
+    ctx.fillStyle = CONFETTI[i]!;
+    ctx.fill(p);
+  });
+  ctx.restore();
 }
 
 const wordFor = (fx: Pick<Fx, "medal" | "times">) => (fx.medal ? "PERFECT!" : fx.times.kept >= 5 ? "AWESOME!" : fx.times.kept >= 4 ? "GREAT!" : fx.times.kept >= 3 ? "NICE!" : "DONE!");
@@ -525,6 +541,15 @@ export function finishParts(fx: Pick<Fx, "medal" | "times">): { name: string; fr
   ];
 }
 
+const widthsOf = new Map<string, number[]>();
+/** The letters' widths (measured once per word and size). */
+function letterWidths(ctx: CanvasRenderingContext2D, text: string, font: string): number[] {
+  const key = `${text}:${font}`;
+  let w = widthsOf.get(key);
+  if (!w) widthsOf.set(key, (w = [...text].map((c) => ctx.measureText(c).width * 1.04)));
+  return w;
+}
+
 /** The word for how it went, popping in letter by letter over the block, then floating up
  * and away as the stars gather. */
 function word(ctx: CanvasRenderingContext2D, fx: Fx): void {
@@ -537,11 +562,9 @@ function word(ctx: CanvasRenderingContext2D, fx: Fx): void {
   if (out >= 1) return;
   const B = big(fx.zoom), size = UNIT * B * (fx.medal ? 0.72 : 0.6);
   ctx.save();
-  ctx.font = `900 ${size}px system-ui, sans-serif`;
-  ctx.textBaseline = "middle";
-  ctx.textAlign = "center";
-  ctx.lineJoin = "round";
-  const widths = [...text].map((c) => ctx.measureText(c).width * 1.04);
+  const font = `900 ${size}px system-ui, sans-serif`;
+  ctx.font = font;
+  const widths = letterWidths(ctx, text, font);
   const total = widths.reduce((a, b) => a + b, 0);
   const margin = UNIT * B * 0.2, v = fx.view;
   const cx = Math.min(v.x + v.width - margin - total / 2, Math.max(v.x + margin + total / 2, r.x + r.width / 2));
@@ -559,25 +582,38 @@ function word(ctx: CanvasRenderingContext2D, fx: Fx): void {
     ctx.translate(x - w / 2, y + bob);
     ctx.rotate((1 - p) * (i % 2 ? 0.5 : -0.5));
     ctx.scale(s, s);
-    ctx.shadowColor = "rgba(0, 0, 0, 0.35)";
-    ctx.shadowBlur = 6;
-    ctx.shadowOffsetY = 2;
-    ctx.strokeStyle = fx.medal ? "#264a94" : "#9a4a00";
-    ctx.lineWidth = size * 0.2;
-    ctx.strokeText(c, 0, 0);
-    ctx.shadowColor = "transparent";
-    const g = ctx.createLinearGradient(0, -size / 2, 0, size / 2);
-    g.addColorStop(0, "#fff6c2");
-    g.addColorStop(0.5, "#ffd23f");
-    g.addColorStop(1, "#f29a0b");
-    ctx.fillStyle = g;
-    ctx.fillText(c, 0, 0);
+    // Each letter is a picture made once (text drawn afresh at every size is slow).
+    const bw = w + size * 0.5, bh = size * 1.7, scale = fx.zoom * devicePixelRatio;
+    sprite(ctx, `word:${c}:${size}:${fx.medal}`, bw, bh, scale, (l) => {
+      l.font = font;
+      l.textBaseline = "middle";
+      l.textAlign = "center";
+      l.lineJoin = "round";
+      l.shadowColor = "rgba(0, 0, 0, 0.35)";
+      l.shadowBlur = 6;
+      l.shadowOffsetY = 2;
+      l.strokeStyle = fx.medal ? "#264a94" : "#9a4a00";
+      l.lineWidth = size * 0.2;
+      l.strokeText(c, 0, 0);
+      l.shadowColor = "transparent";
+      const g = l.createLinearGradient(0, -size / 2, 0, size / 2);
+      g.addColorStop(0, "#fff6c2");
+      g.addColorStop(0.5, "#ffd23f");
+      g.addColorStop(1, "#f29a0b");
+      l.fillStyle = g;
+      l.fillText(c, 0, 0);
+    });
     // A shine runs along the letters, again and again.
     const shine = Math.max(0, Math.sin(k / 160 - i * 0.55)) ** 10;
     if (shine > 0.01) {
       ctx.globalAlpha *= shine * 0.85;
-      ctx.fillStyle = "#ffffff";
-      ctx.fillText(c, 0, 0);
+      sprite(ctx, `shine:${c}:${size}`, bw, bh, scale, (l) => {
+        l.font = font;
+        l.textBaseline = "middle";
+        l.textAlign = "center";
+        l.fillStyle = "#ffffff";
+        l.fillText(c, 0, 0);
+      });
     }
     ctx.restore();
   });
@@ -594,19 +630,25 @@ export function screenFlash(ctx: CanvasRenderingContext2D, fx: Fx, width: number
     return q >= 0 && q < 1 ? Math.max(m, (1 - q) * (0.12 + 0.05 * k)) : m;
   }, 0);
   if (pulse > 0) {
-    const g = ctx.createRadialGradient(width / 2, height / 2, Math.min(width, height) * 0.35, width / 2, height / 2, Math.max(width, height) * 0.7);
-    g.addColorStop(0, "rgba(255, 210, 63, 0)");
-    g.addColorStop(1, `rgba(255, 190, 40, ${pulse})`);
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, width, height);
+    // Strips along the edges only (a gradient over the whole screen costs every pixel).
+    const d = Math.min(width, height) * 0.09;
+    const strip = (x0: number, y0: number, x1: number, y1: number, x: number, y: number, w: number, h: number) => {
+      const g = ctx.createLinearGradient(x0, y0, x1, y1);
+      g.addColorStop(0, `rgba(255, 190, 40, ${pulse})`);
+      g.addColorStop(1, "rgba(255, 190, 40, 0)");
+      ctx.fillStyle = g;
+      ctx.fillRect(x, y, w, h);
+    };
+    strip(0, 0, 0, d, 0, 0, width, d);
+    strip(0, height, 0, height - d, 0, height - d, width, d);
+    strip(0, 0, d, 0, 0, 0, d, height);
+    strip(width, 0, width - d, 0, width - d, 0, d, height);
   }
   if (!fx.medal || times.medalHit === null) return;
-  const p = (t - times.medalHit) / 350;
+  const p = (t - times.medalHit) / 220;
   if (p < 0 || p >= 1) return;
-  const g = ctx.createRadialGradient(width / 2, height / 2, Math.min(width, height) * 0.25, width / 2, height / 2, Math.max(width, height) * 0.75);
-  g.addColorStop(0, `rgba(255, 245, 200, ${0.18 * (1 - p)})`);
-  g.addColorStop(1, `rgba(255, 200, 60, ${0.45 * (1 - p)})`);
-  ctx.fillStyle = g;
+  // A flat fill: the cheapest way to cover the screen.
+  ctx.fillStyle = `rgba(255, 225, 130, ${0.4 * (1 - p)})`;
   ctx.fillRect(0, 0, width, height);
 }
 
@@ -617,7 +659,7 @@ type Rect = { x: number; y: number; width: number; height: number };
 /** The soul `k` ms after it set off: it rises out of the old block as a glowing ghost of it,
  * balls up into an orb that arcs over to the new block shedding sparks, and pours into it
  * (taking its shape), which flashes and rings. */
-export function soul(ctx: CanvasRenderingContext2D, from: Rect, to: Rect, k: number, zoom: number): void {
+export function soul(ctx: CanvasRenderingContext2D, from: Rect, to: Rect, k: number, zoom: number, detail = 1): void {
   const B = big(zoom), p = clamp(k / SOUL.TRAVEL_MS);
   const c0 = { x: from.x + from.width / 2, y: from.y + from.height / 2 }, c1 = { x: to.x + to.width / 2, y: to.y + to.height / 2 };
   const dist = Math.hypot(c1.x - c0.x, c1.y - c0.y);
@@ -631,15 +673,7 @@ export function soul(ctx: CanvasRenderingContext2D, from: Rect, to: Rect, k: num
     return { x: u * u * c0.x + 2 * u * e * ctrl.x + e * e * c1.x, y: u * u * c0.y + 2 * u * e * ctrl.y + e * e * c1.y };
   };
   const orb = UNIT * 0.42 * B;
-  const glowBall = (x: number, y: number, r: number, a: number) => {
-    const g = ctx.createRadialGradient(x, y, 0, x, y, r * 2.2);
-    g.addColorStop(0, `rgba(255, 255, 255, ${a})`);
-    g.addColorStop(0.25, `rgba(255, 150, 150, ${a})`);
-    g.addColorStop(0.55, `rgba(214, 69, 69, ${a * 0.55})`);
-    g.addColorStop(1, "rgba(214, 69, 69, 0)");
-    ctx.fillStyle = g;
-    ctx.fillRect(x - r * 2.2, y - r * 2.2, r * 4.4, r * 4.4);
-  };
+  const glowBall = (x: number, y: number, r: number, a: number) => glow(ctx, "soul", x, y, r * 2.2, a);
   ctx.save();
   if (p < 1) {
     // Rising out: a ghost of the old block lifting and shrinking into the orb.
@@ -672,7 +706,7 @@ export function soul(ctx: CanvasRenderingContext2D, from: Rect, to: Rect, k: num
         ctx.fill();
       }
       ctx.globalAlpha = 1;
-      for (let g = 10; g >= 1; g--) {
+      for (let g = detail < 1 ? 0 : 10; g >= 1; g--) {
         const at = along(Math.max(0, q - g * 0.022));
         glowBall(at.x, at.y, orb * (1 - g * 0.07), 0.25 * (1 - g / 11));
       }
