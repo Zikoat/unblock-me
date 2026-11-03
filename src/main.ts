@@ -29,8 +29,8 @@ const TRIES_KEY = "unblock-me:tries";
 const CAMERA_KEY = "unblock-me:camera"; // where the view is, kept across reloads
 const LOG_KEY = "unblock-me:log"; // the play log; kept across resets
 const DEVICE_KEY = "unblock-me:device"; // names this browser's automatic uploads; kept across resets
-const DEBUG_KEY = "unblock-me:debug";
-const SHARPNESS_KEY = "unblock-me:sharpness"; // how far drawing has stepped down on this device (see pace) // whether the debug UI row is on; kept across resets
+const DEBUG_KEY = "unblock-me:debug"; // whether the debug UI row is on; kept across resets
+const DETAIL_KEY = "unblock-me:detail"; // how far the finish's detail has stepped down on this device (see pace)
 /** With the red block stuck, tapping the empty board and then the red block (which shakes)
  * this many times over, with nothing else between, turns the debug UI on (for good) and
  * resets, since its blocks change the board. Unlikely by accident. */
@@ -579,8 +579,8 @@ Object.assign(window, {
     onScreen: () => blocksIn(scene.layout, latticeRect(scene, { x: 0, y: 0, width: scene.width, height: scene.height }), scene),
     slideRange: (id: string) => slideRange(scene.layout, visibleBlocks(scene).find((b) => b.id === id)!, scene),
     redraw: () => redraw(),
-    /** The adaptive sharpness step (0 full; see pace). */
-    sharpness: () => sharpness,
+    /** The adaptive detail step (0 full; see pace). */
+    detailStep: () => detailStep,
     /** Forget everything stored, like the reset block but without reloading (for tests). */
     forget: () => forget(),
     playLog,
@@ -696,15 +696,12 @@ function redraw(): void {
   });
 }
 
-// Sharpness that adapts: when frames come late (a slow phone in a busy finish), the canvas
-// is drawn with fewer pixels, a step at a time (most of a frame's cost is filling pixels);
-// after a long run of frames on time it steps back up.
-// Past the fewest pixels, the finish draws less (fewer particles, no trails).
-const SHARPNESS = [
-  { px: 2, detail: 1 }, { px: 1.5, detail: 1 }, { px: 1.25, detail: 1 }, { px: 1, detail: 1 }, // device px per CSS px, at most
-  { px: 1, detail: 0.6 }, { px: 1, detail: 0.35 }, { px: 0.75, detail: 0.2 },
-];
-let sharpness = Math.min(SHARPNESS.length - 1, Math.max(0, load<number>(SHARPNESS_KEY, 0)));
+// Detail that adapts: when frames come late (a slow phone in a busy finish), the finish draws
+// less (fewer particles, no trails, at the least no glow or rays), a step at a time; after a
+// long run of frames on time it steps back up. (Drawing with fewer pixels was tried too, but
+// the board looked blurry.)
+const DETAIL = [1, 0.6, 0.35, 0.2];
+let detailStep = Math.min(DETAIL.length - 1, Math.max(0, load<number>(DETAIL_KEY, 0)));
 let lastFrame = 0, onTime = 0, late: number[] = [];
 const recent: number[] = []; // the last frames' lengths, for the screen's frame time
 function pace(now: number): void {
@@ -720,21 +717,21 @@ function pace(now: number): void {
     // Two late frames within a second step down, or one that missed two frames or more.
     late = [...late.filter((t) => now - t < 1000), now];
     onTime = 0;
-    if ((late.length >= 2 || dt > vsync * 2.7) && sharpness < SHARPNESS.length - 1) {
-      sharpness++;
+    if ((late.length >= 2 || dt > vsync * 2.7) && detailStep < DETAIL.length - 1) {
+      detailStep++;
       late = [];
-      keepSharpness();
+      keepDetail();
     }
-  } else if (++onTime > 600 && sharpness > 0) {
-    sharpness--;
+  } else if (++onTime > 600 && detailStep > 0) {
+    detailStep--;
     onTime = 0;
-    keepSharpness();
+    keepDetail();
   }
 }
 /** The step is kept for next time, so a slow phone starts where it got to. */
-function keepSharpness(): void {
+function keepDetail(): void {
   try {
-    localStorage.setItem(SHARPNESS_KEY, String(sharpness));
+    localStorage.setItem(DETAIL_KEY, String(detailStep));
   } catch {
     // No storage: it adapts again next time.
   }
@@ -757,9 +754,9 @@ function advance(now: number): ReturnType<typeof sliding> {
     if (soul && now > soul.born + SOUL.TRAVEL_MS + SOUL.BURST_MS) soul = null;
     const arrived = !soul || now >= soul.born + SOUL.TRAVEL_MS;
     if (throb && throb.born < 0 && arrived) throb.born = now;
-    if (throb && now > throb.born + THROB_MS) throb = null;
+    if (throb && throb.born >= 0 && now > throb.born + THROB_MS) throb = null;
     if (cue && cue.born < 0 && arrived) cue.born = now;
-    if (cue && now > cue.born + CUE_MS) cue = null;
+    if (cue && cue.born >= 0 && now > cue.born + CUE_MS) cue = null;
     for (const r of ripples) if (r.born < 0) r.born = now;
     ripples = ripples.filter((r) => now <= r.born + RIPPLE_MS);
     if (shake && shake.born < 0) shake.born = now;
@@ -806,8 +803,7 @@ function paint(now: number, moving: ReturnType<typeof sliding>, to: HTMLCanvasEl
         soul,
         trace,
         now,
-        pixelRatio: SHARPNESS[sharpness]!.px,
-        detail: SHARPNESS[sharpness]!.detail,
+        detail: DETAIL[detailStep],
       }),
     );
     if (to !== canvas) return;

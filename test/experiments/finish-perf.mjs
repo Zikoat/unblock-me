@@ -26,8 +26,8 @@ try {
   const errors = [];
   if (process.env.GPU) console.log("gpu:", await (await ctx.newPage()).evaluate(() => { const c = document.createElement("canvas"); const gl = c.getContext("webgl"); const d = gl?.getExtension("WEBGL_debug_renderer_info"); return d ? gl.getParameter(d.UNMASKED_RENDERER_WEBGL) : String(!!gl); }));
   page.on("pageerror", (e) => errors.push(e.message));
-  // STEP=n: a returning visit, the drawing already stepped down to n (see pace in main.ts).
-  if (process.env.STEP) await page.addInitScript((n) => localStorage.setItem("unblock-me:sharpness", n), process.env.STEP);
+  // STEP=n: a returning visit, the detail already stepped down to n (see pace in main.ts).
+  if (process.env.STEP) await page.addInitScript((n) => localStorage.setItem("unblock-me:detail", n), process.env.STEP);
   if (process.env.NOSOUND) await page.addInitScript(() => { delete window.AudioContext; delete window.webkitAudioContext; });
   await page.goto(`http://localhost:${port}/?testbed=${goal}${process.env.PERF || process.env.OFF ? "&perf" : ""}${process.env.OFF ? "&off=" + process.env.OFF : ""}${process.env.NOMEASURE ? "&nomeasure" : ""}`);
   await page.waitForTimeout(2500);
@@ -66,7 +66,7 @@ try {
   }
   for (let i = 0; i < 11; i++) {
     await page.waitForTimeout(1000);
-    if (process.env.RES) console.log(`at ${i + 1} s: canvas ${await page.evaluate(() => document.querySelector("canvas").width)} px wide, step ${await page.evaluate(() => unblock.sharpness())}`);
+    if (process.env.RES) console.log(`at ${i + 1} s: canvas ${await page.evaluate(() => document.querySelector("canvas").width)} px wide, detail step ${await page.evaluate(() => unblock.detailStep())}`);
   }
   const { profile } = await cdp.send("Profiler.stop");
   const frames = await page.evaluate(() => window.__frames);

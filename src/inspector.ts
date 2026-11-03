@@ -6,6 +6,7 @@
 import type { TraceEntry } from "./score-track";
 import * as sfx from "./sfx";
 import { SOUL } from "./finish-fx";
+import { CUE_MS } from "./render";
 
 export type InspectorHooks = {
   /** Leave `bottom` px below the board for the panel (0: the whole screen again). */
@@ -299,14 +300,14 @@ export class Inspector {
       }
     });
     const end = Math.max(0, ...Object.values(marks).map((m) => m[1]));
-    this.total = Math.ceil((nextAt > 0 ? Math.max(nextAt + SOUL.TRAVEL_MS + 900, end + 300) : end + 400) / 100) * 100;
+    this.total = Math.ceil((nextAt > 0 ? Math.max(nextAt + SOUL.TRAVEL_MS + CUE_MS + 200, end + 300) : end + 400) / 100) * 100;
     const colors = ["#8a8d91", "#d64545", "#d49a2a", "#e66b2e", "#2f9e6e", "#b84aa8", "#4bb3c4", "#c9a227"];
     // The finish shows as its parts.
     const shown = [...Object.entries(marks).filter(([name]) => name !== "Finish").map(([name, [from, to]]) => ({ name, from, to })), ...parts];
     this.spans = shown.map((s, i) => ({ ...s, color: colors[i % colors.length]! }));
     // The new red block throbs once the soul has got to it.
     const throbAt = marks["Soul flies to the next red block"] ? marks["Soul flies to the next red block"][0] + SOUL.TRAVEL_MS : nextAt;
-    if (nextAt > 0) this.spans.push({ name: "Next red block (throb, then its way)", from: throbAt, to: Math.min(this.total, throbAt + 900), color: "#3b6fd4" });
+    if (nextAt > 0) this.spans.push({ name: "Next red block (throb, then its way)", from: throbAt, to: Math.min(this.total, throbAt + CUE_MS), color: "#3b6fd4" });
     this.slider.max = String(this.total);
     this.v0 = 0;
     this.v1 = this.total;

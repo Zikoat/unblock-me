@@ -69,7 +69,7 @@ const throbScale = (t: number) => (t <= 0 || t >= 1 ? 1 : 1 + 0.15 * Math.sin(Ma
 export function draw(
   canvas: HTMLCanvasElement,
   scene: Scene,
-  { fullscreen, density, fps = true, sliding, sparkles = [], throb = null, cue = null, ripples = [], shake = null, pinThrob = null, used = 0, trace, finish = null, soul = null, pixelRatio = 2, detail = 1, now = 0 }: {
+  { fullscreen, density, fps = true, sliding, sparkles = [], throb = null, cue = null, ripples = [], shake = null, pinThrob = null, used = 0, trace, finish = null, soul = null, detail = 1, now = 0 }: {
     fullscreen: boolean;
     density: number;
     /** Whether the fps counter is showing. */
@@ -95,15 +95,13 @@ export function draw(
     finish?: { id: string; born: number; dir?: { x: number; y: number } } | null;
     /** The last red block's soul flying to the new one (world px), and when it set off. */
     soul?: { from: { x: number; y: number; width: number; height: number }; toId: string; born: number } | null;
-    /** Device px per CSS px at most, and how much of the finish's detail to draw (both less
-     * when frames come late: main.ts). */
-    pixelRatio?: number;
+    /** How much of the finish's detail to draw (less when frames come late: main.ts). */
     detail?: number;
     now?: number;
   },
 ): void {
   const ctx = canvas.getContext("2d")!;
-  const dpr = Math.min(pixelRatio, devicePixelRatio || 1);
+  const dpr = devicePixelRatio || 1;
   const { width, height, camera } = scene;
   if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr)) {
     canvas.width = Math.round(width * dpr);
