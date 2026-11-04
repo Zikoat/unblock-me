@@ -2,10 +2,12 @@
 // 2, its goal a 2x1 extrusion just outside the right wall (x 6..7). Random boards, each
 // shuffled within everything reachable from it to the state farthest (in moves: one block's
 // slide, any distance) from the red block on its goal. Keeps the best per fewest-moves count.
-//   scripts/capped.sh 2000 600 bun test/experiments/island-levels.ts <boards> <out.json> [state cap]
+//   scripts/capped.sh 2000 600 bun test/experiments/island-levels.ts <boards> <out.json> [state cap] [kept per count]
 export {};
 type Piece = { h: boolean; lane: number }; // h: lane is the row; else the column
-const N = 6, ROW = 2, EXIT = 6; // red solved at x = EXIT (cells 6, 7 of row ROW)
+const N = 6, EXIT = 6; // red solved at x = EXIT (cells 6, 7 of row ROW)
+// The exit's row: the red block's row, random per board (set with each board worked on).
+let ROW = 2;
 
 function rng(seed: number) {
   return () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32);
@@ -50,6 +52,7 @@ function neighbours(pieces: Piece[], key: number): number[] {
 }
 
 function randomBoard(next: () => number, count: number): { pieces: Piece[]; pos: number[] } | null {
+  ROW = Math.floor(next() * N);
   const pieces: Piece[] = [{ h: true, lane: ROW }], pos = [Math.floor(next() * 3)];
   for (let t = 0; t < 200 && pieces.length < count; t++) {
     const h = next() < 0.5, lane = Math.floor(next() * N), at = Math.floor(next() * (N - 1));
@@ -123,17 +126,22 @@ function prune(l: Level, cap: number): Level {
 
 const tries = Number(process.argv[2] ?? 100), out = process.argv[3] ?? "island-levels.json", cap = Number(process.argv[4] ?? 200_000);
 const began = performance.now();
-const next = rng(12345), best = new Map<number, Level>();
+// Up to KEEP boards per fewest-moves count (fewest blocks first), so levels can be picked
+// for variety.
+const KEEP = Number(process.argv[5] ?? 1);
+const next = rng(12345), best = new Map<number, Level[]>();
 for (let t = 0; t < tries; t++) {
   const b = randomBoard(next, 7 + Math.floor(next() * 7));
   if (!b) continue;
   const l = hardest(b.pieces, b.pos, cap);
   if (!l) continue;
   // Per fewest count, prefer fewer blocks (cleaner), then a bigger state space.
-  const old = best.get(l.fewest);
-  if (!old || l.pieces.length < old.pieces.length || (l.pieces.length === old.pieces.length && l.states > old.states)) best.set(l.fewest, l);
+  const list = best.get(l.fewest) ?? [];
+  list.push(l);
+  list.sort((a, b) => a.pieces.length - b.pieces.length || b.states - a.states);
+  best.set(l.fewest, list.slice(0, KEEP));
 }
-const levels = [...best.values()].sort((a, b) => a.fewest - b.fewest).map((l) => prune(l, cap));
+const levels = [...best.values()].flat().sort((a, b) => a.fewest - b.fewest).map((l) => ((ROW = l.pieces[0]!.lane), prune(l, cap)));
 console.log(`${tries} boards in ${((performance.now() - began) / 1000).toFixed(1)} s`);
 console.log(levels.map((l) => `${l.fewest} moves, ${l.pieces.length} blocks, ${l.states} states`).join("\n"));
 await Bun.write(out, JSON.stringify(levels));
