@@ -92,6 +92,35 @@ function hardest(pieces: Piece[], startPos: number[], cap: number): Level | null
   return { fewest: dist.get(far)!, states: queue.length, pieces, pos: unpack(far, n), solution };
 }
 
+/** The fewest moves from `pos` to solved, with a shortest solution (forward BFS); null if none. */
+function solve(pieces: Piece[], pos: number[], cap: number): Level["solution"] | null {
+  const start = pack(pos), n = pieces.length, parent = new Map<number, number>([[start, -1]]), q = [start];
+  for (let i = 0; i < q.length && q.length <= cap; i++) {
+    const cur = q[i]!;
+    if (cur % 8 === EXIT) {
+      const path: Level["solution"] = [];
+      for (let c = cur; parent.get(c)! >= 0; c = parent.get(c)!) {
+        const a = unpack(parent.get(c)!, n), b = unpack(c, n), piece = a.findIndex((v, j) => v !== b[j]);
+        path.unshift({ piece, from: a[piece]!, to: b[piece]! });
+      }
+      return path;
+    }
+    for (const s of neighbours(pieces, cur)) if (!parent.has(s)) (parent.set(s, cur), q.push(s));
+  }
+  return null;
+}
+
+/** Drop the blocks the puzzle doesn't need: each whose removal leaves the fewest moves the same. */
+function prune(l: Level, cap: number): Level {
+  let { pieces, pos } = l;
+  for (let i = pieces.length - 1; i >= 1; i--) {
+    const p2 = pieces.filter((_, j) => j !== i), q2 = pos.filter((_, j) => j !== i);
+    const s = solve(p2, q2, cap);
+    if (s && s.length === l.fewest) (pieces = p2), (pos = q2);
+  }
+  return { ...l, pieces, pos, solution: solve(pieces, pos, cap)! };
+}
+
 const tries = Number(process.argv[2] ?? 100), out = process.argv[3] ?? "island-levels.json", cap = Number(process.argv[4] ?? 200_000);
 const began = performance.now();
 const next = rng(12345), best = new Map<number, Level>();
@@ -104,7 +133,7 @@ for (let t = 0; t < tries; t++) {
   const old = best.get(l.fewest);
   if (!old || l.pieces.length < old.pieces.length || (l.pieces.length === old.pieces.length && l.states > old.states)) best.set(l.fewest, l);
 }
-const levels = [...best.values()].sort((a, b) => a.fewest - b.fewest);
+const levels = [...best.values()].sort((a, b) => a.fewest - b.fewest).map((l) => prune(l, cap));
 console.log(`${tries} boards in ${((performance.now() - began) / 1000).toFixed(1)} s`);
 console.log(levels.map((l) => `${l.fewest} moves, ${l.pieces.length} blocks, ${l.states} states`).join("\n"));
 await Bun.write(out, JSON.stringify(levels));
