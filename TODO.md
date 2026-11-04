@@ -19,6 +19,46 @@
 - A way to make goals hard without blocks on the red block's track (since the penalty, goals made ahead need about 11 fewest moves instead of 17, reports/blocks-on-track.html); waits on you picking it.
 - Group picture puzzles in Telegram (your idea): a picture made of 2x1 blocks, scrambled by legal moves, solved together by a group, everyone seeing each other; waits on the multiplayer server and a Telegram mini app.
 
+## User testing
+
+Notes from play tests (not AI generated): issues, observations and ideas, many without a clear solution yet. **Done** marks the fixed ones.
+
+### Subject a
+- Needs a simple tutorial level that teaches how the game works without the huge map.
+- **Done**: tapping the gradient (way cue) did something; disabled.
+- **Done**: fullscreen didn't work in Telegram's browser.
+- **Done**: Telegram's browser slid left and up, making most things hard.
+- **Done**: a red block that had moved away from its goal ran past it instead of stopping on it.
+- Played very zoomed out: blocks hard to see, hunched over the phone, easy misclicks. Ideas: limit max zoom out, or keep it but disable dragging/pushing blocks there, or show that you are too far out. Knows how to zoom but chooses to stay out.
+- Progress resets when going from Telegram's browser to the real browser (also seen going computer to phone).
+- First level: didn't know the red block should go to the red goal; moved lots of blocks out of the way before noticing the goal.
+- Mostly used push. Idea: early puzzles that need a half-way move (forcing drag), then in-game guidance that a tap pushes, maybe an objective like "push 10 blocks" if they haven't pushed yet.
+- Observation: "after a while the red block goes further and further away from the starting area, and the other goals".
+- Start with shorter levels, along a difficulty curve.
+- Got many 1-star results. Ideas: a zen mode without stars, show stars only after a while, or hide them at 1 star; needs a brainstorm, or keep as is.
+- After the first goal was unsure about moving the yellow (reached) block off its goal, thinking it had to stay to progress. Idea: an early level that moves the yellow block off its goal while finishing a red goal. Intuitively knew a yellow block can move, so it may not need teaching, just using in an early handcrafted level.
+- Seemed to have fun and feel mastery ("mestringsfølelse").
+- Afterwards: best was learning new mechanics; hardest was getting an overview ("Vanskeligst var å se helheten"); worst was the Telegram problems.
+
+### Subject b
+- First level too difficult and way too long; after about 5 levels got the hang of it and the default difficulty felt right.
+- First goal had a blue block exactly on it; didn't know it could be moved off and said "completing is impossible" (noticed after being nudged 3 times). Partly remedied by fewer blocks between the red block and the goal; maybe make a block exactly on the goal rarer.
+- Sometimes tapped a block (moving it) when trying to pan; frustrating. Ideas: treat a fast swipe as a pan, or a swipe after many taps as a pan; careful, it may make block drags turn into pans.
+- Never learnt tap to push; dragged all the time.
+- **Done**: more dopamine on finish (stars from the sides of the screen).
+- First level in Telegram's browser had no red block (maybe state left from earlier tests); then in Safari (also used for earlier tests) the first level had several blocks on the same track plus one on the goal. Question: reset on every change to world or block generation, on every update, or keep?
+- First question after moving a block: "why is it green?". Maybe remove the colour change on move; experiment: tint every block slightly differently instead.
+
+### Own observations
+- Possibly the same starting seed on several devices; check the seed mixes time, a device id and randomness so each reset is random.
+
+### Play data (uploads up to 2026-11-03)
+- Phone newcomers mostly quit on the first goal: 5 of 7 phone devices never reached one (28-102 moves, 1-4 min). First goals needed 25-50 fewest moves before the shorter-first-goal change, still 13-17 after; later goals need 4-15, so the curve starts at its hardest.
+- Newcomers who finished used about 2-2.6x the fewest moves (mostly 1 star); experienced players about 1.1x at about 25 s a goal.
+- Phone players zoom far out (camera scale 0.2-0.6), matching subject a.
+- Undo is almost never used (15 undos in about 7000 moves).
+- The log doesn't say whether a move was a drag or a tap-push, so push learning can't be measured yet.
+
 ## AI generated ideas
 
 These have been suggested by AI (Claude, in conversation) and are not necessarily high value or approved. Tags: **Recommended** (AI's pick), **Suggested** (an option), **Not chosen** (considered, turned down), **Done**.
@@ -58,6 +98,9 @@ These have been suggested by AI (Claude, in conversation) and are not necessaril
 ### Gameplay and progression
 - **Recommended**: daily board (same seed for everyone, ranked by moves, Wordle-style share, Telegram).
 - **Suggested**: difficulty curve from play data; streaks or combos across goals.
+- **Recommended**: a short handcrafted first run (about 3-5 goals of 3-10 fewest moves, one needing a half-way drag, one with a block on the goal, one moving a yellow block off its goal) before the generated world, with the fewest moves then ramping up over the next goals.
+- **Recommended**: log the input kind of each move (drag or tap-push) and taps that moved a block during a pan attempt, to measure push learning and misclicks.
+- **Suggested**: no stars shown on the first goals; stars fade in once the player beats about 1.5x fewest.
 - **Suggested**: gold blocks as a collection, achievements, unlockable block skins and finish styles.
 
 ### Multiplayer and MMO
