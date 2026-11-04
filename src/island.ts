@@ -27,6 +27,15 @@ export function islandCamera(k: number, width: number, height: number): Camera {
   return { scale, offsetX: width / 2 - (o.x + SIDE / 2) * UNIT * scale, offsetY: height / 2 - (o.y + SIDE / 2) * UNIT * scale };
 }
 
+/** Square `k`'s cells: the square in its walls, and its bay (with its walls). */
+export function islandRects(k: number): Rect[] {
+  const o = squareAt(k), row = ISLAND_LEVELS[k]!.blocks[0]![1];
+  return [
+    { x: o.x - 1, y: o.y - 1, width: SIDE + 2, height: SIDE + 2 },
+    { x: o.x + SIDE + 1, y: o.y + row - 1, width: 2, height: 3 },
+  ];
+}
+
 /** The square whose goal this is, or null for a goal off the island. */
 export function squareOf(goal: { id: string } | null): number | null {
   const m = goal?.id.match(/^isle (\d+) 0$/);

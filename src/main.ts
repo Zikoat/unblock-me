@@ -11,7 +11,7 @@ import { timedFrame } from "./perf";
 import { bestKnown, medal, shownUsed, viewCentre, type Goal } from "./goal";
 import type { GoalRequest } from "./goal-worker";
 import { Gestures, type Input } from "./gestures";
-import { ISLAND_AREA, islandCamera, nextIslandGoal, SIDE, squareAt, squareOf } from "./island";
+import { ISLAND_AREA, islandCamera, islandRects, nextIslandGoal, SIDE, squareAt, squareOf } from "./island";
 import { fixedLayout, MAX_TRIES, MIN_TRIES, randomLayout, TRIES, UNIT, type Placed, type Ui } from "./layout";
 import { CUE_MS, draw, fading, resetFades, RIPPLE_MS, SHAKE_MS, THROB_MS, redArrow, uiArrow, type Sparkle } from "./render";
 import { ease, slideDuration } from "./slide";
@@ -672,7 +672,7 @@ function restoreCamera(): void {
  * so a resize keeps it, except while the view glides there. */
 function lockView(): void {
   const k = withIsland ? squareOf(scene.goal) : null;
-  scene.locked = k !== null;
+  scene.locked = k === null ? null : islandRects(k);
   if (k !== null && !flight) scene.camera = islandCamera(k, scene.width, scene.height);
 }
 

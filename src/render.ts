@@ -1,6 +1,6 @@
 // Draws a scene on a canvas. Everything on the board is drawn in world units under one
 // camera transform, so it all zooms and pans together.
-import { worldRect } from "./camera";
+import { worldRect, type Rect } from "./camera";
 import { intersects, UNIT, type Block } from "./layout";
 import { drawScoreTrack, FINISH, finishTimes, starPoints, type TraceEntry } from "./score-track";
 import { bestKnown, shownUsed, type Goal } from "./goal";
@@ -29,6 +29,7 @@ export const COLORS = {
   star: "#f2b632",
   ui: "#1d1d1f",
   wall: "#5f5d57",
+  outside: "#cbc8c0", // round an island square being played
   icon: "#f3f2ee",
 };
 /** How long a reached target's area takes to fade out as its block lands on it (and back
@@ -351,6 +352,7 @@ export function draw(
     }
   }
 
+  if (scene.locked) greyOutside(ctx, scene, scene.locked);
   targets.forEach((t, i) => t.goal === goal && drawTarget(i));
 
   // Each target's score track, over the blocks: the current goal's as it is played, a
@@ -421,6 +423,32 @@ export function draw(
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     timed(ctx, "glitch", () => glitch(ctx, fx, width, height));
   }
+}
+
+/** While an island square is played, everything outside it is a flat grey: the view's area
+ * with a hole the shape of the square and its bay (`rects`, side by side), traced along the
+ * walls' outer edges and rounded like them. */
+function greyOutside(ctx: CanvasRenderingContext2D, scene: Scene, rects: Rect[]): void {
+  const c = scene.camera;
+  const view = { x: -c.offsetX / c.scale, y: -c.offsetY / c.scale, width: scene.width / c.scale, height: scene.height / c.scale };
+  const [sq, bay] = rects as [Rect, Rect];
+  const g = GAP / UNIT;
+  // Clockwise round the square, out round the bay on its right, and back.
+  const l = sq.x + g, t = sq.y + g, r = sq.x + sq.width - g, b = sq.y + sq.height - g;
+  const bt = Math.max(t, bay.y + g), bb = Math.min(b, bay.y + bay.height - g), br = bay.x + bay.width - g;
+  const pts = [[l, t], [r, t], [r, bt], [br, bt], [br, bb], [r, bb], [r, b], [l, b]]
+    .map(([x, y]) => [x! * UNIT, y! * UNIT] as const)
+    .filter(([x, y], i, all) => x !== all[(i + 1) % all.length]![0] || y !== all[(i + 1) % all.length]![1]); // a bay on the top or bottom row
+  ctx.save();
+  ctx.fillStyle = COLORS.outside;
+  ctx.beginPath();
+  ctx.rect(view.x, view.y, view.width, view.height);
+  const at = (i: number) => pts[(i + pts.length) % pts.length]!;
+  ctx.moveTo((at(-1)[0] + at(0)[0]) / 2, (at(-1)[1] + at(0)[1]) / 2);
+  for (let i = 0; i < pts.length; i++) ctx.arcTo(at(i)[0], at(i)[1], at(i + 1)[0], at(i + 1)[1], WALL_RADIUS);
+  ctx.closePath();
+  ctx.fill("evenodd");
+  ctx.restore();
 }
 
 /** Walls, joined into one shape where they touch: each wall cell is its inset square, a

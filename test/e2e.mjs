@@ -844,6 +844,11 @@ const browser = await chromium.launch();
   await page.mouse.up();
   const panned = await page.evaluate(() => unblock.scene.camera);
   check(panned.offsetX === view.offsetX && panned.offsetY === view.offsetY, "panning doesn't move the fixed view");
+  // Outside the square everything is grey, and a tap there does nothing.
+  const grey = await rgbAt(page, 5, 650);
+  check(grey.join() === "203,200,192", `outside the square is grey (${grey.join()})`);
+  await page.mouse.click(5, 650);
+  check((await page.evaluate(() => unblock.scene.circle)) === null, "and a tap there does nothing");
   await page.screenshot({ path: shots + "island-first-square.png" });
   // Its solution, dragged move by move, solves it; the red block's last drag stops a cell
   // short of its target (out of view) and it slides on in.

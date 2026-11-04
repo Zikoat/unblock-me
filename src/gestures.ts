@@ -100,6 +100,9 @@ export class Gestures {
   private readonly onAdjust: (ui: Ui, dx: number, done: boolean) => void;
 
   down(id: number, at: Point): void {
+    // Outside the island square being played, touches do nothing.
+    const cell = this.lattice(at);
+    if (this.scene.locked && !this.scene.locked.some((r) => cell.x >= r.x && cell.x < r.x + r.width && cell.y >= r.y && cell.y < r.y + r.height)) return;
     this.pointers.set(id, at);
     if (this.pointers.size === 2) {
       this.startPinch();
