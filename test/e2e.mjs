@@ -189,7 +189,7 @@ const browser = await chromium.launch();
   check(await page.evaluate(() => unblock.scene.camera.offsetX === 170 && unblock.scene.camera.offsetY === 370 && unblock.scene.camera.scale === 1), "and the view centred");
   await page.evaluate(() => unblock.goalReady());
   const stored = await page.evaluate(() => Object.fromEntries(Object.keys(localStorage).sort().map((k) => [k, localStorage.getItem(k)])));
-  const { "unblock-me:v8:goal": storedGoal, "unblock-me:camera": storedCamera, "unblock-me:log": storedLog, "unblock-me:device": storedDevice, ...rest } = stored;
+  const { "unblock-me:v9:goal": storedGoal, "unblock-me:camera": storedCamera, "unblock-me:log": storedLog, "unblock-me:device": storedDevice, ...rest } = stored;
   check(/^[0-9a-f-]{36}$/.test(storedDevice), `the device id for automatic uploads survives the reset (${storedDevice})`);
   const kinds = JSON.parse(storedLog ?? "[]").map((e) => e.e);
   check(kinds.includes("move") && kinds.slice(-3).join() === "reset,load,goal", `the play log survives the reset, which it records, then the page load and the new goal (${kinds.join(",")})`);
@@ -200,9 +200,9 @@ const browser = await chromium.launch();
     "unblock-me:debug": "true",
     "unblock-me:fps": "false",
     "unblock-me:tries": "12",
-    "unblock-me:v8:history": "[]",
-    "unblock-me:v8:moved": "[]",
-    "unblock-me:v8:seed": String(seedAfter),
+    "unblock-me:v9:history": "[]",
+    "unblock-me:v9:moved": "[]",
+    "unblock-me:v9:seed": String(seedAfter),
   }), `storage holds only fresh defaults, and other pages' keys are left alone (${JSON.stringify(rest)})`);
   check(JSON.parse(storedGoal ?? "null")?.seed === seedAfter, "and a new goal for the new seed");
   await expectColor(page, cell(-0.85, 4.15), "reset", "the reset block is still in its place");

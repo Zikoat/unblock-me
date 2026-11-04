@@ -18,14 +18,14 @@ import { ease, slideDuration } from "./slide";
 import { blockAt, blocksIn, slideRange, type Move } from "./rules";
 import { borderOnScreen, goalSolved, latticeRect, newScene, quickPush, record, relayout, resize, restart, undo, visibleBlocks, whereIs } from "./scene";
 
-// v8: harder island squares (their blocks' stored places no longer fit); v7 the island
-// (everyone starts on it); v6 UI blocks in a game row and a debug row
-// (generation changed); v5 two rows of UI blocks, v4 one row, v3 one 2x2 reset block, v2 no
-// seed, v1 free positions.
-const SEED_KEY = "unblock-me:v8:seed";
-const MOVED_KEY = "unblock-me:v8:moved";
-const HISTORY_KEY = "unblock-me:v8:history";
-const GOAL_KEY = "unblock-me:v8:goal";
+// v9: a slower island ramp; v8 harder island squares (their blocks' stored places no longer
+// fit either time); v7 the island (everyone starts on it); v6 UI blocks in a game row and a
+// debug row (generation changed); v5 two rows of UI blocks, v4 one row, v3 one 2x2 reset
+// block, v2 no seed, v1 free positions.
+const SEED_KEY = "unblock-me:v9:seed";
+const MOVED_KEY = "unblock-me:v9:moved";
+const HISTORY_KEY = "unblock-me:v9:history";
+const GOAL_KEY = "unblock-me:v9:goal";
 const BORDER_KEY = "unblock-me:border";
 const FPS_KEY = "unblock-me:fps"; // whether the fps counter shows
 const TRIES_KEY = "unblock-me:tries";

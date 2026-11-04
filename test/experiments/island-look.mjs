@@ -20,7 +20,7 @@ await page.waitForTimeout(1500);
 const goal = () => page.evaluate(() => window.unblock.scene.goal && JSON.parse(JSON.stringify(window.unblock.scene.goal)));
 /** Screen point of a lattice point, by the camera now. */
 const screen = (x, y) => page.evaluate(([x, y]) => { const c = window.unblock.scene.camera; return { x: x * 60 * c.scale + c.offsetX, y: y * 60 * c.scale + c.offsetY }; }, [x, y]);
-for (let k = 0; k < 7; k++) {
+for (let k = 0; k < 9; k++) {
   // Wait for the square's goal, and for the view to settle on it.
   for (let i = 0; i < 100 && (await goal())?.id !== `isle ${k} 0`; i++) await page.waitForTimeout(200);
   const g = await goal();

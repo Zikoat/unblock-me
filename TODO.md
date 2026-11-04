@@ -25,7 +25,7 @@
 Notes from play tests (not AI generated): issues, observations and ideas, many without a clear solution yet. **Done** marks the fixed ones.
 
 ### Subject a
-- Needs a simple tutorial level that teaches how the game works without the huge map. **Started**: the island, 6 walled 6x6 squares (7 to 22 fewest moves; 1 to 13 was too easy at the start) before the generated world, stars hidden on the first 3.
+- Needs a simple tutorial level that teaches how the game works without the huge map. **Started**: the island, 8 walled 6x6 squares (6 to 13 fewest moves, one more each; 1 to 13 was too easy at the start, 7 to 22 ramped too fast) before the generated world, stars hidden on the first 3.
 - **Done**: tapping the gradient (way cue) did something; disabled.
 - **Done**: fullscreen didn't work in Telegram's browser.
 - **Done**: Telegram's browser slid left and up, making most things hard.
