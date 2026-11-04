@@ -3,7 +3,7 @@
 // (600 + 60x, 600 + 60y).
 import { describe, expect, test } from "bun:test";
 import { toScreen, toWorld, type Point } from "../../src/camera";
-import { Gestures } from "../../src/gestures";
+import { Gestures, type Input } from "../../src/gestures";
 import { borderOnScreen, goalSolved, latticeRect, newScene, relayout, restart, undo, visibleBlocks } from "../../src/scene";
 import { fixedLayout, UI_BLOCKS, UNIT, type Placed, type Ui } from "../../src/layout";
 import { slideRange } from "../../src/rules";
@@ -262,6 +262,30 @@ describe("quick push: tapping a block", () => {
     tap(g, cell(2.5, 2)); // another block moves in between
     tap(g, cell(4, 0.5)); // so the usual way again: right
     expect(at("d").x).toBe(6);
+  });
+
+  test("each move reports how it was made: tap or drag, press time, time since the last pan; a pan soon after a tap's push is reported", () => {
+    let now = 0;
+    const inputs: Input[] = [], panAfter: number[] = [];
+    const scene = newScene(1200, 1200, { layout: fixedLayout([H(0, 0, "a"), W(4, 0)]) });
+    scene.camera = { scale: 1, offsetX: 600, offsetY: 600 };
+    const g = new Gestures(scene, { now: () => now, onInput: (i) => inputs.push(i), onPanAfterPush: (ms) => panAfter.push(ms) });
+    g.down(1, cell(1, 0.5));
+    now = 120;
+    g.up(1, cell(1, 0.5)); // a tap: pushed
+    now = 500;
+    drag(g, cell(4, 4), cell(5, 5)); // a pan of the background, soon after
+    scene.camera = { scale: 1, offsetX: 600, offsetY: 600 };
+    now = 900;
+    g.down(1, cell(3, 0.5)); // the pushed block (now at 2..3, against the wall)
+    now = 1300;
+    for (const x of [2.5, 1.5, 1]) g.move(1, cell(x, 0.5));
+    g.up(1, cell(1, 0.5)); // a drag
+    expect(inputs).toEqual([
+      { how: "tap", ms: 120, sincePan: null },
+      { how: "drag", ms: 400, sincePan: 800 },
+    ]);
+    expect(panAfter).toEqual([380]);
   });
 
   test("a block that cannot move either way is not moved, and is reported to shake", () => {

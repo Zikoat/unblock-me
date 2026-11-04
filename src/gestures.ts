@@ -9,13 +9,20 @@ const SLIDERS = new Set<Ui>(["density"]);
 /** A press that moves less than this many screen pixels is a tap. */
 export const TAP_SLOP = 10;
 
+/** How the last block move was made, for the play log: a tap's push or a drag, how long the
+ * finger was down (ms), and how long since the last pan or pinch ended (ms; null if none yet). */
+export type Input = { how: "tap" | "drag"; ms: number; sincePan: number | null };
+
+/** A pan starting this soon after a tap's push is logged: a tap that maybe meant to pan. */
+const PAN_AFTER_PUSH_MS = 1500;
+
 type Mode =
   | { kind: "idle" }
   /** One pointer down, not yet moved past the tap slop. */
-  | { kind: "pressed"; id: number; start: Point; block: Block | null }
+  | { kind: "pressed"; id: number; start: Point; block: Block | null; at: number }
   | { kind: "panning"; id: number; last: Point }
   /** `grab` is where the finger went down, `lo`..`hi` how far the block can slide. */
-  | { kind: "dragging"; id: number; block: Block; grab: Point; lo: number; hi: number }
+  | { kind: "dragging"; id: number; block: Block; grab: Point; lo: number; hi: number; at: number }
   /** Dragging sideways on the density block. */
   | { kind: "adjusting"; id: number; ui: Ui; start: Point; dx: number }
   | { kind: "pinching"; ids: [number, number]; from: [Point, Point]; start: Camera };
@@ -33,6 +40,9 @@ type Mode =
 export class Gestures {
   private mode: Mode = { kind: "idle" };
   private readonly pointers = new Map<number, Point>();
+  /** When the last pan or pinch ended, and the last tap that pushed a block. */
+  private panEnded: number | null = null;
+  private pushedAt: number | null = null;
 
   constructor(
     private readonly scene: Scene,
@@ -42,6 +52,9 @@ export class Gestures {
       onAdjust = () => {},
       onPush = () => {},
       onStuck = () => {},
+      onPanAfterPush = () => {},
+      onInput = () => {},
+      now = () => performance.now(),
     }: {
       onChange?: () => void;
       onUi?: (ui: Ui) => void;
@@ -50,6 +63,12 @@ export class Gestures {
       onPush?: (move: Move) => void;
       /** A tap on a block that cannot move either way (to shake it). */
       onStuck?: (id: string) => void;
+      /** A pan or pinch began soon after a tap pushed a block (ms since): maybe the tap was a
+       * pan that didn't get past the tap slop. */
+      onPanAfterPush?: (ms: number) => void;
+      /** How the move about to be recorded was made (just before onChange). */
+      onInput?: (input: Input) => void;
+      now?: () => number;
     } = {},
   ) {
     this.onChange = onChange;
@@ -57,7 +76,14 @@ export class Gestures {
     this.onAdjust = onAdjust;
     this.onPush = onPush;
     this.onStuck = onStuck;
+    this.onPanAfterPush = onPanAfterPush;
+    this.onInput = onInput;
+    this.now = now;
   }
+
+  private readonly onInput: (input: Input) => void;
+  private readonly onPanAfterPush: (ms: number) => void;
+  private readonly now: () => number;
 
   private readonly onStuck: (id: string) => void;
 
@@ -71,9 +97,10 @@ export class Gestures {
     this.pointers.set(id, at);
     if (this.pointers.size === 2) {
       this.startPinch();
+      this.panStarted();
     } else if (this.pointers.size === 1) {
       const block = blockAt(visibleBlocks(this.scene), this.lattice(at));
-      this.mode = { kind: "pressed", id, start: at, block };
+      this.mode = { kind: "pressed", id, start: at, block, at: this.now() };
     }
     // A third finger is ignored until one of the first two lifts.
   }
@@ -88,14 +115,16 @@ export class Gestures {
         this.mode = { kind: "adjusting", id, ui: mode.block.ui, start: mode.start, dx: 0 };
       } else if (mode.block === null || mode.block.ui || mode.block.wall) {
         this.mode = { kind: "panning", id, last: mode.start };
+        this.panStarted();
       } else {
         const { lo, hi } = slideRange(this.scene.layout, mode.block, this.scene);
         if (lo === hi) {
           // Stuck against blocks at both ends: there is nothing to slide, so pan instead.
           this.scene.stuckId = mode.block.id;
           this.mode = { kind: "panning", id, last: mode.start };
+          this.panStarted();
         } else {
-          this.mode = { kind: "dragging", id, block: mode.block, grab: this.lattice(mode.start), lo, hi };
+          this.mode = { kind: "dragging", id, block: mode.block, grab: this.lattice(mode.start), lo, hi, at: mode.at };
         }
       }
     }
@@ -114,6 +143,8 @@ export class Gestures {
         const to = quickPush(this.scene, mode.block);
         if (to) {
           const move = { id: mode.block.id, from: { x: mode.block.x, y: mode.block.y }, to };
+          this.onInput(this.inputFor("tap", mode.at));
+          this.pushedAt = this.now();
           record(this.scene, move);
           this.onPush(move);
           this.onChange();
@@ -180,8 +211,22 @@ export class Gestures {
     const at = { x: Math.round(drag.x), y: Math.round(drag.y) };
     this.scene.dragging = null;
     if (at.x === block.x && at.y === block.y) return;
+    this.onInput(this.inputFor("drag", this.mode.at));
     record(this.scene, { id: block.id, from: { x: block.x, y: block.y }, to: at });
     this.onChange();
+  }
+
+  private inputFor(how: Input["how"], pressed: number): Input {
+    const now = this.now();
+    return { how, ms: Math.round(now - pressed), sincePan: this.panEnded === null ? null : Math.round(now - this.panEnded) };
+  }
+
+  /** A pan or pinch begins: report it if a tap pushed a block just before. */
+  private panStarted(): void {
+    if (this.pushedAt === null) return;
+    const ms = this.now() - this.pushedAt;
+    this.pushedAt = null;
+    if (ms < PAN_AFTER_PUSH_MS) this.onPanAfterPush(Math.round(ms));
   }
 
   private finishAdjust(): void {
@@ -197,6 +242,7 @@ export class Gestures {
     this.scene.stuckId = null;
     this.drop();
     this.finishAdjust();
+    if (mode.kind === "panning" || mode.kind === "pinching") this.panEnded = this.now();
     // Lifting one finger of a pinch keeps panning with the other, never a tap.
     const [rest] = [...this.pointers];
     if (mode.kind === "pinching" && rest) {

@@ -10,7 +10,7 @@ import * as sfx from "./sfx";
 import { timedFrame } from "./perf";
 import { bestKnown, medal, viewCentre, type Goal } from "./goal";
 import type { GoalRequest } from "./goal-worker";
-import { Gestures } from "./gestures";
+import { Gestures, type Input } from "./gestures";
 import { fixedLayout, MAX_TRIES, MIN_TRIES, randomLayout, TRIES, UNIT, type Placed, type Ui } from "./layout";
 import { CUE_MS, draw, fading, resetFades, RIPPLE_MS, SHAKE_MS, THROB_MS, redArrow, uiArrow, type Sparkle } from "./render";
 import { ease, slideDuration } from "./slide";
@@ -115,6 +115,9 @@ type LogEvent =
   | { e: "error"; message: string; where: string }
   | { e: "goal"; commit: string; id: string; target: Point; start?: Point; tries: number; seed: number; solution: number; moved: [string, number, number][] }
   | { e: "move" | "undo"; id: string; from: Point; to: Point }
+  // A move by a gesture also says how (tap or drag), press ms, ms since the last pan, and zoom.
+  | { e: "move"; id: string; from: Point; to: Point; how: Input["how"]; ms: number; sincePan: number | null; zoom: number }
+  | { e: "panAfterPush"; ms: number }
   | { e: "reached"; id: string; used: number }
   | { e: "reset"; goal: string | null }
   | { e: "density"; from: number; to: number; goal: string | null };
@@ -153,14 +156,19 @@ function upload(): Promise<boolean> {
 addEventListener("pagehide", () => {
   if (unsent && !shared && !forgetting) navigator.sendBeacon(`play-data?device=${device}`, new Blob([JSON.stringify(playData())], { type: "application/json" }));
 });
+/** How the move a gesture is recording was made (see Gestures' onInput); logged with it. */
+let input: Input | null = null;
 /** History entries already in the log (set once the stored history is loaded). */
 let logged = 0;
 function logMoves(): void {
   while (logged < scene.history.length) {
     // Counted before logging: logging can upload, which saves, which logs moves again.
     const m = scene.history[logged++]!;
-    log({ e: "move", id: m.id, from: m.from, to: m.to });
+    // The gesture's input belongs to the move it just recorded, the newest one.
+    const how = input && logged === scene.history.length ? { ...input, zoom: Math.round(scene.camera.scale * 100) / 100 } : {};
+    log({ e: "move", id: m.id, from: m.from, to: m.to, ...how });
   }
+  input = null;
 }
 
 function save(): void {
@@ -471,6 +479,8 @@ const gestures = new Gestures(scene, {
     debugCode(null);
     pushed(move);
   },
+  onInput: (how) => (input = how),
+  onPanAfterPush: (ms) => log({ e: "panAfterPush", ms }),
   onStuck: (id) => {
     if (debugCode(id === scene.goal?.id ? "red" : null)) forgetEverything();
     shake = { id, born: -1 };
