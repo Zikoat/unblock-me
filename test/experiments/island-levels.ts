@@ -3,6 +3,7 @@
 // shuffled within everything reachable from it to the state farthest (in moves: one block's
 // slide, any distance) from the red block on its goal. Keeps the best per fewest-moves count.
 //   scripts/capped.sh 2000 600 bun test/experiments/island-levels.ts <boards> <out.json> [state cap]
+export {};
 type Piece = { h: boolean; lane: number }; // h: lane is the row; else the column
 const N = 6, ROW = 2, EXIT = 6; // red solved at x = EXIT (cells 6, 7 of row ROW)
 

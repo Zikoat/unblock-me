@@ -285,9 +285,6 @@ function showGoal(goal: Goal | null): void {
   if (scene.goal) cue = { id: scene.goal.id, born: -1 };
   save();
   redraw();
-// The finish's fonts loaded ahead, as soon as the page is idle.
-if ("requestIdleCallback" in window) requestIdleCallback(warmUp, { timeout: 1000 });
-else setTimeout(warmUp, 300);
   goalWaiters.forEach((resolve) => resolve());
   goalWaiters = [];
 };
@@ -429,9 +426,6 @@ function takeBack(): void {
   animate({ id: move.id, from: move.to, to: move.from });
   save();
   redraw();
-// The finish's fonts loaded ahead, as soon as the page is idle.
-if ("requestIdleCallback" in window) requestIdleCallback(warmUp, { timeout: 1000 });
-else setTimeout(warmUp, 300);
 }
 undoButton.addEventListener("click", takeBack);
 
@@ -485,9 +479,6 @@ const gestures = new Gestures(scene, {
     if (debugCode(id === scene.goal?.id ? "red" : null)) forgetEverything();
     shake = { id, born: -1 };
     redraw();
-// The finish's fonts loaded ahead, as soon as the page is idle.
-if ("requestIdleCallback" in window) requestIdleCallback(warmUp, { timeout: 1000 });
-else setTimeout(warmUp, 300);
   },
   onUi: (ui) => {
     debugCode(null);
@@ -609,9 +600,6 @@ Object.assign(window, {
       scene.goal = goal;
       lookAhead();
       redraw();
-// The finish's fonts loaded ahead, as soon as the page is idle.
-if ("requestIdleCallback" in window) requestIdleCallback(warmUp, { timeout: 1000 });
-else setTimeout(warmUp, 300);
     },
   },
 });
@@ -846,9 +834,6 @@ function showFpsCounter(): void {
     requestAnimationFrame(tick);
   }
   redraw();
-// The finish's fonts loaded ahead, as soon as the page is idle.
-if ("requestIdleCallback" in window) requestIdleCallback(warmUp, { timeout: 1000 });
-else setTimeout(warmUp, 300);
 }
 showFpsCounter();
 
@@ -964,9 +949,6 @@ canvas.addEventListener("pointerleave", () => {
   if (performance.now() >= noteUntil) tip.style.display = "none";
   scene.hover = null;
   redraw();
-// The finish's fonts loaded ahead, as soon as the page is idle.
-if ("requestIdleCallback" in window) requestIdleCallback(warmUp, { timeout: 1000 });
-else setTimeout(warmUp, 300);
 });
 /** A resting mouse over a sliding block hints where a click would send it. */
 function hoverAt(e: PointerEvent): void {
@@ -1014,9 +996,6 @@ canvas.addEventListener("pointerdown", (e) => {
   }
   gestures.down(e.pointerId, point(e));
   redraw();
-// The finish's fonts loaded ahead, as soon as the page is idle.
-if ("requestIdleCallback" in window) requestIdleCallback(warmUp, { timeout: 1000 });
-else setTimeout(warmUp, 300);
 });
 canvas.addEventListener("pointermove", (e) => {
   showTip(e);
@@ -1024,9 +1003,6 @@ canvas.addEventListener("pointermove", (e) => {
   if (e.pointerId === onArrow) return;
   gestures.move(e.pointerId, point(e));
   redraw();
-// The finish's fonts loaded ahead, as soon as the page is idle.
-if ("requestIdleCallback" in window) requestIdleCallback(warmUp, { timeout: 1000 });
-else setTimeout(warmUp, 300);
 });
 canvas.addEventListener("pointerup", (e) => {
   if (e.pointerId === onArrow) {
@@ -1037,9 +1013,6 @@ canvas.addEventListener("pointerup", (e) => {
       flyTo(to, 160);
     }
     redraw();
-// The finish's fonts loaded ahead, as soon as the page is idle.
-if ("requestIdleCallback" in window) requestIdleCallback(warmUp, { timeout: 1000 });
-else setTimeout(warmUp, 300);
     return;
   }
   const tapped = scene.circle;
@@ -1049,25 +1022,16 @@ else setTimeout(warmUp, 300);
     if (debugCode("tap")) forgetEverything();
   }
   redraw();
-// The finish's fonts loaded ahead, as soon as the page is idle.
-if ("requestIdleCallback" in window) requestIdleCallback(warmUp, { timeout: 1000 });
-else setTimeout(warmUp, 300);
 });
 canvas.addEventListener("pointercancel", (e) => {
   if (e.pointerId === onArrow) onArrow = null;
   gestures.cancel(e.pointerId);
   redraw();
-// The finish's fonts loaded ahead, as soon as the page is idle.
-if ("requestIdleCallback" in window) requestIdleCallback(warmUp, { timeout: 1000 });
-else setTimeout(warmUp, 300);
 });
 canvas.addEventListener("wheel", (e) => {
   e.preventDefault();
   gestures.wheel(point(e), e.deltaMode === WheelEvent.DOM_DELTA_LINE ? e.deltaY * 16 : e.deltaY);
   redraw();
-// The finish's fonts loaded ahead, as soon as the page is idle.
-if ("requestIdleCallback" in window) requestIdleCallback(warmUp, { timeout: 1000 });
-else setTimeout(warmUp, 300);
 }, { passive: false });
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 // Telegram's in-app browser on iPhone takes swipes right and down to close itself unless the
@@ -1077,9 +1041,6 @@ addEventListener("resize", () => {
   resize(scene, innerWidth, innerHeight - (inspector?.open ? inspector.height() : 0));
   if (inspector?.open) inspector.show();
   else redraw();
-// The finish's fonts loaded ahead, as soon as the page is idle.
-if ("requestIdleCallback" in window) requestIdleCallback(warmUp, { timeout: 1000 });
-else setTimeout(warmUp, 300);
 });
 
 // On the testbed: the animation inspector, replaying the tap on the red block and its finish.
@@ -1133,6 +1094,7 @@ const inspector: Inspector | null = !testbed ? null : new Inspector({
 }, redraw);
 
 redraw();
+
 // The finish's fonts loaded ahead, as soon as the page is idle.
 if ("requestIdleCallback" in window) requestIdleCallback(warmUp, { timeout: 1000 });
 else setTimeout(warmUp, 300);
