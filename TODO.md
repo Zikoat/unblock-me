@@ -53,7 +53,7 @@ Notes from play tests (not AI generated): issues, observations and ideas, many w
 - Possibly the same starting seed on several devices; check the seed mixes time, a device id and randomness so each reset is random.
 
 ### Play data (uploads up to 2026-11-03)
-- Phone newcomers mostly quit on the first goal: 5 of 7 phone devices never reached one (28-102 moves, 1-4 min). First goals needed 25-50 fewest moves before the shorter-first-goal change, still 13-17 after; later goals need 4-15, so the curve starts at its hardest.
+- Phone newcomers often quit on the first goal: 4 of 8 phones that moved a block never reached one (12-102 moves, 20 s-4 min). First goals needed 25-50 fewest moves before the shorter-first-goal change, still 13-17 after; later goals need 4-15, so the curve starts at its hardest.
 - Newcomers who finished used about 2-2.6x the fewest moves (mostly 1 star); experienced players about 1.1x at about 25 s a goal.
 - Phone players zoom far out (camera scale 0.2-0.6), matching subject a.
 - Undo is almost never used (15 undos in about 7000 moves).
