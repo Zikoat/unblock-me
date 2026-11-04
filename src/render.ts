@@ -255,7 +255,9 @@ export function draw(
   // A throbbing block grows over its neighbours, so it goes on top.
   if (throb) blocks.sort((a, b) => Number(a.id === throb.id) - Number(b.id === throb.id));
   timed(ctx, "blocks", () => {
+    drawWalls(ctx, blocks.filter((b) => b.wall));
     for (const shown of blocks) {
+      if (shown.wall) continue;
       const block = shown.id === sliding?.id ? { ...shown, x: sliding.x, y: sliding.y } : shown;
       // Red blocks stay red after their goal is reached, a darker red.
       const isGoal = block.id === goal?.id;
@@ -419,6 +421,50 @@ export function draw(
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     timed(ctx, "glitch", () => glitch(ctx, fx, width, height));
   }
+}
+
+/** Walls, joined into one shape where they touch: each wall cell is its inset square, a
+ * strip across the gap to each wall beside it, the corner where four walls meet, and a
+ * fillet in each inner (concave) corner; outer corners are round. Walls never hop or shake,
+ * so they are drawn as one, under the other blocks. */
+const WALL_RADIUS = 3;
+function drawWalls(ctx: CanvasRenderingContext2D, walls: Block[]): void {
+  if (!walls.length) return;
+  const cells = new Set<string>();
+  for (const w of walls) for (let x = w.x; x < w.x + w.w; x++) for (let y = w.y; y < w.y + w.h; y++) cells.add(`${x},${y}`);
+  const wall = (x: number, y: number) => cells.has(`${x},${y}`);
+  const g = GAP, r = WALL_RADIUS, inner = UNIT - 2 * g;
+  ctx.fillStyle = COLORS.wall;
+  ctx.beginPath();
+  for (const key of cells) {
+    const [x, y] = key.split(",").map(Number) as [number, number];
+    const X = x * UNIT, Y = y * UNIT;
+    const left = wall(x - 1, y), right = wall(x + 1, y), up = wall(x, y - 1), down = wall(x, y + 1);
+    const round = (a: boolean, b: boolean) => (a || b ? 0 : r);
+    ctx.roundRect(X + g, Y + g, inner, inner, [round(up, left), round(up, right), round(down, right), round(down, left)]);
+    if (right) ctx.rect(X + UNIT - g, Y + g, g, inner);
+    if (left) ctx.rect(X, Y + g, g, inner);
+    if (down) ctx.rect(X + g, Y + UNIT - g, inner, g);
+    if (up) ctx.rect(X + g, Y, inner, g);
+    for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]] as const) {
+      if (!wall(x + sx, y) || !wall(x, y + sy)) continue;
+      // The gap's corner square: filled where four walls meet...
+      const qx = sx > 0 ? X + UNIT - g : X, qy = sy > 0 ? Y + UNIT - g : Y;
+      if (wall(x + sx, y + sy)) {
+        ctx.rect(qx, qy, g, g);
+        continue;
+      }
+      // ...else an inner corner, rounded by a fillet reaching into the open side.
+      const px = sx > 0 ? X + UNIT - g : X + g, py = sy > 0 ? Y + UNIT - g : Y + g;
+      const a0 = Math.atan2(-sy, 0), a1 = Math.atan2(0, -sx);
+      const sweep = Math.atan2(Math.sin(a1 - a0), Math.cos(a1 - a0));
+      ctx.moveTo(px, py);
+      ctx.lineTo(px + sx * r, py);
+      ctx.arc(px + sx * r, py + sy * r, r, a0, a1, sweep < 0);
+      ctx.closePath();
+    }
+  }
+  ctx.fill();
 }
 
 /** The finishing goal's own time at `now` (ms since it was reached, slowed and stopped
