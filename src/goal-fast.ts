@@ -209,7 +209,7 @@ export function candidatesNear(board: Board, layout: Layout, near: Point, exclud
   }
   return [...seen].map((id) => board.block(id))
     .filter((b) => intersects(b, { x: near.x - 4, y: near.y - 4, width: 8, height: 8 }))
-    .filter((b) => !b.ui && !b.wall && !exclude.has(b.id) && !taken.has(track(b)))
+    .filter((b) => !b.ui && !b.wall && !b.island && !exclude.has(b.id) && !taken.has(track(b)))
     .sort((a, b) => Math.hypot(a.x - near.x, a.y - near.y) - Math.hypot(b.x - near.x, b.y - near.y) || (a.id < b.id ? -1 : 1))
     .slice(0, count);
 }

@@ -28,6 +28,9 @@ export type Goal = {
   used?: number;
   /** Whether a move was undone while it was the goal (no medal then). */
   undone?: boolean;
+  /** An early island goal: no stars while it is played, and its finish is the full one
+   * however many moves it took (src/island.ts). */
+  unrated?: boolean;
 };
 
 export type GoalOptions = {
@@ -58,6 +61,12 @@ export function merge(moves: Move[]): Move[] {
  * shortest solution it has (the search stopped early, so a shorter one may exist). */
 export function bestKnown(goal: Goal): number | null {
   return goal.difficulty ? goal.difficulty.moves ?? goal.solution.length : null;
+}
+
+/** The moves a reached goal's stars and finish show: those used, or for an unrated goal the
+ * fewest (the full finish, whatever it took). */
+export function shownUsed(goal: Goal): number | undefined {
+  return goal.used === undefined || !goal.unrated ? goal.used : (bestKnown(goal) ?? goal.used);
 }
 
 /** A medal: the player solved it in fewer moves than the game knew, without an undo. */

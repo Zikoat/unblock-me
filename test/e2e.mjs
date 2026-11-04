@@ -31,7 +31,9 @@ const server = createServer(async (req, res) => {
     res.writeHead(404).end();
   }
 }).listen(0);
-const url = `http://localhost:${server.address().port}/`;
+const root = `http://localhost:${server.address().port}/`;
+// The world without the island (src/island.ts has its own test below).
+const url = `${root}?island=0`;
 
 const UNIT = 60;
 const COLORS = {
@@ -187,7 +189,7 @@ const browser = await chromium.launch();
   check(await page.evaluate(() => unblock.scene.camera.offsetX === 170 && unblock.scene.camera.offsetY === 370 && unblock.scene.camera.scale === 1), "and the view centred");
   await page.evaluate(() => unblock.goalReady());
   const stored = await page.evaluate(() => Object.fromEntries(Object.keys(localStorage).sort().map((k) => [k, localStorage.getItem(k)])));
-  const { "unblock-me:v6:goal": storedGoal, "unblock-me:camera": storedCamera, "unblock-me:log": storedLog, "unblock-me:device": storedDevice, ...rest } = stored;
+  const { "unblock-me:v7:goal": storedGoal, "unblock-me:camera": storedCamera, "unblock-me:log": storedLog, "unblock-me:device": storedDevice, ...rest } = stored;
   check(/^[0-9a-f-]{36}$/.test(storedDevice), `the device id for automatic uploads survives the reset (${storedDevice})`);
   const kinds = JSON.parse(storedLog ?? "[]").map((e) => e.e);
   check(kinds.includes("move") && kinds.slice(-3).join() === "reset,load,goal", `the play log survives the reset, which it records, then the page load and the new goal (${kinds.join(",")})`);
@@ -198,9 +200,9 @@ const browser = await chromium.launch();
     "unblock-me:debug": "true",
     "unblock-me:fps": "false",
     "unblock-me:tries": "12",
-    "unblock-me:v6:history": "[]",
-    "unblock-me:v6:moved": "[]",
-    "unblock-me:v6:seed": String(seedAfter),
+    "unblock-me:v7:history": "[]",
+    "unblock-me:v7:moved": "[]",
+    "unblock-me:v7:seed": String(seedAfter),
   }), `storage holds only fresh defaults, and other pages' keys are left alone (${JSON.stringify(rest)})`);
   check(JSON.parse(storedGoal ?? "null")?.seed === seedAfter, "and a new goal for the new seed");
   await expectColor(page, cell(-0.85, 4.15), "reset", "the reset block is still in its place");
@@ -301,7 +303,7 @@ const browser = await chromium.launch();
   const pinwheel = [H("a", 0, 0), V("b", 2, 0), H("c", 1, 2), V("d", 0, 1), W(-1, 0), W(2, -1), W(3, 2), W(0, 3)];
   await page.goto(url);
   await page.evaluate(() => unblock.forget());
-  await page.goto(`${url}?board=${encodeURIComponent(JSON.stringify(pinwheel))}`);
+  await page.goto(`${root}?board=${encodeURIComponent(JSON.stringify(pinwheel))}`);
   await frame(page);
   check((await page.evaluate(() => unblock.visibleBlocks().map((b) => b.id).sort().join())) === pinwheel.map((b) => b.id).sort().join(), "a ?board= link shows exactly its blocks");
   for (const [id, x, y] of [["a", 1, 0.5], ["b", 2.5, 1], ["c", 2, 2.5], ["d", 0.5, 2]]) {
@@ -315,7 +317,7 @@ const browser = await chromium.launch();
   await Promise.all([page.waitForURL("**/reports/"), tap(cell(0.5, 3.5))]);
   check((await page.textContent("h1")) === "Reports", `tapping the reports block opens the report list (${page.url()})`);
   check(await page.evaluate(() => [...document.querySelectorAll("ul.list a")].some((a) => a.textContent.startsWith("Play analysis"))), "which lists the play analysis");
-  await Promise.all([page.waitForURL(url), page.click("a.back")]);
+  await Promise.all([page.waitForURL(root), page.click("a.back")]);
   check(await page.evaluate(() => typeof unblock === "object"), "and its back link returns to the game");
 
   // Exact boards from here on.
@@ -823,6 +825,29 @@ const browser = await chromium.launch();
   await page.mouse.wheel(0, -300);
   await frame(page);
   check((await page.evaluate(() => unblock.scene.camera.scale)) > 1.5, "wheel zooms in");
+}
+
+// --- The island: a fresh start opens on its first square; its goals come in turn, the
+// first unrated (no score track while it is played).
+{
+  const page = await browser.newPage({ viewport: { width: 393, height: 700 }, hasTouch: true });
+  await page.goto(root);
+  await page.evaluate(() => unblock.forget());
+  await page.goto(root);
+  await frame(page);
+  const goal = await page.evaluate(() => unblock.scene.goal);
+  check(goal?.id === "isle 0 0" && goal.unrated === true, `a fresh start's goal is the island's first square, unrated (${goal?.id})`);
+  const screen = (x, y) => page.evaluate(([x, y]) => { const c = unblock.scene.camera; return [x * 60 * c.scale + c.offsetX, y * 60 * c.scale + c.offsetY]; }, [x, y]);
+  const red = await page.evaluate(() => unblock.scene.layout.byId("isle 0 0"));
+  await expectColor(page, await screen(red.x - 2.5, red.y - 2.5), "wall", "its square is walled in");
+  const bay = await rgbAt(page, ...(await screen(red.x + 3.5, red.y + 0.5)));
+  check(bay[0] - bay[2] > 10, `with its (reddish) target in the bay outside the right wall (${bay.join(",")})`);
+  await expectColor(page, await screen(red.x + 4.5, red.y + 0.5), "wall", "the bay walled at its end");
+  await page.screenshot({ path: shots + "island-first-square.png" });
+  await page.touchscreen.tap(...(await screen(red.x + 1, red.y + 0.5)));
+  await page.waitForFunction(() => unblock.scene.goal?.id === "isle 1 0", null, { timeout: 20000 }).catch(() => {});
+  check((await page.evaluate(() => unblock.scene.goal?.id)) === "isle 1 0", "a tap solves it, and the next square's goal follows");
+  await page.close();
 }
 
 await browser.close();

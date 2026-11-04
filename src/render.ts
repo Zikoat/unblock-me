@@ -3,7 +3,7 @@
 import { worldRect } from "./camera";
 import { intersects, UNIT, type Block } from "./layout";
 import { drawScoreTrack, FINISH, finishTimes, starPoints, type TraceEntry } from "./score-track";
-import { bestKnown, type Goal } from "./goal";
+import { bestKnown, shownUsed, type Goal } from "./goal";
 import { timed } from "./perf";
 import { cinemaOverlay, dance, glitch, glitchShift, lit, overMore, tilt } from "./finish-fx2";
 import { onBlock, over, punch, quake, screenFlash, soul as drawSoul, SOUL, squash, timeWarp, under, wave, type Fx } from "./finish-fx";
@@ -218,7 +218,7 @@ export function draw(
   const doneColor = (id: string) => {
     const g = finish?.id === id ? scene.done.find((d) => d.id === id) : null;
     if (!g || g.used === undefined) return COLORS.done;
-    const k = Math.max(0, Math.min(1, (finishClock(scene, finish, now)! - finishTimes(fewestOf(g), g.used).gather) / FINISH.GATHER_MS));
+    const k = Math.max(0, Math.min(1, (finishClock(scene, finish, now)! - finishTimes(fewestOf(g), shownUsed(g)!).gather) / FINISH.GATHER_MS));
     return mix(COLORS.goal, COLORS.done, k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2);
   };
   // Reached targets go under the blocks (their red blocks sit on them); the current one goes
@@ -355,8 +355,8 @@ export function draw(
   // reached one's finish and then its row of stars.
   timed(ctx, "score tracks", () => {
     for (const { goal: g, cells } of targets) {
-      if (g === goal) drawScoreTrack(ctx, trackRect(cells), fewestOf(g), used, { undone: g.undone });
-      else if (g.used !== undefined) drawScoreTrack(ctx, trackRect(cells), fewestOf(g), g.used, { t: finish?.id === g.id ? (finishClock(scene, finish, now) ?? Infinity) : Infinity, undone: g.undone, trace: finish?.id === g.id ? trace : undefined, detail });
+      if (g === goal && !g.unrated) drawScoreTrack(ctx, trackRect(cells), fewestOf(g), used, { undone: g.undone });
+      else if (g.used !== undefined) drawScoreTrack(ctx, trackRect(cells), fewestOf(g), shownUsed(g)!, { t: finish?.id === g.id ? (finishClock(scene, finish, now) ?? Infinity) : Infinity, undone: g.undone, trace: finish?.id === g.id ? trace : undefined, detail });
     }
   });
   timed(ctx, "sparkles", () => sparkles.forEach((s) => sparkle(ctx, s, now)));
@@ -426,7 +426,7 @@ export function draw(
 function finishClock(scene: Scene, finish: { id: string; born: number } | null, now: number): number | null {
   const g = finish && scene.done.find((d) => d.id === finish.id);
   if (!finish || !g || g.used === undefined) return null;
-  const times = finishTimes(bestKnown(g) ?? g.solution.length, g.used);
+  const times = finishTimes(bestKnown(g) ?? g.solution.length, shownUsed(g)!);
   return timeWarp(times, times.medalAt !== null && !g.undone).warp(now - finish.born);
 }
 
@@ -435,7 +435,7 @@ function finishFx(scene: Scene, finish: { id: string; born: number; dir?: { x: n
   const g = finish && scene.done.find((d) => d.id === finish.id);
   const block = g && scene.layout.byId(g.id), at = g && whereIs(scene, g.id);
   if (!finish || !g || g.used === undefined || !block || !at) return null;
-  const times = finishTimes(bestKnown(g) ?? g.solution.length, g.used);
+  const times = finishTimes(bestKnown(g) ?? g.solution.length, shownUsed(g)!);
   const t = finishClock(scene, finish, now)!;
   if (t < 0 || t > times.end) return null;
   return {
@@ -446,9 +446,9 @@ function finishFx(scene: Scene, finish: { id: string; born: number; dir?: { x: n
     medal: times.medalAt !== null && !g.undone,
     view,
     zoom,
-    used: g.used,
+    used: shownUsed(g)!,
     detail,
-    stars: starPoints({ x: g.target.x * UNIT - TARGET_MARGIN, y: g.target.y * UNIT - TARGET_MARGIN, width: block.w * UNIT + 2 * TARGET_MARGIN, height: block.h * UNIT + 2 * TARGET_MARGIN }, bestKnown(g) ?? g.solution.length, g.used),
+    stars: starPoints({ x: g.target.x * UNIT - TARGET_MARGIN, y: g.target.y * UNIT - TARGET_MARGIN, width: block.w * UNIT + 2 * TARGET_MARGIN, height: block.h * UNIT + 2 * TARGET_MARGIN }, bestKnown(g) ?? g.solution.length, shownUsed(g)!),
   };
 }
 

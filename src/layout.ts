@@ -1,4 +1,5 @@
 import type { Rect } from "./camera";
+import { ISLAND_AREA, islandBlocks } from "./island";
 
 /** A 1x1 control on the board: it never slides, a tap runs it. */
 export type Ui = "home" | "reset" | "fullscreen" | "reports" | "density" | "border" | "upload" | "fps" | "testbed";
@@ -15,8 +16,10 @@ export type Block = {
   /** An immovable block that only blocks. */
   wall: boolean;
   moved: boolean;
+  /** On the island: only its own goals use it, never a generated one (src/island.ts). */
+  island?: boolean;
 };
-export type Placed = { id?: string; x: number; y: number; w: number; h: number; ui?: Ui; wall?: boolean };
+export type Placed = { id?: string; x: number; y: number; w: number; h: number; ui?: Ui; wall?: boolean; island?: boolean };
 
 /** Where the blocks start. The app uses a random layout; tests place blocks exactly. */
 export interface Layout {
@@ -33,7 +36,7 @@ export const intersects = (b: { x: number; y: number; w: number; h: number }, r:
   b.x < r.x + r.width && b.x + b.w > r.x && b.y < r.y + r.height && b.y + b.h > r.y;
 
 const toBlock = (p: Placed, id: string): Block =>
-  ({ id, x: p.x, y: p.y, w: p.w, h: p.h, ui: p.ui ?? null, wall: p.wall ?? false, moved: false });
+  ({ id, x: p.x, y: p.y, w: p.w, h: p.h, ui: p.ui ?? null, wall: p.wall ?? false, moved: false, ...(p.island && { island: true }) });
 
 /** Exactly these blocks and nothing else. */
 export function fixedLayout(placed: Placed[]): Layout {
@@ -62,7 +65,8 @@ export const DEBUG_UI: Placed[] = [
   { id: "testbed", x: 0, y: 4, w: 1, h: 1, ui: "testbed" },
 ];
 export const UI_BLOCKS: Placed[] = [...GAME_UI, ...DEBUG_UI];
-export type UiShown = { debug?: boolean; fullscreen?: boolean };
+/** `island`: the handcrafted squares right of the start (src/island.ts). */
+export type UiShown = { debug?: boolean; fullscreen?: boolean; island?: boolean };
 /** The UI blocks shown, and the area kept free round them (nothing is generated there): the
  * debug UI's rows and the gap between them, or the fullscreen block's cell, or none. */
 export function uiBlocks({ debug = false, fullscreen = true }: UiShown): Placed[] {
@@ -101,8 +105,9 @@ function chunkSeed(seed: number, cx: number, cy: number): number {
 
 /** Blocks everywhere, the same for the same seed, with the UI blocks in the middle. */
 export function randomLayout(seed: number, { tries = TRIES, ...shown }: { tries?: number } & UiShown = {}): Layout {
-  const ui = uiBlocks(shown).map((p) => toBlock(p, p.id!));
-  const area = uiArea(shown);
+  // The UI blocks and the island are fixed; the random blocks keep out of their areas.
+  const ui = [...uiBlocks(shown), ...(shown.island ? islandBlocks() : [])].map((p) => toBlock(p, p.id!));
+  const area = uiArea(shown), island = shown.island ? ISLAND_AREA : null;
   const cache = new Map<string, Block[]>();
 
   function chunk(cx: number, cy: number): Block[] {
@@ -120,7 +125,7 @@ export function randomLayout(seed: number, { tries = TRIES, ...shown }: { tries?
       const y = cy * CHUNK + Math.floor(next() * (CHUNK - h + 1));
       const cells = horizontal ? [`${x},${y}`, `${x + 1},${y}`] : [`${x},${y}`, `${x},${y + 1}`];
       const candidate = toBlock({ x, y, w, h }, `${cx},${cy},${i}`);
-      if (cells.some((c) => taken.has(c)) || (area && intersects(candidate, area))) continue;
+      if (cells.some((c) => taken.has(c)) || (area && intersects(candidate, area)) || (island && intersects(candidate, island))) continue;
       cells.forEach((c) => taken.add(c));
       blocks.push(candidate);
     }

@@ -8,21 +8,23 @@ import { finishCues, finishParts, SOUL, timeWarp } from "./finish-fx";
 import { moreCues, moreParts, warmUp } from "./finish-fx2";
 import * as sfx from "./sfx";
 import { timedFrame } from "./perf";
-import { bestKnown, medal, viewCentre, type Goal } from "./goal";
+import { bestKnown, medal, shownUsed, viewCentre, type Goal } from "./goal";
 import type { GoalRequest } from "./goal-worker";
 import { Gestures, type Input } from "./gestures";
+import { ISLAND_AREA, nextIslandGoal, SIDE, squareAt } from "./island";
 import { fixedLayout, MAX_TRIES, MIN_TRIES, randomLayout, TRIES, UNIT, type Placed, type Ui } from "./layout";
 import { CUE_MS, draw, fading, resetFades, RIPPLE_MS, SHAKE_MS, THROB_MS, redArrow, uiArrow, type Sparkle } from "./render";
 import { ease, slideDuration } from "./slide";
 import { blockAt, blocksIn, slideRange, type Move } from "./rules";
 import { borderOnScreen, goalSolved, latticeRect, newScene, quickPush, record, relayout, resize, restart, undo, visibleBlocks, whereIs } from "./scene";
 
-// v6: UI blocks in a game row and a debug row (generation changed); v5 two rows of UI
-// blocks, v4 one row, v3 one 2x2 reset block, v2 no seed, v1 free positions.
-const SEED_KEY = "unblock-me:v6:seed";
-const MOVED_KEY = "unblock-me:v6:moved";
-const HISTORY_KEY = "unblock-me:v6:history";
-const GOAL_KEY = "unblock-me:v6:goal";
+// v7: the island (everyone starts on it); v6 UI blocks in a game row and a debug row
+// (generation changed); v5 two rows of UI blocks, v4 one row, v3 one 2x2 reset block, v2 no
+// seed, v1 free positions.
+const SEED_KEY = "unblock-me:v7:seed";
+const MOVED_KEY = "unblock-me:v7:moved";
+const HISTORY_KEY = "unblock-me:v7:history";
+const GOAL_KEY = "unblock-me:v7:goal";
 const BORDER_KEY = "unblock-me:border";
 const FPS_KEY = "unblock-me:fps"; // whether the fps counter shows
 const TRIES_KEY = "unblock-me:tries";
@@ -59,6 +61,9 @@ const TESTBED = {
     { id: "d", target: { x: -2, y: 7 }, solution: [], difficulty: known(1) },
   ] as Goal[],
 };
+// ?island=0 leaves the island out: the generated world from the start, as before it (for
+// tests of the world itself).
+const withIsland = new URLSearchParams(location.search).get("island") !== "0";
 // ?testbed=N starts at goal N (0 first).
 let testbedNext = Number(new URLSearchParams(location.search).get("testbed")) || 0;
 // ?board=<JSON list of placed blocks> opens exactly that board (for sharing a board, and
@@ -195,7 +200,7 @@ let tries = load<number>(TRIES_KEY, TRIES);
 const debug = load<boolean>(DEBUG_KEY, false);
 // The fullscreen block shows only where the browser can go full screen (not iPhone Safari).
 const canFullscreen = !!(document.fullscreenEnabled || (document as unknown as { webkitFullscreenEnabled?: boolean }).webkitFullscreenEnabled);
-const shownUi = { debug, fullscreen: canFullscreen };
+const shownUi = { debug, fullscreen: canFullscreen, island: withIsland };
 const moved = load<[string, number, number][]>(MOVED_KEY, []);
 const storedGoal = load<{ seed: number; tries: number; goal: Goal | null; done?: Goal[] } | null>(GOAL_KEY, null);
 const goalsFit = storedGoal?.seed === seed && storedGoal.tries === tries;
@@ -236,6 +241,12 @@ let goalWaiters: (() => void)[] = [];
 function requestGoal(near: Point = viewCentre(scene.camera, scene.width, scene.height)): void {
   if (testbed) return showGoal(TESTBED.goals[testbedNext++] ? { ...TESTBED.goals[testbedNext - 1]! } : null);
   if (shared) return;
+  // The island's squares come first, in turn.
+  const square = withIsland ? nextIslandGoal(scene.done) : null;
+  if (square) return showGoal(square);
+  // Past the last square, the world's first goal is made just beyond the island's edge (the
+  // search looks only round `near`, and no block there may be the red block).
+  if (near.x >= ISLAND_AREA.x && near.x < ISLAND_AREA.x + ISLAND_AREA.width && near.y >= ISLAND_AREA.y && near.y < ISLAND_AREA.y + ISLAND_AREA.height) near = { x: ISLAND_AREA.x + ISLAND_AREA.width + 2, y: near.y };
   const exclude = scene.done.map((g) => g.id);
   // Made already while the red block was one move away: no wait.
   const key = boardKey(scene.moved, exclude, near);
@@ -312,7 +323,7 @@ function lookAhead(): void {
   const goal = scene.goal;
   const red = goal && scene.layout.byId(goal.id);
   const at = goal && whereIs(scene, goal.id);
-  if (shared || !goal || !red || !at) return;
+  if (shared || !goal || !red || !at || (withIsland && nextIslandGoal([...scene.done, goal]))) return;
   const { lo, hi } = slideRange(scene.layout, { ...red, ...at }, scene);
   const along = red.w > red.h ? goal.target.x : goal.target.y;
   const inLane = red.w > red.h ? goal.target.y === at.y : goal.target.x === at.x;
@@ -400,7 +411,7 @@ function reachGoal(now: number): void {
   // The way it slid in, for the landing's squash and jolt.
   const last = scene.history.at(-1);
   const dir = last?.id === goal.id ? { x: Math.sign(last.to.x - last.from.x), y: Math.sign(last.to.y - last.from.y) } : { x: 0, y: 0 };
-  const times = finishTimes(bestKnown(goal) ?? goal.solution.length, goal.used);
+  const times = finishTimes(bestKnown(goal) ?? goal.solution.length, shownUsed(goal)!);
   finish = { id: goal.id, born: now, end: timeWarp(times, times.medalAt !== null && !goal.undone).raw(times.end), next: goal.target, dir, heard: -1 };
   const red = scene.layout.byId(goal.id)!;
   const at = whereIs(scene, goal.id)!;
@@ -638,6 +649,10 @@ function restoreCamera(): void {
   if (saved) {
     scene.camera = saved;
     resize(scene, scene.width, scene.height);
+  } else if (withIsland) {
+    // A fresh start looks at the first square of the island, all of it in view.
+    const o = squareAt(0), fit = Math.min(1, scene.width / ((SIDE + 5) * UNIT), scene.height / ((SIDE + 4) * UNIT));
+    scene.camera = { scale: fit, offsetX: scene.width / 2 - (o.x + 4) * UNIT * fit, offsetY: scene.height / 2 - (o.y + 3) * UNIT * fit };
   }
 }
 
@@ -765,7 +780,7 @@ function advance(now: number): ReturnType<typeof sliding> {
       // Its sounds, each once, as the finish gets to it.
       const g = scene.done.find((d) => d.id === finish!.id);
       if (g && g.used !== undefined) {
-        const times = finishTimes(bestKnown(g) ?? g.solution.length, g.used), medal = times.medalAt !== null && !g.undone;
+        const times = finishTimes(bestKnown(g) ?? g.solution.length, shownUsed(g)!), medal = times.medalAt !== null && !g.undone;
         const t = timeWarp(times, medal).warp(now - finish.born);
         for (const cue of [...finishCues({ times, medal }), ...moreCues({ times, medal })]) if (cue.at > finish.heard && cue.at <= t) sfx.play(cue.sound, now, cue.n);
         finish.heard = t;
@@ -1081,7 +1096,7 @@ const inspector: Inspector | null = !testbed ? null : new Inspector({
   paint: (now, moving, to, trace) => paint(now, moving as ReturnType<typeof sliding>, to, trace),
   state: () => {
     const g = finish && scene.done.find((d) => d.id === finish!.id);
-    const times = g && g.used !== undefined ? finishTimes(bestKnown(g) ?? g.solution.length, g.used) : null;
+    const times = g && g.used !== undefined ? finishTimes(bestKnown(g) ?? g.solution.length, shownUsed(g)!) : null;
     const medal = !!times && times.medalAt !== null && !g!.undone, raw = times ? timeWarp(times, medal).raw : (t: number) => t;
     // On the inspector's time line in real time (slow motion takes longer).
     const parts = g && times ? [...finishParts({ times, medal }), ...moreParts({ times, medal })].map((p) => ({ ...p, from: raw(p.from), to: raw(p.to) })) : [];
