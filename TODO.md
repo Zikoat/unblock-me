@@ -50,14 +50,14 @@ Notes from play tests (not AI generated): issues, observations and ideas, many w
 - First question after moving a block: "why is it green?". Maybe remove the colour change on move; experiment: tint every block slightly differently instead.
 
 ### Own observations
-- Possibly the same starting seed on several devices; check the seed mixes time, a device id and randomness so each reset is random.
+- **Done**: possibly the same starting seed on several devices. Checked: a new random seed on first visit and every reset, all 21 uploaded seeds differ; kept as is.
 
 ### Play data (uploads up to 2026-11-03)
 - Phone newcomers often quit on the first goal: 4 of 8 phones that moved a block never reached one (12-102 moves, 20 s-4 min). First goals needed 25-50 fewest moves before the shorter-first-goal change, still 13-17 after; later goals need 4-15, so the curve starts at its hardest.
 - Newcomers who finished used about 2-2.6x the fewest moves (mostly 1 star); experienced players about 1.1x at about 25 s a goal.
 - Phone players zoom far out (camera scale 0.2-0.6), matching subject a.
 - Undo is almost never used (15 undos in about 7000 moves).
-- The log doesn't say whether a move was a drag or a tap-push, so push learning can't be measured yet.
+- **Done**: the log now says whether a move was a drag or a tap-push (with press time, time since the last pan and zoom) and logs pans right after a tap's push, to measure push learning and misclicks.
 
 ## AI generated ideas
 
@@ -99,7 +99,7 @@ These have been suggested by AI (Claude, in conversation) and are not necessaril
 - **Recommended**: daily board (same seed for everyone, ranked by moves, Wordle-style share, Telegram).
 - **Suggested**: difficulty curve from play data; streaks or combos across goals.
 - **Recommended**: a short handcrafted first run (about 3-5 goals of 3-10 fewest moves, one needing a half-way drag, one with a block on the goal, one moving a yellow block off its goal) before the generated world, with the fewest moves then ramping up over the next goals.
-- **Recommended**: log the input kind of each move (drag or tap-push) and taps that moved a block during a pan attempt, to measure push learning and misclicks.
+- **Done**: log the input kind of each move (drag or tap-push) and taps that moved a block during a pan attempt, to measure push learning and misclicks.
 - **Suggested**: no stars shown on the first goals; stars fade in once the player beats about 1.5x fewest.
 - **Suggested**: gold blocks as a collection, achievements, unlockable block skins and finish styles.
 
