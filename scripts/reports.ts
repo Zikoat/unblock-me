@@ -115,7 +115,10 @@ export async function buildReports(from: string, to: string): Promise<void> {
       file = name.replace(/\.md$/, ".html");
       await Bun.write(join(to, file), page(title, "./", markdown(text)));
     } else continue;
-    reports.push({ file, title, changed: (await stat(join(from, name))).mtime });
+    // The date the report states (<meta name="date"> or a "Date:" line): file times are no
+    // help, since the public build extracts every file with the last commit's time.
+    const stated = text.match(/<meta name="date" content="(\d{4}-\d\d-\d\d)"/)?.[1] ?? text.match(/^Date: (\d{4}-\d\d-\d\d)$/m)?.[1];
+    reports.push({ file, title, changed: stated ? new Date(stated) : (await stat(join(from, name))).mtime });
   }
   reports.sort((a, b) => b.changed.getTime() - a.changed.getTime());
   const list = reports.map((r) => `<li><a href="${escape(r.file)}">${r.title}<span class="meta">${r.changed.toISOString().slice(0, 10)}</span></a></li>`).join("");

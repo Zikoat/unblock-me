@@ -23,6 +23,7 @@ if (out.endsWith(".html")) {
   fs.writeFileSync(out, `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Island candidates</title>
+<meta name="date" content="${new Date().toISOString().slice(0, 10)}">
 <style>
   :root { color-scheme: light dark; --bg: #f9f9f7; --ink: #0b0b0b; --ink-2: #52514e; }
   @media (prefers-color-scheme: dark) { :root { --bg: #0d0d0d; --ink: #f0efec; --ink-2: #c3c2b7; } }
