@@ -11,9 +11,10 @@ import { timedFrame } from "./perf";
 import { bestKnown, medal, shownUsed, viewCentre, type Goal } from "./goal";
 import type { GoalRequest } from "./goal-worker";
 import { Gestures, type Input } from "./gestures";
+import { ISLAND_LEVELS } from "./island-levels";
 import { ISLAND_AREA, islandCamera, islandRects, nextIslandGoal, SIDE, squareAt, squareOf } from "./island";
 import { fixedLayout, MAX_TRIES, MIN_TRIES, randomLayout, TRIES, UNIT, type Placed, type Ui } from "./layout";
-import { CUE_MS, draw, fading, resetFades, RIPPLE_MS, SHAKE_MS, THROB_MS, redArrow, uiArrow, type Sparkle } from "./render";
+import { CUE_MS, draw, fading, islandCardRect, resetFades, RIPPLE_MS, SHAKE_MS, THROB_MS, redArrow, uiArrow, type Sparkle } from "./render";
 import { ease, slideDuration } from "./slide";
 import { blockAt, blocksIn, slideRange, type Move } from "./rules";
 import { borderOnScreen, goalSolved, latticeRect, newScene, quickPush, record, relayout, resize, restart, undo, visibleBlocks, whereIs } from "./scene";
@@ -278,6 +279,12 @@ function measured({ of, difficulty, choices }: Measured): void {
 }
 function showGoal(goal: Goal | null): void {
   job++; // anything still on its way is stale
+  // Past the island's last square, the view cuts to the world's first red block.
+  if (cutToGoal && goal) {
+    const red = scene.layout.byId(goal.id), at = whereIs(scene, goal.id), s = scene.camera.scale;
+    if (red && at) scene.camera = { scale: s, offsetX: scene.width / 2 - (at.x + red.w / 2) * UNIT * s, offsetY: scene.height / 2 - (at.y + red.h / 2) * UNIT * s };
+  }
+  if (goal) cutToGoal = false;
   scene.goal = goal;
   if (goal) {
     goal.tries = tries;
@@ -397,7 +404,9 @@ let ripples: { at: Point; born: number }[] = [];
 let shake: { id: string; born: number } | null = null;
 // The goal just reached: its score track plays the finish (stars fill, the medal, the row).
 // The next goal shows once the stars have gathered (`next`: where it is made).
-let finish: { id: string; born: number; end: number; next: Point; dir: Point; heard: number } | null = null;
+// An island square's (`island`) plays in a card in the middle of the screen and waits there
+// for the next button; the view stays.
+let finish: { id: string; born: number; end: number; next: Point; dir: Point; heard: number; island?: boolean } | null = null;
 // Once the finish is over, the red block's soul flies from it (`soulFrom`, world px) to the
 // next red block, the view gliding along; the new block throbs once it arrives.
 type WorldRect = { x: number; y: number; width: number; height: number };
@@ -413,18 +422,13 @@ function reachGoal(now: number): void {
   log({ e: "reached", id: goal.id, used: goal.used });
   scene.done.push(goal);
   scene.goal = null;
-  // An island square's view lets go, gliding just far enough to show the bay for the finish.
-  const square = squareOf(goal);
-  if (square !== null) {
-    const o = squareAt(square), c = scene.camera, half = scene.width / 2 / (UNIT * c.scale);
-    const x = Math.max(o.x + SIDE / 2, goal.target.x + 2.4 - half);
-    if (x > o.x + SIDE / 2) flyTo({ x, y: o.y + SIDE / 2 }, 0, 500);
-  }
   // The way it slid in, for the landing's squash and jolt.
   const last = scene.history.at(-1);
   const dir = last?.id === goal.id ? { x: Math.sign(last.to.x - last.from.x), y: Math.sign(last.to.y - last.from.y) } : { x: 0, y: 0 };
   const times = finishTimes(bestKnown(goal) ?? goal.solution.length, shownUsed(goal)!);
-  finish = { id: goal.id, born: now, end: timeWarp(times, times.medalAt !== null && !goal.undone).raw(times.end), next: goal.target, dir, heard: -1 };
+  const island = squareOf(goal) !== null;
+  finish = { id: goal.id, born: now, end: timeWarp(times, times.medalAt !== null && !goal.undone).raw(times.end), next: goal.target, dir, heard: -1, island };
+  if (island) return save();
   const red = scene.layout.byId(goal.id)!;
   const at = whereIs(scene, goal.id)!;
   const cx = (at.x + red.w / 2) * UNIT;
@@ -668,10 +672,39 @@ function restoreCamera(): void {
   }
 }
 
+// The island's next button: once a square's finish has shown its stars, it cuts straight to
+// the next square (no soul, no glide), or past the last one to the world.
+const nextButton = document.querySelector<HTMLButtonElement>("#next")!;
+let cutToGoal = false;
+function showNext(on: boolean): void {
+  if (on) {
+    const r = islandCardRect(scene.width, scene.height), view = borderOnScreen(scene);
+    nextButton.textContent = nextIslandGoal(scene.done) ? "Next level" : "Continue";
+    nextButton.style.top = `${r.y + r.height + 28 - view.y}px`;
+  }
+  nextButton.hidden = !on;
+}
+nextButton.addEventListener("click", () => {
+  if (!finish?.island) return;
+  const next = finish.next;
+  finish = null;
+  showNext(false);
+  cutToGoal = true;
+  requestGoal(next);
+  redraw();
+});
+/** The level, of how many, and the moves so far on the island square being played (or just
+ * finished), for the bar at the top. */
+function islandHud(): { level: number; of: number; moves: number } {
+  const g = scene.goal ?? scene.done.find((d) => d.id === finish?.id) ?? null;
+  const k = squareOf(g) ?? 0;
+  return { level: k + 1, of: ISLAND_LEVELS.length, moves: g?.used ?? (g ? movesSince(g.begun ?? 0) : 0) };
+}
+
 /** While an island square is played its view is fixed (see islandCamera): set every frame,
  * so a resize keeps it, except while the view glides there. */
 function lockView(): void {
-  const k = withIsland ? squareOf(scene.goal) : null;
+  const k = withIsland ? (squareOf(scene.goal) ?? (finish?.island ? squareOf(finish) : null)) : null;
   scene.locked = k === null ? null : islandRects(k);
   if (k !== null && !flight) scene.camera = islandCamera(k, scene.width, scene.height);
 }
@@ -803,11 +836,16 @@ function advance(now: number): ReturnType<typeof sliding> {
       if (g && g.used !== undefined) {
         const times = finishTimes(bestKnown(g) ?? g.solution.length, shownUsed(g)!), medal = times.medalAt !== null && !g.undone;
         const t = timeWarp(times, medal).warp(now - finish.born);
-        for (const cue of [...finishCues({ times, medal }), ...moreCues({ times, medal })]) if (cue.at > finish.heard && cue.at <= t) sfx.play(cue.sound, now, cue.n);
+        for (const cue of [...finishCues({ times, medal }), ...(finish.island ? [] : moreCues({ times, medal }))]) if (cue.at > finish.heard && cue.at <= t) sfx.play(cue.sound, now, cue.n);
         finish.heard = t;
       }
     }
-    if (finish && now > finish.born + finish.end) {
+    // An island square's finish waits for its next button once the stars have landed.
+    if (finish?.island) {
+      const g = scene.done.find((d) => d.id === finish!.id);
+      const landed = g && g.used !== undefined && finish.heard >= finishTimes(bestKnown(g) ?? g.solution.length, shownUsed(g)!).landed;
+      showNext(!!landed);
+    } else if (finish && now > finish.born + finish.end) {
       const next = finish.next;
       const red = scene.layout.byId(finish.id), at = whereIs(scene, finish.id);
       soulFrom = red && at ? { x: at.x * UNIT + 3, y: at.y * UNIT + 3, width: red.w * UNIT - 6, height: red.h * UNIT - 6 } : null;
@@ -836,6 +874,7 @@ function paint(now: number, moving: ReturnType<typeof sliding>, to: HTMLCanvasEl
         finish,
         soul,
         trace,
+        hud: scene.locked ? islandHud() : null,
         now,
         detail: DETAIL[detailStep],
       }),

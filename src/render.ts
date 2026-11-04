@@ -29,7 +29,8 @@ export const COLORS = {
   star: "#f2b632",
   ui: "#1d1d1f",
   wall: "#5f5d57",
-  outside: "#cbc8c0", // round an island square being played
+  outside: "#5f5d57", // round an island square being played: its walls' colour, one surface
+  hud: "#e9e7e0", // the level and moves over it
   icon: "#f3f2ee",
 };
 /** How long a reached target's area takes to fade out as its block lands on it (and back
@@ -70,7 +71,7 @@ const throbScale = (t: number) => (t <= 0 || t >= 1 ? 1 : 1 + 0.15 * Math.sin(Ma
 export function draw(
   canvas: HTMLCanvasElement,
   scene: Scene,
-  { fullscreen, density, fps = true, sliding, sparkles = [], throb = null, cue = null, ripples = [], shake = null, pinThrob = null, used = 0, trace, finish = null, soul = null, detail = 1, now = 0 }: {
+  { fullscreen, density, fps = true, sliding, sparkles = [], throb = null, cue = null, ripples = [], shake = null, pinThrob = null, used = 0, trace, finish = null, soul = null, detail = 1, now = 0, hud = null }: {
     fullscreen: boolean;
     density: number;
     /** Whether the fps counter is showing. */
@@ -92,8 +93,13 @@ export function draw(
     pinThrob?: { pin: "red" | "ui"; born: number } | null;
     /** Moves made on the current goal so far, for its score track. */
     used?: number;
-    /** The goal just reached, and when: its score track plays the finish. */
-    finish?: { id: string; born: number; dir?: { x: number; y: number } } | null;
+    /** The goal just reached, and when: its score track plays the finish. An island square's
+     * (`island`) plays in a card in the middle of the screen instead, with no effects round
+     * the block. */
+    finish?: { id: string; born: number; dir?: { x: number; y: number }; island?: boolean } | null;
+    /** On an island square: its number, how many there are, and the moves so far (shown over
+     * the surface at the top). */
+    hud?: { level: number; of: number; moves: number } | null;
     /** The last red block's soul flying to the new one (world px), and when it set off. */
     soul?: { from: { x: number; y: number; width: number; height: number }; toId: string; born: number } | null;
     /** How much of the finish's detail to draw (less when frames come late: main.ts). */
@@ -114,7 +120,7 @@ export function draw(
 
   ctx.setTransform(dpr * camera.scale, 0, 0, dpr * camera.scale, dpr * camera.offsetX, dpr * camera.offsetY);
   // The finish's effects round the block (finish-fx.ts); its hits jolt the whole board.
-  const fx = finishFx(scene, finish, now, worldRect(camera, { x: 0, y: 0, width, height }), camera.scale, detail);
+  const fx = finish?.island ? null : finishFx(scene, finish, now, worldRect(camera, { x: 0, y: 0, width, height }), camera.scale, detail);
   // The soul still on its way: the new red block shows as it was until it arrives.
   const soulK = soul ? now - soul.born : Infinity;
   if (fx) {
@@ -256,7 +262,8 @@ export function draw(
   // A throbbing block grows over its neighbours, so it goes on top.
   if (throb) blocks.sort((a, b) => Number(a.id === throb.id) - Number(b.id === throb.id));
   timed(ctx, "blocks", () => {
-    drawWalls(ctx, blocks.filter((b) => b.wall));
+    // On an island square its walls are the colour of the surface round it.
+    drawWalls(ctx, blocks.filter((b) => b.wall), scene.locked ? COLORS.outside : COLORS.wall);
     for (const shown of blocks) {
       if (shown.wall) continue;
       const block = shown.id === sliding?.id ? { ...shown, x: sliding.x, y: sliding.y } : shown;
@@ -360,7 +367,7 @@ export function draw(
   timed(ctx, "score tracks", () => {
     for (const { goal: g, cells } of targets) {
       if (g === goal && !g.unrated) drawScoreTrack(ctx, trackRect(cells), fewestOf(g), used, { undone: g.undone });
-      else if (g.used !== undefined) drawScoreTrack(ctx, trackRect(cells), fewestOf(g), shownUsed(g)!, { t: finish?.id === g.id ? (finishClock(scene, finish, now) ?? Infinity) : Infinity, undone: g.undone, trace: finish?.id === g.id ? trace : undefined, detail });
+      else if (g.used !== undefined && !(finish?.island && finish.id === g.id)) drawScoreTrack(ctx, trackRect(cells), fewestOf(g), shownUsed(g)!, { t: finish?.id === g.id ? (finishClock(scene, finish, now) ?? Infinity) : Infinity, undone: g.undone, trace: finish?.id === g.id ? trace : undefined, detail });
     }
   });
   timed(ctx, "sparkles", () => sparkles.forEach((s) => sparkle(ctx, s, now)));
@@ -423,19 +430,88 @@ export function draw(
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     timed(ctx, "glitch", () => glitch(ctx, fx, width, height));
   }
+  if (hud) islandHud(ctx, hud, width, height, dpr);
+  if (finish?.island) {
+    const g = scene.done.find((d) => d.id === finish.id);
+    if (g && g.used !== undefined) islandCard(ctx, g, finishClock(scene, finish, now) ?? 0, width, height, dpr, detail, hud?.level ?? 0);
+  }
 }
 
-/** While an island square is played, everything outside it is a flat grey: the view's area
- * with a hole the shape of the square and its bay (`rects`, side by side), traced along the
- * walls' outer edges and rounded like them. */
+/** Where an island square's finish card sits on the screen (CSS px), for the next button. */
+export function islandCardRect(width: number, height: number): Rect {
+  const w = Math.min(0.82 * width, 460), h = w / 2;
+  return { x: (width - w) / 2, y: (height - h) / 2 - 24, width: w, height: h };
+}
+
+/** The level and the moves so far, over the island's surface at the top of the screen. */
+function islandHud(ctx: CanvasRenderingContext2D, hud: { level: number; of: number; moves: number }, width: number, height: number, dpr: number): void {
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const size = Math.max(15, Math.min(22, Math.min(width, height) * 0.05));
+  ctx.font = `700 ${size}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = COLORS.hud;
+  const y = Math.max(size, Math.min(44, (height - 0.9 * Math.min(width, height)) / 4));
+  ctx.textAlign = "left";
+  ctx.fillText(`Level ${hud.level}/${hud.of}`, 16, y);
+  ctx.textAlign = "right";
+  ctx.fillText(`${hud.moves} ${hud.moves === 1 ? "move" : "moves"}`, width - 16, y);
+}
+
+/** An island square's finish, in the middle of the screen: the board dimmed, and a card
+ * like the reached target (the red block on it, its score track over it) playing the same
+ * finish as a target does (`t`: the finish's clock), with the level above. */
+function islandCard(ctx: CanvasRenderingContext2D, g: Goal, t: number, width: number, height: number, dpr: number, detail: number, level: number): void {
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const fewest = bestKnown(g) ?? g.solution.length, used = shownUsed(g)!;
+  const times = finishTimes(fewest, used);
+  const shown = Math.min(1, Math.max(0, t / 300));
+  ctx.fillStyle = `rgba(20, 20, 18, ${0.55 * shown})`;
+  ctx.fillRect(0, 0, width, height);
+  const r = islandCardRect(width, height);
+  // It rises a little into place as the dim comes up.
+  const rise = (1 - easeOutCubic(shown)) * 30;
+  ctx.globalAlpha = shown;
+  ctx.translate(0, rise);
+  const m = r.width * 0.03; // the target's margin round the block
+  ctx.fillStyle = COLORS.background; // the target's pale coral, over the board's colour
+  ctx.beginPath();
+  ctx.roundRect(r.x, r.y, r.width, r.height, 14);
+  ctx.fill();
+  ctx.fillStyle = COLORS.target;
+  ctx.strokeStyle = COLORS.targetLine;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.roundRect(r.x, r.y, r.width, r.height, 14);
+  ctx.fill();
+  ctx.stroke();
+  // The block goes gold as the stars gather, as on the board.
+  const k = Math.max(0, Math.min(1, (t - times.gather) / FINISH.GATHER_MS));
+  ctx.fillStyle = mix(COLORS.goal, COLORS.done, k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2);
+  ctx.beginPath();
+  ctx.roundRect(r.x + m, r.y + m, r.width - 2 * m, r.height - 2 * m, 12);
+  ctx.fill();
+  drawScoreTrack(ctx, r, fewest, used, { t, undone: g.undone, radius: 14, detail });
+  ctx.font = `800 ${Math.round(r.width * 0.075)}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "alphabetic";
+  ctx.fillStyle = "#f3f2ee";
+  ctx.fillText(`Level ${level} complete`, width / 2, r.y - r.width * 0.06);
+  ctx.globalAlpha = 1;
+}
+const easeOutCubic = (t: number) => 1 - (1 - t) ** 3;
+
+/** While an island square is played, everything outside it is one surface in the walls'
+ * colour: the view's area with a hole the shape of the square's inside and its bay (`rects`:
+ * the square and bay with their walls), traced along the walls' inner edges and rounded like
+ * them, so the walls are part of it with no seam. */
 function greyOutside(ctx: CanvasRenderingContext2D, scene: Scene, rects: Rect[]): void {
   const c = scene.camera;
   const view = { x: -c.offsetX / c.scale, y: -c.offsetY / c.scale, width: scene.width / c.scale, height: scene.height / c.scale };
   const [sq, bay] = rects as [Rect, Rect];
   const g = GAP / UNIT;
-  // Clockwise round the square, out round the bay on its right, and back.
-  const l = sq.x + g, t = sq.y + g, r = sq.x + sq.width - g, b = sq.y + sq.height - g;
-  const bt = Math.max(t, bay.y + g), bb = Math.min(b, bay.y + bay.height - g), br = bay.x + bay.width - g;
+  // Clockwise round the inside, out along the exit into the bay on its right, and back.
+  const l = sq.x + 1 - g, t = sq.y + 1 - g, r = sq.x + sq.width - 1 + g, b = sq.y + sq.height - 1 + g;
+  const bt = Math.max(t, bay.y + 1 - g), bb = Math.min(b, bay.y + bay.height - 1 + g), br = bay.x + bay.width - 1 + g;
   const pts = [[l, t], [r, t], [r, bt], [br, bt], [br, bb], [r, bb], [r, b], [l, b]]
     .map(([x, y]) => [x! * UNIT, y! * UNIT] as const)
     .filter(([x, y], i, all) => x !== all[(i + 1) % all.length]![0] || y !== all[(i + 1) % all.length]![1]); // a bay on the top or bottom row
@@ -456,13 +532,13 @@ function greyOutside(ctx: CanvasRenderingContext2D, scene: Scene, rects: Rect[])
  * fillet in each inner (concave) corner; outer corners are round. Walls never hop or shake,
  * so they are drawn as one, under the other blocks. */
 const WALL_RADIUS = 3;
-function drawWalls(ctx: CanvasRenderingContext2D, walls: Block[]): void {
+function drawWalls(ctx: CanvasRenderingContext2D, walls: Block[], color: string): void {
   if (!walls.length) return;
   const cells = new Set<string>();
   for (const w of walls) for (let x = w.x; x < w.x + w.w; x++) for (let y = w.y; y < w.y + w.h; y++) cells.add(`${x},${y}`);
   const wall = (x: number, y: number) => cells.has(`${x},${y}`);
   const g = GAP, r = WALL_RADIUS, inner = UNIT - 2 * g;
-  ctx.fillStyle = COLORS.wall;
+  ctx.fillStyle = color;
   ctx.beginPath();
   for (const key of cells) {
     const [x, y] = key.split(",").map(Number) as [number, number];

@@ -846,7 +846,7 @@ const browser = await chromium.launch();
   check(panned.offsetX === view.offsetX && panned.offsetY === view.offsetY, "panning doesn't move the fixed view");
   // Outside the square everything is grey, and a tap there does nothing.
   const grey = await rgbAt(page, 5, 650);
-  check(grey.join() === "203,200,192", `outside the square is grey (${grey.join()})`);
+  check(grey.join() === "95,93,87", `outside the square is the walls' colour, one surface (${grey.join()})`);
   await page.mouse.click(5, 650);
   check((await page.evaluate(() => unblock.scene.circle)) === null, "and a tap there does nothing");
   await page.screenshot({ path: shots + "island-first-square.png" });
@@ -861,8 +861,15 @@ const browser = await chromium.launch();
     await page.mouse.move(...to, { steps: 8 });
     await page.mouse.up();
   }
+  // Its finish plays in a card in the middle, the view staying; then the next button cuts
+  // to the next square.
+  const shown = await page.waitForSelector("#next:not([hidden])", { timeout: 20000 }).then(() => true, () => false);
+  const still = await page.evaluate(() => unblock.scene.camera);
+  check(shown && still.offsetX === view.offsetX && still.offsetY === view.offsetY, "once solved, its finish shows a next button, and the view stays");
+  await page.screenshot({ path: shots + "island-finish.png" });
+  await page.click("#next");
   await page.waitForFunction(() => unblock.scene.goal?.id === "isle 1 0", null, { timeout: 20000 }).catch(() => {});
-  check((await page.evaluate(() => unblock.scene.goal?.id)) === "isle 1 0", `dragging its ${goal.solution.length} solution moves solves it, and the next square's goal follows`);
+  check((await page.evaluate(() => unblock.scene.goal?.id)) === "isle 1 0", `and the next square's goal follows at once (after dragging its ${goal.solution.length} solution moves)`);
   await page.close();
 }
 

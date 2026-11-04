@@ -24,7 +24,7 @@ for (let k = 0; k < 9; k++) {
   // Wait for the square's goal, and for the view to settle on it.
   for (let i = 0; i < 100 && (await goal())?.id !== `isle ${k} 0`; i++) await page.waitForTimeout(200);
   const g = await goal();
-  await page.waitForTimeout(2500);
+  await page.waitForTimeout(600);
   await page.screenshot({ path: `${out}/island-${k}.png` });
   console.log("locked", await page.evaluate(() => [window.unblock.scene.locked, window.unblock.scene.camera.scale.toFixed(2)]));
   if (!g || !g.id.startsWith("isle ")) { console.log("after the island:", g?.id ?? "no goal"); break; }
@@ -41,6 +41,11 @@ for (let k = 0; k < 9; k++) {
     await page.mouse.up();
     await page.waitForTimeout(150);
   }
+  // Its finish plays in a card; the next button cuts to the next square.
+  await page.waitForSelector("#next:not([hidden])", { timeout: 20000 }).catch(() => console.log("no next button"));
+  await page.waitForTimeout(1500);
+  await page.screenshot({ path: `${out}/island-${k}-done.png` });
+  await page.click("#next").catch(() => {});
 }
 await page.screenshot({ path: `${out}/island-end.png` });
 await b.close(); server.close();
