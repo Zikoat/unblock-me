@@ -54,6 +54,7 @@ export class Gestures {
       onStuck = () => {},
       onPanAfterPush = () => {},
       onInput = () => {},
+      onSnap = () => {},
       now = () => performance.now(),
     }: {
       onChange?: () => void;
@@ -68,6 +69,9 @@ export class Gestures {
       onPanAfterPush?: (ms: number) => void;
       /** How the move about to be recorded was made (just before onChange). */
       onInput?: (input: Input) => void;
+      /** A dropped red block slides on into its target (to animate it): from where it was
+       * dropped to the target. Just before the move is recorded. */
+      onSnap?: (slide: Move) => void;
       now?: () => number;
     } = {},
   ) {
@@ -78,9 +82,11 @@ export class Gestures {
     this.onStuck = onStuck;
     this.onPanAfterPush = onPanAfterPush;
     this.onInput = onInput;
+    this.onSnap = onSnap;
     this.now = now;
   }
 
+  private readonly onSnap: (slide: Move) => void;
   private readonly onInput: (input: Input) => void;
   private readonly onPanAfterPush: (ms: number) => void;
   private readonly now: () => number;
@@ -162,6 +168,7 @@ export class Gestures {
   }
 
   wheel(at: Point, deltaY: number): void {
+    if (this.scene.locked) return;
     this.scene.camera = zoomAt(this.scene.camera, at, Math.exp(-deltaY * 0.002), limits(this.scene));
   }
 
@@ -173,7 +180,7 @@ export class Gestures {
   private apply(id: number, at: Point): void {
     const mode = this.mode;
     if (mode.kind === "panning" && mode.id === id) {
-      this.scene.camera = pan(this.scene.camera, at.x - mode.last.x, at.y - mode.last.y);
+      if (!this.scene.locked) this.scene.camera = pan(this.scene.camera, at.x - mode.last.x, at.y - mode.last.y);
       mode.last = at;
     } else if (mode.kind === "dragging" && mode.id === id) {
       // The block follows the finger along its long axis only, and stops at other blocks.
@@ -188,7 +195,7 @@ export class Gestures {
       this.onAdjust(mode.ui, mode.dx, false);
     } else if (mode.kind === "pinching" && mode.ids.includes(id)) {
       const now = mode.ids.map((p) => this.pointers.get(p)!) as [Point, Point];
-      this.scene.camera = pinch(mode.start, mode.from, now, limits(this.scene));
+      if (!this.scene.locked) this.scene.camera = pinch(mode.start, mode.from, now, limits(this.scene));
     }
   }
 
@@ -203,15 +210,23 @@ export class Gestures {
   }
 
   /** Snap the dragged block to the nearest lattice position and store where it is. A block
-   * back on its start position has nothing to store: its move is forgotten. */
+   * back on its start position has nothing to store: its move is forgotten. The red block
+   * dropped partly on its target, with the target free, slides the rest of the way in. */
   private drop(): void {
     const drag = this.scene.dragging;
     if (drag === null || this.mode.kind !== "dragging") return;
-    const { block } = this.mode;
-    const at = { x: Math.round(drag.x), y: Math.round(drag.y) };
+    const { block, lo, hi } = this.mode;
+    const dropped = { x: Math.round(drag.x), y: Math.round(drag.y) };
     this.scene.dragging = null;
+    const goal = this.scene.goal, horizontal = block.w > block.h;
+    const along = (p: Point) => (horizontal ? p.x : p.y);
+    const target = goal?.id === block.id ? goal.target : null;
+    const partly = target && (horizontal ? target.y === dropped.y : target.x === dropped.x) && along(target) >= lo && along(target) <= hi
+      && along(dropped) !== along(target) && Math.abs(along(dropped) - along(target)) < (horizontal ? block.w : block.h);
+    const at = partly ? target : dropped;
     if (at.x === block.x && at.y === block.y) return;
     this.onInput(this.inputFor("drag", this.mode.at));
+    if (partly) this.onSnap({ id: block.id, from: dropped, to: at });
     record(this.scene, { id: block.id, from: { x: block.x, y: block.y }, to: at });
     this.onChange();
   }

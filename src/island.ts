@@ -2,11 +2,11 @@
 // 6x6 room walled in all round, its red block on row 2 leaving through a gap in the right wall
 // into its target, a 2x1 bay outside it (as in the original Unblock Me). The generated world
 // begins past the last square; nothing is generated in the island's area.
-import type { Rect } from "./camera";
+import type { Camera, Rect } from "./camera";
 import type { Difficulty } from "./difficulty";
 import type { Goal } from "./goal";
 import { ISLAND_LEVELS } from "./island-levels";
-import type { Placed } from "./layout";
+import { UNIT, type Placed } from "./layout";
 
 /** A square's size inside its walls, the row its exit is on, and the distance from one
  * square to the next (10 cells of square and bay, a gap of 2). */
@@ -17,6 +17,22 @@ const STRIDE = 12;
 const ORIGIN = { x: 4, y: -3 };
 /** How many of the first squares hide their stars (the score track while playing). */
 export const UNRATED = 3;
+
+/** How much of the screen's shorter side a square's inside fills, its view fixed while it
+ * is played (the bay is mostly out of view; a drag onto its first cell still finishes). */
+const FILL = 0.9;
+
+/** The view while square `k` is played: its inside centred, FILL of the shorter side. */
+export function islandCamera(k: number, width: number, height: number): Camera {
+  const o = squareAt(k), scale = (FILL * Math.min(width, height)) / (SIDE * UNIT);
+  return { scale, offsetX: width / 2 - (o.x + SIDE / 2) * UNIT * scale, offsetY: height / 2 - (o.y + SIDE / 2) * UNIT * scale };
+}
+
+/** The square whose goal this is, or null for a goal off the island. */
+export function squareOf(goal: { id: string } | null): number | null {
+  const m = goal?.id.match(/^isle (\d+) 0$/);
+  return m ? Number(m[1]) : null;
+}
 
 /** Square `k`'s top-left inside cell. */
 export const squareAt = (k: number) => ({ x: ORIGIN.x + k * STRIDE, y: ORIGIN.y });

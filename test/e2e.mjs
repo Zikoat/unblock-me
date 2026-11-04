@@ -723,6 +723,8 @@ const browser = await chromium.launch();
   const home = page.waitForEvent("load", { timeout: 5000 }).then(() => true, () => false);
   await tap(cell(-1.5, 2.5)); // the placed board's home block
   check(await home && new URL(page.url()).pathname === "/", `the home block opens the homepage (${page.url()})`);
+  await page.goto(url); // back to the world without the island
+  await frame(page);
 
   // Pinch zooms and pans together; limits hold.
   await place([]);
@@ -743,7 +745,7 @@ const browser = await chromium.launch();
   await frame(page);
   check(didReload, "a new build reloads the open page by itself");
   const kept = await page.evaluate(() => unblock.scene.camera);
-  check(kept.offsetX === 111 && kept.offsetY === 222, "and the view stays where it was");
+  check(kept.offsetX === 111 && kept.offsetY === 222, `and the view stays where it was (${JSON.stringify(kept)}, ${page.url()}, goal ${await page.evaluate(() => unblock.scene.goal?.id)})`);
   await context.close();
 }
 
@@ -830,23 +832,32 @@ const browser = await chromium.launch();
   const goal = await page.evaluate(() => unblock.scene.goal);
   check(goal?.id === "isle 0 0" && goal.unrated === true, `a fresh start's goal is the island's first square, unrated (${goal?.id})`);
   const screen = (x, y) => page.evaluate(([x, y]) => { const c = unblock.scene.camera; return [x * 60 * c.scale + c.offsetX, y * 60 * c.scale + c.offsetY]; }, [x, y]);
-  const red = await page.evaluate(() => unblock.scene.layout.byId("isle 0 0"));
-  await expectColor(page, await screen(goal.target.x - 6.5, goal.target.y - 2.5), "wall", "its square is walled in");
-  const bay = await rgbAt(page, ...(await screen(goal.target.x + 1, goal.target.y + 0.5)));
-  check(bay[0] - bay[2] > 10, `with its (reddish) target in the bay outside the right wall (${bay.join(",")})`);
-  await expectColor(page, await screen(goal.target.x + 2.5, goal.target.y + 0.5), "wall", "the bay walled at its end");
+  // Its view is fixed: the square's inside centred, 90% of the screen's width; the bay
+  // outside the right wall is mostly out of view.
+  const view = await page.evaluate(() => ({ ...unblock.scene.camera, locked: unblock.scene.locked }));
+  const [left] = await screen(goal.target.x - 6, 0), [right] = await screen(goal.target.x, 0);
+  check(view.locked && Math.abs(right - left - 0.9 * 393) < 1 && Math.abs((left + right) / 2 - 393 / 2) < 1, `the first square's inside is centred and fills 90% of the width (${left.toFixed(0)}..${right.toFixed(0)})`);
+  await expectColor(page, await screen(goal.target.x - 3.5, goal.target.y - 2.5), "wall", "its square is walled in");
+  await page.mouse.move(100, 650); // the empty margin under the square
+  await page.mouse.down();
+  await page.mouse.move(300, 650, { steps: 8 });
+  await page.mouse.up();
+  const panned = await page.evaluate(() => unblock.scene.camera);
+  check(panned.offsetX === view.offsetX && panned.offsetY === view.offsetY, "panning doesn't move the fixed view");
   await page.screenshot({ path: shots + "island-first-square.png" });
-  // Its solution, dragged move by move, solves it; the next square's goal follows.
+  // Its solution, dragged move by move, solves it; the red block's last drag stops a cell
+  // short of its target (out of view) and it slides on in.
   for (const m of goal.solution) {
     const b = await page.evaluate((id) => unblock.scene.layout.byId(id), m.id);
-    const from = await screen(m.from.x + b.w / 2, m.from.y + b.h / 2), to = await screen(m.to.x + b.w / 2, m.to.y + b.h / 2);
+    const short = m === goal.solution.at(-1) ? 1 : 0;
+    const from = await screen(m.from.x + b.w / 2, m.from.y + b.h / 2), to = await screen(m.to.x - short + b.w / 2, m.to.y + b.h / 2);
     await page.mouse.move(...from);
     await page.mouse.down();
     await page.mouse.move(...to, { steps: 8 });
     await page.mouse.up();
   }
   await page.waitForFunction(() => unblock.scene.goal?.id === "isle 1 0", null, { timeout: 20000 }).catch(() => {});
-  check((await page.evaluate(() => unblock.scene.goal?.id)) === "isle 1 0", `dragging its ${red && goal.solution.length} solution moves solves it, and the next square's goal follows`);
+  check((await page.evaluate(() => unblock.scene.goal?.id)) === "isle 1 0", `dragging its ${goal.solution.length} solution moves solves it, and the next square's goal follows`);
   await page.close();
 }
 

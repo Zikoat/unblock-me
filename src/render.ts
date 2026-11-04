@@ -777,6 +777,7 @@ function edgeArrow(scene: Scene, target: ScreenRect): EdgeArrow | null {
 
 /** Both edge pins; when they would overlap, they step apart along the edge they sit on. */
 function pins(scene: Scene): { ui: EdgeArrow | null; red: EdgeArrow | null } {
+  if (scene.locked) return { ui: null, red: null };
   const ui = uiArrowAlone(scene), red = redArrowAlone(scene);
   if (!ui || !red) return { ui, red };
   const apart = 40;

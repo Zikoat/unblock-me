@@ -11,7 +11,7 @@ import { timedFrame } from "./perf";
 import { bestKnown, medal, shownUsed, viewCentre, type Goal } from "./goal";
 import type { GoalRequest } from "./goal-worker";
 import { Gestures, type Input } from "./gestures";
-import { ISLAND_AREA, nextIslandGoal, SIDE, squareAt } from "./island";
+import { ISLAND_AREA, islandCamera, nextIslandGoal, SIDE, squareAt, squareOf } from "./island";
 import { fixedLayout, MAX_TRIES, MIN_TRIES, randomLayout, TRIES, UNIT, type Placed, type Ui } from "./layout";
 import { CUE_MS, draw, fading, resetFades, RIPPLE_MS, SHAKE_MS, THROB_MS, redArrow, uiArrow, type Sparkle } from "./render";
 import { ease, slideDuration } from "./slide";
@@ -86,19 +86,20 @@ function placeView(): void {
 
 // Tapping an edge arrow glides the view there, at the same zoom, putting `to` (lattice units)
 // in the middle; `delay` ms later, so the arrow's throb shows first.
-let flight: { from: { scale: number; offsetX: number; offsetY: number }; to: Point; start: number | null; delay: number; duration: number } | null = null;
-function flyTo(to: Point, delay = 0, duration = 350): void {
-  flight = { from: { ...scene.camera }, to, start: null, delay, duration };
+// `scale`: the zoom to end at (the same by default).
+let flight: { from: { scale: number; offsetX: number; offsetY: number }; to: Point; start: number | null; delay: number; duration: number; scale?: number } | null = null;
+function flyTo(to: Point, delay = 0, duration = 350, scale?: number): void {
+  flight = { from: { ...scene.camera }, to, start: null, delay, duration, scale };
 }
 function flying(now: number): void {
   if (!flight) return;
   flight.start ??= now + flight.delay;
   const t = Math.max(0, Math.min(1, (now - flight.start) / flight.duration));
-  const { scale } = flight.from;
+  const { scale: from } = flight.from, scale = flight.scale ?? from;
   const to = { offsetX: scene.width / 2 - flight.to.x * UNIT * scale, offsetY: scene.height / 2 - flight.to.y * UNIT * scale };
   const e = ease(t);
   scene.camera = {
-    scale,
+    scale: from + (scale - from) * e,
     offsetX: flight.from.offsetX + (to.offsetX - flight.from.offsetX) * e,
     offsetY: flight.from.offsetY + (to.offsetY - flight.from.offsetY) * e,
   };
@@ -203,7 +204,8 @@ const canFullscreen = !!(document.fullscreenEnabled || (document as unknown as {
 const shownUi = { debug, fullscreen: canFullscreen, island: withIsland };
 const moved = load<[string, number, number][]>(MOVED_KEY, []);
 const storedGoal = load<{ seed: number; tries: number; goal: Goal | null; done?: Goal[] } | null>(GOAL_KEY, null);
-const goalsFit = storedGoal?.seed === seed && storedGoal.tries === tries;
+// (An island goal fits only a page with the island.)
+const goalsFit = storedGoal?.seed === seed && storedGoal.tries === tries && (withIsland || squareOf(storedGoal.goal) === null);
 const scene = newScene(innerWidth, innerHeight, {
   layout: randomLayout(seed, { tries, ...shownUi }),
   moved: new Map(moved.map(([id, x, y]) => [id, { x, y }])),
@@ -285,9 +287,12 @@ function showGoal(goal: Goal | null): void {
   }
   // The last red block's soul flies to the new one, the view following it there.
   const red = goal && scene.layout.byId(goal.id), at = goal && whereIs(scene, goal.id);
+  // On the island the view goes to the square's middle, at the square's own zoom.
   if (soulFrom && goal && red && at) {
     soul = { from: soulFrom, toId: goal.id, born: -1 };
-    flyTo({ x: at.x + red.w / 2, y: at.y + red.h / 2 }, 0, SOUL.TRAVEL_MS);
+    const k = squareOf(goal);
+    if (k === null) flyTo({ x: at.x + red.w / 2, y: at.y + red.h / 2 }, 0, SOUL.TRAVEL_MS);
+    else flyTo({ x: squareAt(k).x + SIDE / 2, y: squareAt(k).y + SIDE / 2 }, 0, SOUL.TRAVEL_MS, islandCamera(k, scene.width, scene.height).scale);
   }
   soulFrom = null;
   // The new red block throbs once; its clock starts at the first frame drawn (after the soul
@@ -408,6 +413,13 @@ function reachGoal(now: number): void {
   log({ e: "reached", id: goal.id, used: goal.used });
   scene.done.push(goal);
   scene.goal = null;
+  // An island square's view lets go, gliding just far enough to show the bay for the finish.
+  const square = squareOf(goal);
+  if (square !== null) {
+    const o = squareAt(square), c = scene.camera, half = scene.width / 2 / (UNIT * c.scale);
+    const x = Math.max(o.x + SIDE / 2, goal.target.x + 2.4 - half);
+    if (x > o.x + SIDE / 2) flyTo({ x, y: o.y + SIDE / 2 }, 0, 500);
+  }
   // The way it slid in, for the landing's squash and jolt.
   const last = scene.history.at(-1);
   const dir = last?.id === goal.id ? { x: Math.sign(last.to.x - last.from.x), y: Math.sign(last.to.y - last.from.y) } : { x: 0, y: 0 };
@@ -468,7 +480,8 @@ function pushed(move: Move): void {
     const c = scene.camera, view = borderOnScreen(scene);
     const x = goal.target.x * UNIT * c.scale + c.offsetX, y = goal.target.y * UNIT * c.scale + c.offsetY;
     const inView = x >= view.x && y >= view.y && x + red.w * UNIT * c.scale <= view.x + view.width && y + red.h * UNIT * c.scale <= view.y + view.height;
-    if (!inView) {
+    // (Not on an island square: its view is fixed, the target just out of it.)
+    if (!inView && !scene.locked) {
       flyTo({ x: goal.target.x + red.w / 2, y: goal.target.y + red.h / 2 });
       animation.wait = true;
     }
@@ -486,6 +499,7 @@ const gestures = new Gestures(scene, {
     pushed(move);
   },
   onInput: (how) => (input = how),
+  onSnap: (slide) => animate(slide),
   onPanAfterPush: (ms) => log({ e: "panAfterPush", ms }),
   onStuck: (id) => {
     if (debugCode(id === scene.goal?.id ? "red" : null)) forgetEverything();
@@ -651,11 +665,15 @@ function restoreCamera(): void {
   if (saved) {
     scene.camera = saved;
     resize(scene, scene.width, scene.height);
-  } else if (withIsland) {
-    // A fresh start looks at the first square of the island, all of it in view.
-    const o = squareAt(0), fit = Math.min(1, scene.width / ((SIDE + 5) * UNIT), scene.height / ((SIDE + 4) * UNIT));
-    scene.camera = { scale: fit, offsetX: scene.width / 2 - (o.x + 4) * UNIT * fit, offsetY: scene.height / 2 - (o.y + 3) * UNIT * fit };
   }
+}
+
+/** While an island square is played its view is fixed (see islandCamera): set every frame,
+ * so a resize keeps it, except while the view glides there. */
+function lockView(): void {
+  const k = withIsland ? squareOf(scene.goal) : null;
+  scene.locked = k !== null;
+  if (k !== null && !flight) scene.camera = islandCamera(k, scene.width, scene.height);
 }
 
 function saveCamera(): void {
@@ -756,6 +774,7 @@ function keepDetail(): void {
  * timed effects (what a frame does before it draws). */
 function advance(now: number): ReturnType<typeof sliding> {
     flying(now);
+    lockView();
     placeView();
     cameraMoved();
     const moving = sliding(now);

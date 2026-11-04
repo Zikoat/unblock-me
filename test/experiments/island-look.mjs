@@ -26,12 +26,15 @@ for (let k = 0; k < 9; k++) {
   const g = await goal();
   await page.waitForTimeout(2500);
   await page.screenshot({ path: `${out}/island-${k}.png` });
+  console.log("locked", await page.evaluate(() => [window.unblock.scene.locked, window.unblock.scene.camera.scale.toFixed(2)]));
   if (!g || !g.id.startsWith("isle ")) { console.log("after the island:", g?.id ?? "no goal"); break; }
   console.log(k, g.id, "fewest", g.difficulty.moves, "unrated", !!g.unrated);
   for (const m of g.solution) {
     const blocks = await page.evaluate(() => window.unblock.visibleBlocks());
     const b = blocks.find((b) => b.id === m.id);
-    const from = await screen(m.from.x + b.w / 2, m.from.y + b.h / 2), to = await screen(m.to.x + b.w / 2, m.to.y + b.h / 2);
+    // The red block's last drag stops a cell short (its target is out of view): it slides in.
+    const short = m === g.solution.at(-1) ? 1 : 0;
+    const from = await screen(m.from.x + b.w / 2, m.from.y + b.h / 2), to = await screen(m.to.x - short + b.w / 2, m.to.y + b.h / 2);
     await page.mouse.move(from.x, from.y);
     await page.mouse.down();
     for (let s = 1; s <= 8; s++) await page.mouse.move(from.x + ((to.x - from.x) * s) / 8, from.y + ((to.y - from.y) * s) / 8);

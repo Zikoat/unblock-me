@@ -288,6 +288,31 @@ describe("quick push: tapping a block", () => {
     expect(panAfter).toEqual([380]);
   });
 
+  test("the red block dragged partly onto its free target slides the rest of the way in, from either side", () => {
+    const { scene, at } = board(H(0, 0, "r"), H(8, 0, "x"));
+    const slides: unknown[] = [];
+    const g2 = new Gestures(scene, { onSnap: (m) => slides.push(m) });
+    scene.goal = { id: "r", target: { x: 4, y: 0 }, solution: [] };
+    drag(g2, cell(1, 0.5), cell(4, 0.5)); // to 3: one cell on the target
+    expect(at("r").x).toBe(4);
+    expect(slides).toEqual([{ id: "r", from: { x: 3, y: 0 }, to: { x: 4, y: 0 } }]);
+    expect(scene.history.at(-1)).toEqual({ id: "r", from: { x: 0, y: 0 }, to: { x: 4, y: 0 } });
+    scene.goal = { id: "r", target: { x: 1, y: 0 }, solution: [] };
+    drag(g2, cell(5, 0.5), cell(3, 0.5)); // to 2, from the right
+    expect(at("r").x).toBe(1);
+  });
+
+  test("no slide in when the target isn't free, or for other blocks", () => {
+    const { scene, at } = board(H(0, 0, "r"), H(5, 0, "x"), H(0, 2, "b"));
+    const g = new Gestures(scene);
+    scene.goal = { id: "r", target: { x: 4, y: 0 }, solution: [] }; // x stands on its second cell
+    drag(g, cell(1, 0.5), cell(4, 0.5));
+    expect(at("r").x).toBe(3);
+    scene.goal = { id: "r", target: { x: 3, y: 2 }, solution: [] };
+    drag(g, cell(1, 2.5), cell(3, 2.5)); // b, not the red block
+    expect(at("b").x).toBe(2);
+  });
+
   test("a block that cannot move either way is not moved, and is reported to shake", () => {
     const stuck: string[] = [];
     const scene = newScene(1200, 1200, { layout: fixedLayout([W(-1, 0), H(0, 0, "a"), W(2, 0)]) });

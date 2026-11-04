@@ -36,6 +36,8 @@ export type Scene = {
   dragging: { id: string; x: number; y: number } | null;
   /** Cull to the smaller border (and draw it), or to the screen edge. */
   border: boolean;
+  /** The view is fixed (on an island square): no panning or zooming, and no edge pins. */
+  locked?: boolean;
 };
 
 export function newScene(
