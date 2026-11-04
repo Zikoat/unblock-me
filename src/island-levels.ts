@@ -1,13 +1,13 @@
 // The island's levels: 6x6 squares of 2x1 blocks, made by test/experiments/island-levels.ts
-// (300 boards, seed 12345, pruned) and picked as a ramp. Each block is [x, y, horizontal]
-// inside its square (0..5), the red block first; each solution step is [block, to] along
-// the block's lane, a shortest one (the fewest moves).
+// (300 boards, seed 12345, pruned) and picked as a ramp of 7 to 22 fewest moves (1, 3 and 5
+// were too easy). Each block is [x, y, horizontal] inside its square (0..5), the red block
+// first; each solution step is [block, to] along the block's lane, a shortest one.
 export type IslandLevel = { fewest: number; blocks: [number, number, 0 | 1][]; solution: [number, number][] };
 export const ISLAND_LEVELS: IslandLevel[] = [
-  { fewest: 1, blocks: [[4, 2, 1]], solution: [[0, 6]] },
-  { fewest: 3, blocks: [[0, 2, 1], [5, 2, 0], [2, 2, 0]], solution: [[1, 0], [2, 0], [0, 6]] },
-  { fewest: 5, blocks: [[0, 2, 1], [5, 2, 0], [4, 2, 0], [2, 2, 0], [3, 2, 0]], solution: [[1, 0], [2, 0], [3, 0], [4, 0], [0, 6]] },
   { fewest: 7, blocks: [[2, 2, 1], [4, 0, 1], [3, 4, 1], [3, 0, 0], [5, 4, 0], [4, 1, 0], [5, 1, 0]], solution: [[0, 1], [2, 1], [3, 3], [1, 3], [5, 3], [6, 0], [0, 6]] },
   { fewest: 10, blocks: [[1, 2, 1], [3, 3, 0], [5, 2, 0], [4, 2, 0], [3, 1, 0], [4, 1, 1], [2, 0, 0], [0, 2, 0], [4, 4, 0]], solution: [[1, 4], [2, 3], [4, 2], [7, 0], [0, 0], [6, 3], [5, 1], [3, 0], [4, 0], [0, 6]] },
   { fewest: 13, blocks: [[2, 2, 1], [1, 3, 1], [5, 1, 0], [4, 1, 0], [4, 0, 1], [5, 3, 0], [3, 0, 0], [4, 5, 1], [1, 0, 1], [3, 3, 1], [0, 2, 0], [2, 4, 1], [0, 0, 0]], solution: [[0, 1], [7, 3], [5, 4], [9, 4], [10, 3], [11, 1], [6, 3], [12, 1], [8, 0], [4, 2], [2, 0], [3, 0], [0, 6]] },
+  { fewest: 16, blocks: [[0, 2, 1], [3, 4, 1], [0, 4, 0], [2, 1, 0], [4, 0, 0], [5, 2, 0], [1, 0, 0], [3, 1, 0], [2, 0, 1], [2, 3, 0], [0, 3, 1]], solution: [[1, 4], [4, 1], [5, 0], [7, 4], [8, 3], [3, 0], [0, 2], [9, 4], [10, 2], [6, 3], [0, 0], [3, 1], [8, 0], [3, 0], [4, 0], [0, 6]] },
+  { fewest: 19, blocks: [[0, 2, 1], [2, 4, 1], [3, 0, 0], [3, 2, 0], [1, 4, 0], [1, 3, 1], [5, 3, 0], [4, 3, 0], [5, 1, 0], [2, 1, 0], [3, 5, 1], [4, 1, 0]], solution: [[8, 0], [6, 2], [9, 0], [10, 4], [11, 0], [7, 2], [1, 4], [3, 4], [0, 2], [5, 2], [4, 0], [0, 1], [5, 1], [3, 2], [1, 1], [3, 3], [6, 3], [7, 3], [0, 6]] },
+  { fewest: 22, blocks: [[0, 2, 1], [4, 4, 0], [3, 3, 1], [1, 0, 1], [2, 1, 0], [1, 5, 1], [2, 3, 0], [1, 3, 0], [3, 1, 0], [5, 4, 0], [3, 0, 1], [5, 2, 0], [4, 1, 1]], solution: [[3, 0], [4, 0], [5, 0], [6, 4], [10, 4], [8, 0], [0, 2], [7, 1], [2, 0], [1, 3], [6, 3], [5, 3], [6, 4], [2, 2], [7, 4], [0, 1], [2, 1], [8, 3], [10, 3], [12, 3], [11, 0], [0, 6]] },
 ];

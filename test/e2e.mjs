@@ -189,7 +189,7 @@ const browser = await chromium.launch();
   check(await page.evaluate(() => unblock.scene.camera.offsetX === 170 && unblock.scene.camera.offsetY === 370 && unblock.scene.camera.scale === 1), "and the view centred");
   await page.evaluate(() => unblock.goalReady());
   const stored = await page.evaluate(() => Object.fromEntries(Object.keys(localStorage).sort().map((k) => [k, localStorage.getItem(k)])));
-  const { "unblock-me:v7:goal": storedGoal, "unblock-me:camera": storedCamera, "unblock-me:log": storedLog, "unblock-me:device": storedDevice, ...rest } = stored;
+  const { "unblock-me:v8:goal": storedGoal, "unblock-me:camera": storedCamera, "unblock-me:log": storedLog, "unblock-me:device": storedDevice, ...rest } = stored;
   check(/^[0-9a-f-]{36}$/.test(storedDevice), `the device id for automatic uploads survives the reset (${storedDevice})`);
   const kinds = JSON.parse(storedLog ?? "[]").map((e) => e.e);
   check(kinds.includes("move") && kinds.slice(-3).join() === "reset,load,goal", `the play log survives the reset, which it records, then the page load and the new goal (${kinds.join(",")})`);
@@ -200,9 +200,9 @@ const browser = await chromium.launch();
     "unblock-me:debug": "true",
     "unblock-me:fps": "false",
     "unblock-me:tries": "12",
-    "unblock-me:v7:history": "[]",
-    "unblock-me:v7:moved": "[]",
-    "unblock-me:v7:seed": String(seedAfter),
+    "unblock-me:v8:history": "[]",
+    "unblock-me:v8:moved": "[]",
+    "unblock-me:v8:seed": String(seedAfter),
   }), `storage holds only fresh defaults, and other pages' keys are left alone (${JSON.stringify(rest)})`);
   check(JSON.parse(storedGoal ?? "null")?.seed === seedAfter, "and a new goal for the new seed");
   await expectColor(page, cell(-0.85, 4.15), "reset", "the reset block is still in its place");
@@ -839,14 +839,22 @@ const browser = await chromium.launch();
   check(goal?.id === "isle 0 0" && goal.unrated === true, `a fresh start's goal is the island's first square, unrated (${goal?.id})`);
   const screen = (x, y) => page.evaluate(([x, y]) => { const c = unblock.scene.camera; return [x * 60 * c.scale + c.offsetX, y * 60 * c.scale + c.offsetY]; }, [x, y]);
   const red = await page.evaluate(() => unblock.scene.layout.byId("isle 0 0"));
-  await expectColor(page, await screen(red.x - 2.5, red.y - 2.5), "wall", "its square is walled in");
-  const bay = await rgbAt(page, ...(await screen(red.x + 3.5, red.y + 0.5)));
+  await expectColor(page, await screen(goal.target.x - 6.5, goal.target.y - 2.5), "wall", "its square is walled in");
+  const bay = await rgbAt(page, ...(await screen(goal.target.x + 1, goal.target.y + 0.5)));
   check(bay[0] - bay[2] > 10, `with its (reddish) target in the bay outside the right wall (${bay.join(",")})`);
-  await expectColor(page, await screen(red.x + 4.5, red.y + 0.5), "wall", "the bay walled at its end");
+  await expectColor(page, await screen(goal.target.x + 2.5, goal.target.y + 0.5), "wall", "the bay walled at its end");
   await page.screenshot({ path: shots + "island-first-square.png" });
-  await page.touchscreen.tap(...(await screen(red.x + 1, red.y + 0.5)));
+  // Its solution, dragged move by move, solves it; the next square's goal follows.
+  for (const m of goal.solution) {
+    const b = await page.evaluate((id) => unblock.scene.layout.byId(id), m.id);
+    const from = await screen(m.from.x + b.w / 2, m.from.y + b.h / 2), to = await screen(m.to.x + b.w / 2, m.to.y + b.h / 2);
+    await page.mouse.move(...from);
+    await page.mouse.down();
+    await page.mouse.move(...to, { steps: 8 });
+    await page.mouse.up();
+  }
   await page.waitForFunction(() => unblock.scene.goal?.id === "isle 1 0", null, { timeout: 20000 }).catch(() => {});
-  check((await page.evaluate(() => unblock.scene.goal?.id)) === "isle 1 0", "a tap solves it, and the next square's goal follows");
+  check((await page.evaluate(() => unblock.scene.goal?.id)) === "isle 1 0", `dragging its ${red && goal.solution.length} solution moves solves it, and the next square's goal follows`);
   await page.close();
 }
 
