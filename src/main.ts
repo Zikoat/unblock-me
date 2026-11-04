@@ -76,7 +76,6 @@ let forgetting = false;
 const canvas = document.querySelector("canvas")!;
 const fps = document.querySelector<HTMLElement>("#fps")!;
 const tip = document.querySelector<HTMLElement>("#tip")!;
-const undoButton = document.querySelector<HTMLButtonElement>("#undo")!;
 const viewBox = document.querySelector<HTMLElement>("#view")!;
 
 /** Keep the on-screen controls inside the view: the smaller border when it is on. */
@@ -429,6 +428,8 @@ function reachGoal(now: number): void {
   save();
 }
 
+/** Take back the last move. There is no undo button (it was almost never used, in the play
+ * data and the play tests); tests and the console still undo with unblock.undo(). */
 function takeBack(): void {
   const move = undo(scene);
   if (!move) return;
@@ -439,7 +440,6 @@ function takeBack(): void {
   save();
   redraw();
 }
-undoButton.addEventListener("click", takeBack);
 
 /** Count a step of the debug sequence: a tap on the empty board ("tap"), then a tap on the
  * stuck red block ("red"); anything else (null) starts it over. True once it is complete,
@@ -594,6 +594,7 @@ Object.assign(window, {
     redraw: () => redraw(),
     /** The adaptive detail step (0 full; see pace). */
     detailStep: () => detailStep,
+    undo: () => takeBack(),
     /** Forget everything stored, like the reset block but without reloading (for tests). */
     forget: () => forget(),
     playLog,
@@ -821,7 +822,6 @@ function paint(now: number, moving: ReturnType<typeof sliding>, to: HTMLCanvasEl
       }),
     );
     if (to !== canvas) return;
-    undoButton.disabled = scene.history.length === 0;
     const debug = (window as unknown as { unblock: { frames: { t: number; x: number; y: number }[] | null } }).unblock;
     if (debug.frames && moving) debug.frames.push({ t: now, x: moving.x, y: moving.y });
 }

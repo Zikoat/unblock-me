@@ -360,7 +360,6 @@ const browser = await chromium.launch();
 
   // Quick push: a tap slides a block to the end of its room. Row 4, walls at x -2 and 3.
   await place([...UI, Wall(-2, 4), H("a", -1, 4), Wall(3, 4)]);
-  check(await page.evaluate(() => document.querySelector("#undo").disabled), "the undo button is dimmed with nothing to undo");
   await tap(cell(0, 4.5));
   check((await block(page, "a")).x === 1, "a tap slides a free block right to the wall");
   await page.waitForTimeout(450); // the slide is animated
@@ -393,17 +392,16 @@ const browser = await chromium.launch();
   const slideXs = await page.evaluate(() => { const f = unblock.frames.map((f) => f.x); unblock.frames = null; return f; });
   check(slideXs[0] === -1 && slideXs.every((x, i) => i === 0 || x >= slideXs[i - 1]) && slideXs.at(-1) <= 1,
     `the slide starts drawing at its start cell and only moves forward (${slideXs.map((x) => x.toFixed(2)).join(" ")})`);
-  // Undo: the round button in the corner takes moves back one at a time.
-  await page.tap("#undo");
+  // Undo (no button now; unblock.undo) takes moves back one at a time.
+  await page.evaluate(() => unblock.undo());
   await page.waitForTimeout(450);
-  check((await block(page, "a")).x === -1, "the undo button takes back the last move");
-  await page.tap("#undo");
+  check((await block(page, "a")).x === -1, "undo takes back the last move");
+  await page.evaluate(() => unblock.undo());
   await page.waitForTimeout(450);
   check((await block(page, "a")).x === 1, "and the one before");
-  await page.tap("#undo");
+  await page.evaluate(() => unblock.undo());
   await page.waitForTimeout(450);
   check((await block(page, "a")).x === -1 && !(await block(page, "a")).moved, "and the first, back to the start");
-  check(await page.evaluate(() => document.querySelector("#undo").disabled), "and then it is dimmed again");
   // A tap on the background: a yellow ring spreads out from it and fades; nothing stays.
   const drop = cell(-1.5, -3);
   const ringWatch = page.evaluate(([x, y]) => new Promise((resolve) => {
@@ -437,7 +435,7 @@ const browser = await chromium.launch();
     return [cx + dx * k, cy + dy * k + 7];
   });
   check((await colorAt(page, ...changeArrow)) !== "moved", "no green arrow before the undo");
-  await page.tap("#undo");
+  await page.evaluate(() => unblock.undo());
   await page.waitForTimeout(40);
   await expectColor(page, changeArrow, "moved", `while an off-screen undo runs, a green arrow at the edge points to it (${changeArrow.map((v) => v.toFixed(0)).join(",")})`);
   await page.waitForTimeout(450);
@@ -514,9 +512,6 @@ const browser = await chromium.launch();
   await expectColor(page, borderArrow, "reset", "with the border on, the arrow sits inside the border's edge");
   check(borderArrow[0] > 40 || borderArrow[1] > 80, `(inside the border, not at the screen's edge: ${borderArrow.map((v) => v.toFixed(0)).join(",")})`);
   await page.screenshot({ path: shots + "phone-5c-indicator-border.png" });
-  // The undo button stays inside the border too.
-  const undoBox = await page.evaluate(() => { const r = document.querySelector("#undo").getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom]; });
-  check(undoBox[0] >= 40 && undoBox[2] <= 360 && undoBox[1] >= 80 && undoBox[3] <= 720, `with the border on, the undo button sits inside it (${undoBox.map((v) => v.toFixed(0)).join(",")})`);
   // UI blocks on screen but just right of the border count as out of view: the arrow shows.
   await page.evaluate(() => { unblock.scene.camera = { scale: 1, offsetX: 430, offsetY: 370 }; unblock.redraw(); });
   await frame(page);
@@ -662,8 +657,7 @@ const browser = await chromium.launch();
   check(midway === 0 && (await page.evaluate(() => unblock.scene.done.map((g) => g.id).join())) === "q", `a slide onto the target cut short by another touch still reaches it (${midway} reached before the touch)`);
 
   // Edge markers for an out-of-view goal: a red arrow to the red block and a red glow at the
-  // edge towards the target, on the red block's axis. Tapping either goes there. (Row 3 keeps
-  // the glow clear of the undo button in the corner, which would take the tap.)
+  // edge towards the target, on the red block's axis. Tapping either goes there.
   const redEdge = () => page.evaluate(() => {
     const ctx = document.querySelector("canvas").getContext("2d"), dpr = devicePixelRatio, x = (unblock.scene.width - 3) * dpr;
     let red = 0;
@@ -806,8 +800,6 @@ const browser = await chromium.launch();
   await page.screenshot({ path: shots + "desktop-tooltip.png" });
   await page.mouse.move(...at(-0.5, 0.5));
   check(await page.evaluate(() => getComputedStyle(document.querySelector("#tip")).display === "none"), "hovering the home block shows nothing");
-  const undoTitle = await page.getAttribute("#undo", "title");
-  check(undoTitle === "Undo", `the undo button's tooltip is "Undo" (${undoTitle})`);
   // Hovering a goal's red block shows how hard it is, once the worker has measured it.
   // r has to wait for v to get out of its row before it can go right.
   await page.evaluate(() => {
