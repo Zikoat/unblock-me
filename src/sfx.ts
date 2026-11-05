@@ -66,7 +66,7 @@ export function listen(w: typeof window_): void {
   window_ = w;
 }
 
-export type Sound = "thud" | "glitch" | "heartbeat" | "riser" | "zap" | "stamp" | "beat" | "chime" | "fall" | "drumroll" | "boom" | "confetti" | "fanfare" | "cheer" | "firework" | "whoosh" | "land" | "jingle" | "twinkle" | "incoming" | "soul" | "press" | "release" | "push" | "bump" | "stuck";
+export type Sound = "thud" | "glitch" | "heartbeat" | "riser" | "zap" | "stamp" | "beat" | "chime" | "fall" | "drumroll" | "boom" | "confetti" | "fanfare" | "cheer" | "firework" | "whoosh" | "land" | "jingle" | "incoming" | "soul" | "press" | "release" | "push" | "bump" | "stuck";
 
 /** Play `sound` (the moment it belongs to is `at`; `n` picks a variant, e.g. which star). */
 export function play(sound: Sound, at: number, n = 0): void {
@@ -223,9 +223,6 @@ const SOUNDS: Record<Sound, Make> = {
       tone(a, out, t + at, f / 2, f / 2, len + 0.08, 0.1, "triangle", 0.008);
     }
   },
-  twinkle(a, out, t) {
-    for (let i = 0; i < 16; i++) bell(a, out, t + Math.random() * 1.4, note(1568, Math.floor(Math.random() * 8)), 0.35, 0.05);
-  },
   boom(a, out, t) {
     tone(a, out, t, 55, 30, 1.6, 0.9); // the drop
     tone(a, out, t, 110, 32, 0.8, 1);
@@ -281,23 +278,23 @@ const SOUNDS: Record<Sound, Make> = {
     tone(a, out, t, 220, 110, 0.2, 0.3);
   },
   soul(a, out, t) {
-    // Rising and airy as it flies, a bright bell as it arrives.
-    const o = a.createOscillator(), lfo = a.createOscillator(), depth = a.createGain(), g = a.createGain();
-    o.type = "triangle";
-    o.frequency.setValueAtTime(330, t);
-    o.frequency.exponentialRampToValueAtTime(990, t + 1);
-    lfo.frequency.value = 7;
-    depth.gain.value = 18;
-    lfo.connect(depth).connect(o.frequency);
+    // A steady, airy tone as it flies (no wobble nor glide: they sounded goofy), a bright
+    // bell as it arrives.
+    const g = a.createGain();
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(0.12, t + 0.25);
+    g.gain.exponentialRampToValueAtTime(0.09, t + 0.3);
+    g.gain.setValueAtTime(0.09, t + 0.75);
     g.gain.exponentialRampToValueAtTime(0.0001, t + 1.05);
-    o.connect(g).connect(out);
-    o.start(t);
-    lfo.start(t);
-    o.stop(t + 1.1);
-    lfo.stop(t + 1.1);
-    noise(a, out, t, 1, 0.08, "bandpass", 600, 4000, 0.4, 3);
+    g.connect(out);
+    for (const [f, type] of [[659, "sine"], [988, "triangle"]] as const) {
+      const o = a.createOscillator();
+      o.type = type;
+      o.frequency.value = f;
+      o.connect(g);
+      o.start(t);
+      o.stop(t + 1.1);
+    }
+    noise(a, out, t, 1, 0.05, "bandpass", 1800, 1800, 0.4, 3);
     bell(a, out, t + 1, 1318, 0.9, 0.25);
     bell(a, out, t + 1, 1975, 0.7, 0.12);
   },

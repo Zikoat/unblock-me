@@ -456,7 +456,6 @@ export function finishCues(fx: Pick<Fx, "medal" | "times">): { at: number; sound
     ...Array.from({ length: times.kept }, (_, k) => ({ at: fillAt(k), sound: "chime" as const, n: k })),
     ...(times.medalAt !== null && fx.medal ? [{ at: times.medalAt, sound: "fall" as const }, { at: times.medalAt, sound: "drumroll" as const, n: (times.medalHit! - times.medalAt) / SLOW.RATE }, { at: times.medalHit!, sound: "boom" as const }] : []),
     { at: wordAt(fx), sound: "cheer", n: fx.medal ? 1 : 0 },
-    ...(rainCount(fx) ? [{ at: rainAt(fx), sound: "twinkle" as const }] : []),
     { at: times.landed + 120, sound: "jingle" },
     { at: confettiAt(fx), sound: "confetti" },
     { at: wordAt(fx), sound: "fanfare", n: fx.medal || times.kept >= 5 ? 1 : 0 },
@@ -662,15 +661,10 @@ type Rect = { x: number; y: number; width: number; height: number };
 export function soul(ctx: CanvasRenderingContext2D, from: Rect, to: Rect, k: number, zoom: number, detail = 1): void {
   const B = big(zoom), p = clamp(k / SOUL.TRAVEL_MS);
   const c0 = { x: from.x + from.width / 2, y: from.y + from.height / 2 }, c1 = { x: to.x + to.width / 2, y: to.y + to.height / 2 };
-  const dist = Math.hypot(c1.x - c0.x, c1.y - c0.y);
-  // An arc bowing out to one side of the straight line (the upper side, where there is one),
-  // so it stays on the screen the view glides over.
-  const nx = -(c1.y - c0.y) / (dist || 1), ny = (c1.x - c0.x) / (dist || 1), side = ny > 0 ? -1 : 1;
-  const bow = Math.max(UNIT * B, dist * 0.35);
-  const ctrl = { x: (c0.x + c1.x) / 2 + nx * bow * side, y: (c0.y + c1.y) / 2 + ny * bow * side };
+  // Straight there (an arc bowing to one side looked wayward), easing in and out.
   const along = (q: number) => {
-    const e = q < 0.5 ? 2 * q * q : 1 - (-2 * q + 2) ** 2 / 2, u = 1 - e;
-    return { x: u * u * c0.x + 2 * u * e * ctrl.x + e * e * c1.x, y: u * u * c0.y + 2 * u * e * ctrl.y + e * e * c1.y };
+    const e = q < 0.5 ? 2 * q * q : 1 - (-2 * q + 2) ** 2 / 2;
+    return { x: c0.x + (c1.x - c0.x) * e, y: c0.y + (c1.y - c0.y) * e };
   };
   const orb = UNIT * 0.42 * B;
   const glowBall = (x: number, y: number, r: number, a: number) => glow(ctx, "soul", x, y, r * 2.2, a);
@@ -710,7 +704,7 @@ export function soul(ctx: CanvasRenderingContext2D, from: Rect, to: Rect, k: num
         const at = along(Math.max(0, q - g * 0.022));
         glowBall(at.x, at.y, orb * (1 - g * 0.07), 0.25 * (1 - g / 11));
       }
-      const at = along(q), beat = 1 + 0.12 * Math.sin(k / 45);
+      const at = along(q), beat = 1; // (a pulse while flying read as blinking)
       // Arriving, it spreads into the new block's shape.
       const pour = clamp((q - 0.88) / 0.12);
       glowBall(at.x, at.y, orb * beat * (1 + pour), 1 - pour * 0.6);

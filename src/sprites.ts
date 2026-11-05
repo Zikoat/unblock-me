@@ -39,7 +39,7 @@ const GLOWS = {
   gold: [[0, "255, 214, 90", 1], [0.3, "255, 214, 90", 0.9], [1, "255, 214, 90", 0]],
   halo: [[0, "255, 236, 140", 1], [1, "255, 220, 90", 0]],
   white: [[0, "255, 255, 255", 0.9], [1, "255, 255, 255", 0]],
-  soul: [[0, "255, 255, 255", 1], [0.25, "255, 150, 150", 1], [0.55, "214, 69, 69", 0.55], [1, "214, 69, 69", 0]],
+  soul: [[0, "222, 64, 64", 1], [0.3, "236, 96, 96", 1], [0.6, "214, 69, 69", 0.55], [1, "214, 69, 69", 0]],
 } as const satisfies Record<string, readonly (readonly [number, string, number])[]>;
 const lights = new Map<string, HTMLCanvasElement>();
 function light(key: string, size: number, paint: (c: CanvasRenderingContext2D, r: number) => void): HTMLCanvasElement {
