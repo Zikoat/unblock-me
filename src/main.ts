@@ -712,12 +712,12 @@ nextButton.addEventListener("click", () => {
   requestGoal(next);
   redraw();
 });
-/** The level, of how many, and the moves so far on the island square being played (or just
+/** The level and the moves so far on the island square being played (or just
  * finished), for the bar at the top. */
-function islandHud(): { level: number; of: number; moves: number } {
+function islandHud(): { level: number; moves: number } {
   const g = scene.goal ?? scene.done.find((d) => d.id === finish?.id) ?? null;
   const k = squareOf(g) ?? 0;
-  return { level: k + 1, of: ISLAND_LEVELS.length, moves: g?.used ?? (g ? movesSince(g.begun ?? 0) : 0) };
+  return { level: k + 1, moves: g?.used ?? (g ? movesSince(g.begun ?? 0) : 0) };
 }
 
 /** While an island square is played its view is fixed (see islandCamera): set every frame,

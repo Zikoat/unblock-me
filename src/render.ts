@@ -98,9 +98,9 @@ export function draw(
      * (`island`) plays in a card in the middle of the screen instead, with no effects round
      * the block. */
     finish?: { id: string; born: number; dir?: { x: number; y: number }; island?: boolean } | null;
-    /** On an island square: its number, how many there are, and the moves so far (shown over
+    /** On an island square: its number and the moves so far (shown over
      * the surface at the top). */
-    hud?: { level: number; of: number; moves: number } | null;
+    hud?: { level: number; moves: number } | null;
     /** The island's surface fading out (`alpha`) round its last square (`rects`), once reached. */
     surface?: { rects: Rect[]; alpha: number } | null;
     /** Out in the world: the island squares' numbers, on their top walls (lattice units). */
@@ -446,7 +446,7 @@ export function draw(
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     timed(ctx, "glitch", () => glitch(ctx, fx, width, height));
   }
-  if (hud) islandHud(ctx, hud, width, height, dpr);
+  if (hud && !finish?.island) islandHud(ctx, hud, width, height, dpr); // (the card has its level)
   if (finish?.island) {
     const g = scene.done.find((d) => d.id === finish.id);
     if (g && g.used !== undefined) islandCard(ctx, g, finishClock(scene, finish, now) ?? 0, width, height, dpr, detail, hud?.level ?? 0);
@@ -460,7 +460,7 @@ export function islandCardRect(width: number, height: number): Rect {
 }
 
 /** The level and the moves so far, over the island's surface at the top of the screen. */
-function islandHud(ctx: CanvasRenderingContext2D, hud: { level: number; of: number; moves: number }, width: number, height: number, dpr: number): void {
+function islandHud(ctx: CanvasRenderingContext2D, hud: { level: number; moves: number }, width: number, height: number, dpr: number): void {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const size = Math.max(15, Math.min(22, Math.min(width, height) * 0.05));
   ctx.font = `700 ${size}px system-ui, -apple-system, "Segoe UI", sans-serif`;
@@ -469,7 +469,7 @@ function islandHud(ctx: CanvasRenderingContext2D, hud: { level: number; of: numb
   // Halfway down the space over the square, but in the bar at least.
   const y = Math.max(HUD_BAR / 2, Math.min(44, (height - islandSide(width, height)) / 4));
   ctx.textAlign = "left";
-  ctx.fillText(`Level ${hud.level}/${hud.of}`, 16, y);
+  ctx.fillText(`Level ${hud.level}`, 16, y);
   ctx.textAlign = "right";
   ctx.fillText(`${hud.moves} ${hud.moves === 1 ? "move" : "moves"}`, width - 16, y);
 }
@@ -489,25 +489,15 @@ function islandCard(ctx: CanvasRenderingContext2D, g: Goal, t: number, width: nu
   const rise = (1 - easeOutCubic(shown)) * 30;
   ctx.globalAlpha = shown;
   ctx.translate(0, rise);
-  const m = r.width * 0.03; // the target's margin round the block
-  ctx.fillStyle = COLORS.background; // the target's pale coral, over the board's colour
-  ctx.beginPath();
-  ctx.roundRect(r.x, r.y, r.width, r.height, 14);
-  ctx.fill();
-  ctx.fillStyle = COLORS.target;
-  ctx.strokeStyle = COLORS.targetLine;
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.roundRect(r.x, r.y, r.width, r.height, 14);
-  ctx.fill();
-  ctx.stroke();
-  // The block goes gold as the stars gather, as on the board.
+  // The block alone (no target round it); it goes gold as the stars gather, as on the board.
   const k = Math.max(0, Math.min(1, (t - times.gather) / FINISH.GATHER_MS));
   ctx.fillStyle = mix(COLORS.goal, COLORS.done, k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2);
   ctx.beginPath();
-  ctx.roundRect(r.x + m, r.y + m, r.width - 2 * m, r.height - 2 * m, 12);
+  ctx.roundRect(r.x, r.y, r.width, r.height, 14);
   ctx.fill();
-  drawScoreTrack(ctx, r, fewest, used, { t, undone: g.undone, radius: 14, detail });
+  // The track a little in from the block's ends, so the stars have room either side.
+  const pad = r.width * 0.07;
+  drawScoreTrack(ctx, { ...r, x: r.x + pad, width: r.width - 2 * pad }, fewest, used, { t, undone: g.undone, radius: 14, detail });
   ctx.font = `800 ${Math.round(r.width * 0.075)}px system-ui, -apple-system, "Segoe UI", sans-serif`;
   ctx.textAlign = "center";
   ctx.textBaseline = "alphabetic";
