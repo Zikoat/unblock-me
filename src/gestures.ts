@@ -1,6 +1,7 @@
 import { pan, pinch, toWorld, zoomAt, type Camera, type Point } from "./camera";
 import { limits, quickPush, record, uiToolbar, visibleBlocks, type Scene } from "./scene";
 import { UNIT, type Block, type Ui } from "./layout";
+import type { Sound } from "./sfx";
 import { blockAt, slideRange, type Move } from "./rules";
 
 /** UI blocks that are also sliders: a drag on them adjusts instead of panning. */
@@ -22,7 +23,7 @@ type Mode =
   | { kind: "pressed"; id: number; start: Point; block: Block | null; at: number }
   | { kind: "panning"; id: number; last: Point }
   /** `grab` is where the finger went down, `lo`..`hi` how far the block can slide. */
-  | { kind: "dragging"; id: number; block: Block; grab: Point; lo: number; hi: number; at: number; cell: number }
+  | { kind: "dragging"; id: number; block: Block; grab: Point; lo: number; hi: number; at: number; cell: number; against: boolean }
   /** Dragging sideways on the density block. */
   | { kind: "adjusting"; id: number; ui: Ui; start: Point; dx: number }
   | { kind: "pinching"; ids: [number, number]; from: [Point, Point]; start: Camera };
@@ -70,9 +71,9 @@ export class Gestures {
       onPanAfterPush?: (ms: number) => void;
       /** How the move about to be recorded was made (just before onChange). */
       onInput?: (input: Input) => void;
-      /** A block pressed, a drag let go, a dragged block over a new cell (`cell`: which), a
-       * tap's push: for their sounds. */
-      onSound?: (sound: "press" | "release" | "tick" | "push", cell?: number) => void;
+      /** A block pressed, a drag let go, a dragged block over a new cell (`cell`: which) or
+       * against another, a tap's push, a stuck block tried: for their sounds. */
+      onSound?: (sound: Sound, cell?: number) => void;
       /** A dropped red block slides on into its target (to animate it): from where it was
        * dropped to the target. Just before the move is recorded. */
       onSnap?: (slide: Move) => void;
@@ -93,7 +94,7 @@ export class Gestures {
 
   private readonly onSnap: (slide: Move) => void;
   private readonly onInput: (input: Input) => void;
-  private readonly onSound: (sound: "press" | "release" | "tick" | "push", cell?: number) => void;
+  private readonly onSound: (sound: Sound, cell?: number) => void;
   private readonly onPanAfterPush: (ms: number) => void;
   private readonly now: () => number;
 
@@ -140,10 +141,11 @@ export class Gestures {
         if (lo === hi) {
           // Stuck against blocks at both ends: there is nothing to slide, so pan instead.
           this.scene.stuckId = mode.block.id;
+          this.onSound("stuck");
           this.mode = { kind: "panning", id, last: mode.start };
           this.panStarted();
         } else {
-          this.mode = { kind: "dragging", id, block: mode.block, grab: this.lattice(mode.start), lo, hi, at: mode.at, cell: mode.block.w > mode.block.h ? mode.block.x : mode.block.y };
+          this.mode = { kind: "dragging", id, block: mode.block, grab: this.lattice(mode.start), lo, hi, at: mode.at, cell: mode.block.w > mode.block.h ? mode.block.x : mode.block.y, against: false };
         }
       }
     }
@@ -201,9 +203,12 @@ export class Gestures {
       const now = this.lattice(at);
       const { block, grab, lo, hi } = mode;
       const clamp = (v: number) => Math.min(hi, Math.max(lo, v));
-      this.scene.dragging = block.w > block.h
-        ? { id: block.id, x: clamp(block.x + now.x - grab.x), y: block.y }
-        : { id: block.id, x: block.x, y: clamp(block.y + now.y - grab.y) };
+      const want = block.w > block.h ? block.x + now.x - grab.x : block.y + now.y - grab.y;
+      this.scene.dragging = block.w > block.h ? { id: block.id, x: clamp(want), y: block.y } : { id: block.id, x: block.x, y: clamp(want) };
+      // Pulled into the block (or wall) that stops it: one knock, until it moves off again.
+      const against = want > hi + 0.02 || want < lo - 0.02;
+      if (against && !mode.against) this.onSound("bump");
+      mode.against = against;
       const cell = Math.round(block.w > block.h ? this.scene.dragging.x : this.scene.dragging.y);
       if (cell !== mode.cell) {
         mode.cell = cell;

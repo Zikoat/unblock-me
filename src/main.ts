@@ -403,7 +403,17 @@ function slide(ui: Ui, from: number, dx: number): number {
 // The clock starts at the first frame that draws it: started at the tap, the first frame
 // came a frame or two late and the block jumped ~20% of the way (measured with
 // test/experiments/slide-frames.mjs).
-let animation: { move: Move; start: number | null; duration: number; wait?: boolean } | null = null;
+// (`push`: a tap's, which knocks at its end if a block stopped it.)
+let animation: { move: Move; start: number | null; duration: number; wait?: boolean; push?: boolean } | null = null;
+/** A move ended against a block (or wall) the way it went, not short of one. */
+function stoppedByBlock(move: Move): boolean {
+  const home = scene.layout.byId(move.id);
+  if (!home) return false;
+  const dir = Math.sign(move.to.x - move.from.x + move.to.y - move.from.y);
+  const { lo, hi } = slideRange(scene.layout, { ...home, ...move.to }, scene);
+  const at = home.w > home.h ? move.to.x : move.to.y;
+  return dir > 0 ? hi === at : lo === at;
+}
 function animate(move: Move): void {
   const cells = Math.abs(move.to.x - move.from.x) + Math.abs(move.to.y - move.from.y);
   animation = { move, start: null, duration: slideDuration(cells) };
@@ -415,6 +425,7 @@ function sliding(now: number): { id: string; x: number; y: number; from: Point; 
   animation.start ??= now;
   const t = Math.min(1, Math.max(0, (now - animation.start) / animation.duration));
   if (t >= 1) {
+    if (animation.push && stoppedByBlock(animation.move)) sfx.play("bump", now);
     animation = null;
     reachGoal(now);
     return null;
@@ -523,6 +534,7 @@ function debugCode(step: "tap" | "red" | null): boolean {
  * block moves after, so the finish shows. */
 function pushed(move: Move): void {
   animate(move);
+  animation!.push = true;
   const goal = scene.goal, red = goal && scene.layout.byId(goal.id);
   if (goal && red && animation && move.id === goal.id && move.to.x === goal.target.x && move.to.y === goal.target.y) {
     const c = scene.camera, view = borderOnScreen(scene);
@@ -551,6 +563,7 @@ const gestures = new Gestures(scene, {
   onSnap: (slide) => animate(slide),
   onPanAfterPush: (ms) => log({ e: "panAfterPush", ms }),
   onStuck: (id) => {
+    sfx.play("stuck", performance.now());
     if (debugCode(id === scene.goal?.id ? "red" : null)) forgetEverything();
     shake = { id, born: -1 };
     redraw();
