@@ -837,7 +837,7 @@ const browser = await chromium.launch();
   const view = await page.evaluate(() => ({ ...unblock.scene.camera, locked: unblock.scene.locked }));
   const [left] = await screen(goal.target.x - 6, 0), [right] = await screen(goal.target.x, 0);
   check(view.locked && Math.abs(right - left - 0.9 * 393) < 1 && Math.abs((left + right) / 2 - 393 / 2) < 1, `the first square's inside is centred and fills 90% of the width (${left.toFixed(0)}..${right.toFixed(0)})`);
-  await expectColor(page, [393 / 2, 700 / 2 - 3.5 * (0.9 * 393) / 6], "wall", "its square is walled in (the top wall, over the middle)");
+  await expectColor(page, [393 / 2 - 2.5 * (0.9 * 393) / 6, 700 / 2 - 3.5 * (0.9 * 393) / 6], "wall", "its square is walled in (the top wall, left of its level)");
   await page.mouse.move(100, 650); // the empty margin under the square
   await page.mouse.down();
   await page.mouse.move(300, 650, { steps: 8 });
