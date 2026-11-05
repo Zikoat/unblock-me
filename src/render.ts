@@ -501,13 +501,16 @@ export function draw(
 /** Where an island square's finish card sits on the screen (CSS px), in the middle of `view`
  * (the screen or the smaller border), for the next button too. */
 export function islandCardRect(view: Rect): Rect {
-  // The title over it (about 0.14 of its width) and the button under it (NEXT px) fit too,
-  // all of it centred: on a short screen the card is smaller.
-  const NEXT = 28 + 52, title = 0.14, margin = 16;
-  const w = Math.max(40, Math.min(0.82 * view.width, 460, (view.height - NEXT - 2 * margin) / (title + 0.5))), h = w / 2;
-  const top = view.y + (view.height - (title * w + h + NEXT)) / 2;
-  return { x: view.x + (view.width - w) / 2, y: top + title * w, width: w, height: h };
+  // The title over it and the button under it fit too (all sized to its width: CARD), all
+  // of it centred: on a short screen it all comes out smaller.
+  const margin = 16, below = CARD.gap + CARD.button;
+  const w = Math.max(40, Math.min(0.82 * view.width, 460, (view.height - 2 * margin) / (CARD.title + 0.5 + below))), h = w / 2;
+  const top = view.y + (view.height - (CARD.title + 0.5 + below) * w) / 2;
+  return { x: view.x + (view.width - w) / 2, y: top + CARD.title * w, width: w, height: h };
 }
+/** The finish card's parts, as shares of its width: its corners' radius, the title over it,
+ * and the gap to the next button and the button's height (its font size: button / 2.6). */
+export const CARD = { radius: 0.03, title: 0.14, gap: 0.06, button: 0.1 };
 
 /** The moves so far, over the island's surface at the top of the screen (the level is on
  * the square's top wall). */
@@ -542,12 +545,12 @@ function islandCard(ctx: CanvasRenderingContext2D, g: Goal, t: number, width: nu
   const k = Math.max(0, Math.min(1, (t - times.gather) / FINISH.GATHER_MS));
   ctx.fillStyle = mix(COLORS.goal, COLORS.done, k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2);
   ctx.beginPath();
-  ctx.roundRect(r.x, r.y, r.width, r.height, 14);
+  ctx.roundRect(r.x, r.y, r.width, r.height, CARD.radius * r.width);
   ctx.fill();
   // The moves' fill grows from none to the moves used as the finish starts; the stars'
   // row keeps room at each end.
   const grow = easeOutCubic(Math.min(1, Math.max(0, t / FINISH.START_MS)));
-  drawScoreTrack(ctx, r, fewest, used, { t, undone: g.undone, radius: 14, detail, room: r.width * 0.09, grow });
+  drawScoreTrack(ctx, r, fewest, used, { t, undone: g.undone, radius: CARD.radius * r.width, detail, room: r.width * 0.09, grow });
   ctx.font = `800 ${Math.round(r.width * 0.075)}px system-ui, -apple-system, "Segoe UI", sans-serif`;
   ctx.textAlign = "center";
   ctx.textBaseline = "alphabetic";

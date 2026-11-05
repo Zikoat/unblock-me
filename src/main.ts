@@ -14,7 +14,7 @@ import { Gestures, type Input } from "./gestures";
 import { ISLAND_LEVELS } from "./island-levels";
 import { bayReached, inIsland, isLast, islandCamera, islandRects, nextIslandGoal, SIDE, squareAt, squareOf } from "./island";
 import { fixedLayout, MAX_TRIES, MIN_TRIES, randomLayout, TRIES, UNIT, type Placed, type Ui } from "./layout";
-import { CUE_MS, draw, fading, islandCardRect, resetFades, RIPPLE_MS, SHAKE_MS, THROB_MS, redArrow, uiArrow, type Sparkle } from "./render";
+import { CARD, CUE_MS, draw, fading, islandCardRect, resetFades, RIPPLE_MS, SHAKE_MS, THROB_MS, redArrow, uiArrow, type Sparkle } from "./render";
 import { ease, slideDuration } from "./slide";
 import { blockAt, blocksIn, slideRange, type Move } from "./rules";
 import { borderOnScreen, goalSolved, latticeRect, newScene, quickPush, record, relayout, resize, restart, undo, visibleBlocks, whereIs } from "./scene";
@@ -698,7 +698,10 @@ function showNext(on: boolean): void {
     const view = borderOnScreen(scene), r = islandCardRect(view);
     nextButton.textContent = nextIslandGoal(scene.done) ? "Next level" : "Continue";
     // (Kept on the screen when that is too short for the card and it together.)
-    nextButton.style.top = `${Math.max(0, Math.min(r.y + r.height + 28, view.y + view.height - 54) - view.y)}px`;
+    // Sized with the card; kept on the screen when that is too short for the two.
+    const size = (CARD.button / 2.6) * r.width;
+    nextButton.style.fontSize = `${size}px`;
+    nextButton.style.top = `${Math.max(0, Math.min(r.y + r.height + CARD.gap * r.width, view.y + view.height - 2.6 * size - 8) - view.y)}px`;
   }
   nextButton.hidden = !on;
 }
