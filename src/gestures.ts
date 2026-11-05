@@ -23,7 +23,7 @@ type Mode =
   | { kind: "pressed"; id: number; start: Point; block: Block | null; at: number }
   | { kind: "panning"; id: number; last: Point }
   /** `grab` is where the finger went down, `lo`..`hi` how far the block can slide. */
-  | { kind: "dragging"; id: number; block: Block; grab: Point; lo: number; hi: number; at: number; cell: number; against: boolean }
+  | { kind: "dragging"; id: number; block: Block; grab: Point; lo: number; hi: number; at: number; against: boolean }
   /** Dragging sideways on the density block. */
   | { kind: "adjusting"; id: number; ui: Ui; start: Point; dx: number }
   | { kind: "pinching"; ids: [number, number]; from: [Point, Point]; start: Camera };
@@ -71,9 +71,9 @@ export class Gestures {
       onPanAfterPush?: (ms: number) => void;
       /** How the move about to be recorded was made (just before onChange). */
       onInput?: (input: Input) => void;
-      /** A block pressed, a drag let go, a dragged block over a new cell (`cell`: which) or
-       * against another, a tap's push, a stuck block tried: for their sounds. */
-      onSound?: (sound: Sound, cell?: number) => void;
+      /** A block pressed, a drag let go, a dragged block against another, a tap's push, a
+       * stuck block tried: for their sounds. */
+      onSound?: (sound: Sound) => void;
       /** A dropped red block slides on into its target (to animate it): from where it was
        * dropped to the target. Just before the move is recorded. */
       onSnap?: (slide: Move) => void;
@@ -94,7 +94,7 @@ export class Gestures {
 
   private readonly onSnap: (slide: Move) => void;
   private readonly onInput: (input: Input) => void;
-  private readonly onSound: (sound: Sound, cell?: number) => void;
+  private readonly onSound: (sound: Sound) => void;
   private readonly onPanAfterPush: (ms: number) => void;
   private readonly now: () => number;
 
@@ -145,7 +145,7 @@ export class Gestures {
           this.mode = { kind: "panning", id, last: mode.start };
           this.panStarted();
         } else {
-          this.mode = { kind: "dragging", id, block: mode.block, grab: this.lattice(mode.start), lo, hi, at: mode.at, cell: mode.block.w > mode.block.h ? mode.block.x : mode.block.y, against: false };
+          this.mode = { kind: "dragging", id, block: mode.block, grab: this.lattice(mode.start), lo, hi, at: mode.at, against: false };
         }
       }
     }
@@ -209,11 +209,6 @@ export class Gestures {
       const against = want > hi + 0.02 || want < lo - 0.02;
       if (against && !mode.against) this.onSound("bump");
       mode.against = against;
-      const cell = Math.round(block.w > block.h ? this.scene.dragging.x : this.scene.dragging.y);
-      if (cell !== mode.cell) {
-        mode.cell = cell;
-        this.onSound("tick", cell);
-      }
     } else if (mode.kind === "adjusting" && mode.id === id) {
       mode.dx = at.x - mode.start.x;
       this.onAdjust(mode.ui, mode.dx, false);

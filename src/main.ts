@@ -559,7 +559,7 @@ const gestures = new Gestures(scene, {
     pushed(move);
   },
   onInput: (how) => (input = how),
-  onSound: (sound, cell = 0) => sfx.play(sound, performance.now(), cell),
+  onSound: (sound) => sfx.play(sound, performance.now()),
   onSnap: (slide) => animate(slide),
   onPanAfterPush: (ms) => log({ e: "panAfterPush", ms }),
   onStuck: (id) => {

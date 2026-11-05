@@ -66,7 +66,7 @@ export function listen(w: typeof window_): void {
   window_ = w;
 }
 
-export type Sound = "thud" | "glitch" | "heartbeat" | "riser" | "zap" | "stamp" | "beat" | "chime" | "fall" | "drumroll" | "boom" | "confetti" | "fanfare" | "cheer" | "firework" | "whoosh" | "land" | "jingle" | "twinkle" | "incoming" | "soul" | "press" | "release" | "tick" | "push" | "bump" | "stuck";
+export type Sound = "thud" | "glitch" | "heartbeat" | "riser" | "zap" | "stamp" | "beat" | "chime" | "fall" | "drumroll" | "boom" | "confetti" | "fanfare" | "cheer" | "firework" | "whoosh" | "land" | "jingle" | "twinkle" | "incoming" | "soul" | "press" | "release" | "push" | "bump" | "stuck";
 
 /** Play `sound` (the moment it belongs to is `at`; `n` picks a variant, e.g. which star). */
 export function play(sound: Sound, at: number, n = 0): void {
@@ -253,18 +253,14 @@ const SOUNDS: Record<Sound, Make> = {
     for (let i = 0; i < 12; i++) noise(a, out, b + 0.15 + Math.random() * 0.7, 0.03, 0.12, "highpass", 4000, 6000, 0.002);
   },
   // Moving blocks: small and quiet, as they come often. A soft click when a block is pressed,
-  // a lower one when a drag lets go, a tiny clean blip per cell it crosses (`n`: the cell,
-  // for a little pitch; a square wave's buzz sounded like chewing), a short swish for a
-  // tap's push, a soft knock when a block runs into another, and a low double buzz for one
-  // that can't move.
+  // a lower one when a drag lets go, a short swish for a tap's push, a soft knock when a
+  // block runs into another, and a low double buzz for one that can't move. (A tick per cell
+  // a dragged block crossed was too much, buzzy or clean.)
   press(a, out, t) {
     tone(a, out, t, 900, 650, 0.035, 0.05, "triangle", 0.002);
   },
   release(a, out, t) {
     tone(a, out, t, 520, 380, 0.05, 0.06, "triangle", 0.002);
-  },
-  tick(a, out, t, n) {
-    tone(a, out, t, note(1568, ((n % 3) + 3) % 3), note(1568, ((n % 3) + 3) % 3), 0.03, 0.018, "sine", 0.003);
   },
   bump(a, out, t) {
     tone(a, out, t, 190, 120, 0.07, 0.09, "sine", 0.002);
