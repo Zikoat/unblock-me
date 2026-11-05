@@ -8,7 +8,7 @@ import { finishCues, finishParts, SOUL, timeWarp } from "./finish-fx";
 import { moreCues, moreParts, warmUp } from "./finish-fx2";
 import * as sfx from "./sfx";
 import { timedFrame } from "./perf";
-import { bestKnown, medal, rampCap, shownUsed, viewCentre, type Goal } from "./goal";
+import { bestKnown, medal, rampTarget, shownUsed, viewCentre, type Goal } from "./goal";
 import type { GoalRequest } from "./goal-worker";
 import { Gestures, type Input } from "./gestures";
 import { ISLAND_LEVELS } from "./island-levels";
@@ -262,13 +262,11 @@ function requestGoal(near: Point = viewCentre(scene.camera, scene.width, scene.h
     showGoal(ahead.ready.goal);
     return;
   }
-  const request: GoalRequest = { job: ++job, seed, tries, ui: shownUi, placed, near, moved: [...scene.moved], level: 0, exclude, avoid: targetsOf(scene.done), cap: capFor(worldGoals()) };
+  const request: GoalRequest = { job: ++job, seed, tries, ui: shownUi, placed, near, moved: [...scene.moved], level: 0, exclude, avoid: targetsOf(scene.done), target: rampTarget(worldGoals()) };
   worker.postMessage(request);
 }
 /** How many world goals (off the island) were reached: the next one's place on the ramp. */
 const worldGoals = () => scene.done.filter((g) => squareOf(g) === null).length;
-/** The ramp's cap for the world goal after `n` others (none past it: JSON has no Infinity). */
-const capFor = (n: number) => (Number.isFinite(rampCap(n)) ? rampCap(n) : undefined);
 type Measured = { of: { id: string; target: Point }; difficulty: Difficulty; choices?: number };
 type Reply = { job: number; goal: Goal | null } | ({ job: number } & Measured);
 worker.onmessage = (event: MessageEvent<Reply>) => {
@@ -361,7 +359,7 @@ function prefetchFirst(): void {
   while (inIsland(near)) near = { x: near.x + 1, y: near.y };
   const exclude = all.map((g) => g.id);
   ahead.asked = boardKey(worldMoved(moved), exclude, near);
-  const request: GoalRequest = { job: ++ahead.job, seed, tries, ui: shownUi, placed, near, moved: [...moved], level: 3, exclude, avoid: targetsOf(all), cap: capFor(0) };
+  const request: GoalRequest = { job: ++ahead.job, seed, tries, ui: shownUi, placed, near, moved: [...moved], level: 3, exclude, avoid: targetsOf(all), target: rampTarget(0) };
   ahead.worker.postMessage(request);
 }
 function lookAhead(): void {
@@ -379,7 +377,7 @@ function lookAhead(): void {
   const key = boardKey(moved, exclude, goal.target);
   if (key === ahead.asked || ahead.ready?.key === key) return;
   ahead.asked = key;
-  const request: GoalRequest = { job: ++ahead.job, seed, tries, ui: shownUi, placed, near: goal.target, moved: [...moved], level: 2, exclude, avoid: targetsOf([...scene.done, goal]), cap: capFor(worldGoals() + 1) };
+  const request: GoalRequest = { job: ++ahead.job, seed, tries, ui: shownUi, placed, near: goal.target, moved: [...moved], level: 2, exclude, avoid: targetsOf([...scene.done, goal]), target: rampTarget(worldGoals() + 1) };
   ahead.worker.postMessage(request);
 }
 ahead.worker.onmessage = (event: MessageEvent<Reply>) => {
@@ -820,12 +818,12 @@ const builtAt = parseInt(__BUILD_ID__, 36);
 const frames: number[] = [];
 function showFps(now: number): void {
   while (frames.length && frames[0]! <= now - 1000) frames.shift();
-  // And the world's goals solved, and the ramp's cap on the goal being played (or next).
-  const cap = capFor(worldGoals());
+  // And the world's goals solved, and the ramp's target for the goal being played (or next).
+  const target = rampTarget(worldGoals());
   fps.textContent = [
     `${frames.length} fps · ${ago(Date.now() - builtAt)} · ${__COMMIT__}`,
     `World goals solved: ${worldGoals()}`,
-    `Ramp limit: ${cap === undefined ? "none" : `${cap} fewest moves`}`,
+    `Ramp target: ${target === undefined ? "none" : `${target} fewest moves`}`,
   ].join("\n");
 }
 setInterval(() => showFps(performance.now()), 500);

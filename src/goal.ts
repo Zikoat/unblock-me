@@ -51,13 +51,14 @@ export type GoalOptions = {
   avoid?: readonly Rect[];
 };
 
-/** The fewest moves a world goal may take, by how many came before it (`n`, from 0 after
- * the island): from RAMP_FROM, rising evenly over RAMP goals to about what the uncapped
- * search gives at most, then no cap (reports/world-ramp.html: before the ramp the first
- * world goals took 11-14 fewest moves at the median, up to 23, from the very first). */
-export const RAMP = 30, RAMP_FROM = 8, RAMP_TO = 20;
-export function rampCap(n: number): number {
-  return n >= RAMP ? Infinity : Math.round(RAMP_FROM + ((RAMP_TO - RAMP_FROM) * n) / RAMP);
+/** The fewest moves a world goal aims at, by how many came before it (`n`, from 0 after the
+ * island): from RAMP_FROM, rising evenly over RAMP goals to what the search gives at the
+ * median without one, then none (reports/world-ramp.html: without it the world's goals
+ * took about 10 fewest moves at the median from the very first, spikes over 20; a cap
+ * instead, 8 rising to 20, trimmed the spikes but hardly moved the median). */
+export const RAMP = 30, RAMP_FROM = 6, RAMP_TO = 10;
+export function rampTarget(n: number): number | undefined {
+  return n >= RAMP ? undefined : Math.round(RAMP_FROM + ((RAMP_TO - RAMP_FROM) * n) / RAMP);
 }
 
 /** One drag can move a block several cells: merge back-to-back moves of the same block. */
