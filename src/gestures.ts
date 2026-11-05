@@ -72,7 +72,7 @@ export class Gestures {
       /** How the move about to be recorded was made (just before onChange). */
       onInput?: (input: Input) => void;
       /** A block pressed, a drag let go, a dragged block against another, a tap's push, a
-       * stuck block tried: for their sounds. */
+       * stuck block tried, a zoom held at its limit: for their sounds. */
       onSound?: (sound: Sound) => void;
       /** A dropped red block slides on into its target (to animate it): from where it was
        * dropped to the target. Just before the move is recorded. */
@@ -185,7 +185,19 @@ export class Gestures {
 
   wheel(at: Point, deltaY: number): void {
     if (this.scene.locked) return;
-    this.scene.camera = zoomAt(this.scene.camera, at, Math.exp(-deltaY * 0.002), limits(this.scene));
+    const factor = Math.exp(-deltaY * 0.002);
+    this.zoomLimit(this.scene.camera.scale * factor);
+    this.scene.camera = zoomAt(this.scene.camera, at, factor, limits(this.scene));
+  }
+
+  /** A zoom asked for `wanted` and got held at the furthest in or out: one knock, until it
+   * comes off the limit again. */
+  private atZoomLimit = false;
+  private zoomLimit(wanted: number): void {
+    const { min, max } = limits(this.scene);
+    const at = wanted > max * 1.001 || wanted < min * 0.999;
+    if (at && !this.atZoomLimit) this.onSound("bump");
+    this.atZoomLimit = at;
   }
 
   private lattice(screen: Point): Point {
@@ -214,7 +226,9 @@ export class Gestures {
       this.onAdjust(mode.ui, mode.dx, false);
     } else if (mode.kind === "pinching" && mode.ids.includes(id)) {
       const now = mode.ids.map((p) => this.pointers.get(p)!) as [Point, Point];
-      if (!this.scene.locked) this.scene.camera = pinch(mode.start, mode.from, now, limits(this.scene));
+      if (this.scene.locked) return;
+      this.zoomLimit(mode.start.scale * (Math.hypot(now[0].x - now[1].x, now[0].y - now[1].y) / Math.max(1, Math.hypot(mode.from[0].x - mode.from[1].x, mode.from[0].y - mode.from[1].y))));
+      this.scene.camera = pinch(mode.start, mode.from, now, limits(this.scene));
     }
   }
 
