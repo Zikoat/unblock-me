@@ -12,21 +12,21 @@ import { bestKnown, medal, shownUsed, viewCentre, type Goal } from "./goal";
 import type { GoalRequest } from "./goal-worker";
 import { Gestures, type Input } from "./gestures";
 import { ISLAND_LEVELS } from "./island-levels";
-import { bayReached, inIsland, isLast, islandCamera, islandRects, nextIslandGoal, squareAt, squareMiddle, squareOf } from "./island";
+import { bayReached, GATE, GATE_GONE, inIsland, opensGate, isLast, islandCamera, islandRects, nextIslandGoal, squareAt, squareMiddle, squareOf } from "./island";
 import { fixedLayout, MAX_TRIES, MIN_TRIES, randomLayout, TRIES, UNIT, type Placed, type Ui } from "./layout";
 import { CARD, CUE_MS, draw, fading, islandCardRect, resetFades, RIPPLE_MS, SHAKE_MS, THROB_MS, redArrow, uiArrow, type Sparkle } from "./render";
 import { ease, slideDuration } from "./slide";
 import { blockAt, blocksIn, slideRange, type Move } from "./rules";
 import { borderOnScreen, goalSolved, latticeRect, newScene, quickPush, record, relayout, resize, restart, undo, visibleBlocks, whereIs } from "./scene";
 
-// v12: bay goals first, a few squares with goals inside later; v11 teaching squares first, of several sizes; v10 varied island squares; v9 a slower island ramp; v8 harder island squares (their
+// v13: several goals in every square from level 7, the last one with its exit shut, the island reordered; v12 bay goals first, a few squares with goals inside later; v11 teaching squares first, of several sizes; v10 varied island squares; v9 a slower island ramp; v8 harder island squares (their
 // blocks' stored places no longer fit, each time); v7 the island (everyone starts on it); v6
 // UI blocks in a game row and a debug row (generation changed); v5 two rows of UI blocks, v4
 // one row, v3 one 2x2 reset block, v2 no seed, v1 free positions.
-const SEED_KEY = "unblock-me:v12:seed";
-const MOVED_KEY = "unblock-me:v12:moved";
-const HISTORY_KEY = "unblock-me:v12:history";
-const GOAL_KEY = "unblock-me:v12:goal";
+const SEED_KEY = "unblock-me:v13:seed";
+const MOVED_KEY = "unblock-me:v13:moved";
+const HISTORY_KEY = "unblock-me:v13:history";
+const GOAL_KEY = "unblock-me:v13:goal";
 const BORDER_KEY = "unblock-me:border";
 const FPS_KEY = "unblock-me:fps"; // whether the fps counter shows
 const TRIES_KEY = "unblock-me:tries";
@@ -288,7 +288,10 @@ function showGoal(goal: Goal | null): void {
   scene.goal = goal;
   if (goal) {
     goal.tries = tries;
-    goal.begun = scene.history.length;
+    // (An island square's next goal counts from where the one before was reached: moves made
+    // while it sparkled are its.)
+    const before = squareOf(goal) === null ? undefined : scene.done.filter((d) => squareOf(d) === squareOf(goal)).at(-1);
+    goal.begun = before?.ended ?? scene.history.length;
     // A snapshot of the board, so the goal can be measured again later.
     log({ e: "goal", commit: __COMMIT__, id: goal.id, target: goal.target, start: goal.start, tries, seed, solution: goal.solution.length, moved: [...scene.moved].map(([id, p]) => [id, p.x, p.y]) });
   }
@@ -419,9 +422,11 @@ function reachGoal(now: number): void {
   if (!goal || !goalSolved(scene) || animation?.move.id === goal.id) return;
   // Done: its target plays the finish, and once the stars have gathered the next goal
   // starts from a block close to it.
-  // (An island square's last goal counts its moves from the square's first: it scores them all.)
-  const first = squareOf(goal) === null ? undefined : scene.done.find((d) => squareOf(d) === squareOf(goal));
-  goal.used = Math.max(1, movesSince((first ?? goal).begun ?? 0));
+  goal.ended = scene.history.length;
+  // The last square's goals inside done: the wall across its exit goes, the way out open.
+  if (GATE && opensGate(goal)) scene.moved.set(GATE.id, GATE_GONE);
+  // (An island square's last goal scores the moves of all its goals.)
+  goal.used = Math.max(1, goal.step || squareOf(goal) === null ? movesSince(goal.begun ?? 0) : squareMoves(squareOf(goal)!));
   logMoves();
   log({ e: "reached", id: goal.id, used: goal.used });
   scene.done.push(goal);
@@ -724,8 +729,7 @@ nextButton.addEventListener("click", () => {
 function islandHud(): { level: number; moves: number } {
   const g = scene.goal ?? scene.done.find((d) => d.id === finish?.id) ?? null;
   const k = squareOf(g) ?? 0;
-  const first = [...scene.done, scene.goal].find((d) => d && squareOf(d) === k);
-  return { level: k + 1, moves: first ? movesSince(first.begun ?? 0) : 0 };
+  return { level: k + 1, moves: squareMoves(k) };
 }
 
 /** While an island square is played its view is fixed (see islandCamera): set every frame,
@@ -736,7 +740,7 @@ function lockView(): void {
   // Getting there (not on a load that finds it there), the view glides slowly out over the
   // bay and the clearing past it as the island's surface fades.
   const at = k !== null && scene.goal ? whereIs(scene, scene.goal.id) : null;
-  if (k !== null && at && bayReached(k, at)) {
+  if (k !== null && at && bayReached(k, scene.goal!, at)) {
     if (scene.locked) {
       reveal = { born: performance.now(), rects: islandRects(k) };
       const t = scene.goal!.target, scale = Math.min(scene.camera.scale, scene.width / (10 * UNIT));
@@ -1012,10 +1016,15 @@ function note(text: string, ms = 2500): void {
 }
 /** Moves made since history had `begun` entries, where moving one block several times in a
  * row counts once (as in the fewest-moves count). */
-function movesSince(begun: number): number {
+function movesSince(begun: number, end = scene.history.length): number {
   let moves = 0;
-  for (let i = begun; i < scene.history.length; i++) if (i === begun || scene.history[i]!.id !== scene.history[i - 1]!.id) moves++;
+  for (let i = begun; i < end; i++) if (i === begun || scene.history[i]!.id !== scene.history[i - 1]!.id) moves++;
   return moves;
+}
+/** The moves made on island square `k` so far: each of its goals' own (a block moved again
+ * right after it reached its goal is a new move, for the next goal). */
+function squareMoves(k: number): number {
+  return [...scene.done, scene.goal].reduce((n, g) => (g && squareOf(g) === k ? n + movesSince(g.begun ?? 0, g.ended ?? scene.history.length) : n), 0);
 }
 /** A goal's numbers, over its red block or its target (the current goal or a reached one). */
 function goalTip(at: Point): string | null {

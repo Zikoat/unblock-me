@@ -26,6 +26,8 @@ export type Goal = {
    * many it took once reached. */
   begun?: number;
   used?: number;
+  /** How many had been made when it was reached. */
+  ended?: number;
   /** Whether a move was undone while it was the goal (no medal then). */
   undone?: boolean;
   /** An early island goal: no stars while it is played, and its finish is the full one
