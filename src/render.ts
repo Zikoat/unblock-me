@@ -498,8 +498,12 @@ export function draw(
 /** Where an island square's finish card sits on the screen (CSS px), in the middle of `view`
  * (the screen or the smaller border), for the next button too. */
 export function islandCardRect(view: Rect): Rect {
-  const w = Math.min(0.82 * view.width, 460), h = w / 2;
-  return { x: view.x + (view.width - w) / 2, y: view.y + (view.height - h) / 2 - 24, width: w, height: h };
+  // The title over it (about 0.14 of its width) and the button under it (NEXT px) fit too,
+  // all of it centred: on a short screen the card is smaller.
+  const NEXT = 28 + 52, title = 0.14, margin = 16;
+  const w = Math.max(80, Math.min(0.82 * view.width, 460, (view.height - NEXT - 2 * margin) / (title + 0.5))), h = w / 2;
+  const top = view.y + (view.height - (title * w + h + NEXT)) / 2;
+  return { x: view.x + (view.width - w) / 2, y: top + title * w, width: w, height: h };
 }
 
 /** The moves so far, over the island's surface at the top of the screen (the level is on

@@ -907,7 +907,8 @@ function paint(now: number, moving: ReturnType<typeof sliding>, to: HTMLCanvasEl
         hud: scene.locked ? islandHud() : null,
         surface: surface(now),
         // Out in the world, every square's; on one, its own (the rest are under the surface).
-        labels: !withIsland ? [] : scene.locked ? LABELS.filter((_, k) => k === islandHud().level - 1) : LABELS,
+        // (None while a finish card shows: it has the level.)
+        labels: !withIsland || finish?.island ? [] : scene.locked ? LABELS.filter((_, k) => k === islandHud().level - 1) : LABELS,
         now,
         detail: DETAIL[detailStep],
       }),
