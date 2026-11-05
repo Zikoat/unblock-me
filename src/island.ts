@@ -8,17 +8,21 @@ import type { Goal } from "./goal";
 import { ISLAND_LEVELS } from "./island-levels";
 import { UNIT, type Placed } from "./layout";
 
-/** A square's size inside its walls. Squares sit in rows, as near a square as their number
- * allows (the last row maybe part full), packed in one block of wall: a square's bay ends in
- * the next square's left wall, and rows share the wall between them. So a square's footprint
- * is 10 x 8 cells (wall, inside, exit and bay, wall), 9 x 7 apart. Each square's exit is on
- * its red block's row; the last square's bay is open to the world. */
+/** A square's size inside its walls. Squares sit in rows of COLS packed in one block of wall:
+ * a square's bay ends in the next square's left wall, and rows share the wall between them.
+ * So a square's footprint is 10 x 8 cells (wall, inside, exit and bay, wall), 9 x 7 apart;
+ * the last square's has no wall past its bay, which opens to the world. A part-full last row
+ * sits at the right, so the last square is always at the island's right edge. Each square's
+ * exit is on its red block's row. */
 export const SIDE = 6;
 const STEP = { x: SIDE + 3, y: SIDE + 1 };
-const COLS = Math.ceil(Math.sqrt(ISLAND_LEVELS.length));
+/** Squares per row: all of them, one strip (Math.ceil(Math.sqrt(n)) makes it squarish). */
+const COLS = ISLAND_LEVELS.length;
 /** The first square's top-left inside cell. */
 const ORIGIN = { x: 4, y: -3 };
 const LAST = ISLAND_LEVELS.length - 1;
+/** Whether square `k` is the last: its bay opens to the world. */
+export const isLast = (k: number) => k === LAST;
 /** How many of the first squares hide their stars (the score track while playing). */
 export const UNRATED = 3;
 
@@ -55,9 +59,13 @@ export function squareOf(goal: { id: string } | null): number | null {
 }
 
 /** Square `k`'s top-left inside cell. */
-export const squareAt = (k: number) => ({ x: ORIGIN.x + (k % COLS) * STEP.x, y: ORIGIN.y + Math.floor(k / COLS) * STEP.y });
-/** Square `k`'s footprint: it, its walls and its bay. */
-const footprint = (k: number): Rect => ({ x: squareAt(k).x - 1, y: squareAt(k).y - 1, width: SIDE + 4, height: SIDE + 2 });
+export const squareAt = (k: number) => {
+  const row = Math.floor(k / COLS), last = Math.floor(LAST / COLS);
+  const col = (k % COLS) + (row === last ? COLS - (LAST % COLS) - 1 : 0);
+  return { x: ORIGIN.x + col * STEP.x, y: ORIGIN.y + row * STEP.y };
+};
+/** Square `k`'s footprint: it, its walls and its bay (and the wall past it, but the last's). */
+const footprint = (k: number): Rect => ({ x: squareAt(k).x - 1, y: squareAt(k).y - 1, width: SIDE + (isLast(k) ? 3 : 4), height: SIDE + 2 });
 /** The island's cells: the squares' footprints (nothing random is generated there). */
 export const ISLAND_RECTS: Rect[] = ISLAND_LEVELS.map((_, k) => footprint(k));
 /** The last square's way out: its bay opens on a clearing in the world, a blocker across the
@@ -65,25 +73,24 @@ export const ISLAND_RECTS: Rect[] = ISLAND_LEVELS.map((_, k) => footprint(k));
  * the bay only reveals the world (see bayReached). */
 const exitRow = (k: number) => ISLAND_LEVELS[k]!.blocks[0]![1];
 const BLOCKER = { id: `isle ${LAST} blocker`, x: squareAt(LAST).x + SIDE + 3, y: squareAt(LAST).y + exitRow(LAST) - 1 };
-const CLEARING: Rect = { x: BLOCKER.x, y: BLOCKER.y - 1, width: 4, height: 5 };
+const CLEARING: Rect = { x: BLOCKER.x - 1, y: BLOCKER.y - 1, width: 5, height: 5 };
 /** Where nothing random is generated: the island and the clearing past its last bay. */
 export const ISLAND_KEEP_OUT: Rect[] = [...ISLAND_RECTS, CLEARING];
-/** Square `k`'s red block (at `at`) is in its bay: for the last square, the world shows. */
-export const bayReached = (k: number, at: { x: number }) => isLast(k) && at.x >= squareAt(k).x + SIDE;
+/** Square `k`'s red block (at `at`) has a cell in its bay: for the last square, the world
+ * shows. */
+export const bayReached = (k: number, at: { x: number }) => isLast(k) && at.x >= squareAt(k).x + SIDE - 1;
 export const inIsland = (p: { x: number; y: number }) => ISLAND_KEEP_OUT.some((r) => p.x >= r.x && p.x < r.x + r.width && p.y >= r.y && p.y < r.y + r.height);
-/** Whether square `k` is the last: its bay opens to the world. */
-export const isLast = (k: number) => k === LAST;
 /** A square's red block. */
 export const redId = (k: number) => `isle ${k} 0`;
 
 /** Everything on the island: wall wherever a footprint isn't a square's inside or its exit
- * and bay (the last square's bay open at its end), and the levels' blocks. */
+ * and bay, and the levels' blocks (and the last square's blocker past its bay). */
 export function islandBlocks(): Placed[] {
   const open = new Set<string>(), walls = new Set<string>();
   ISLAND_LEVELS.forEach((level, k) => {
     const o = squareAt(k), row = level.blocks[0]![1];
     for (let x = 0; x < SIDE; x++) for (let y = 0; y < SIDE; y++) open.add(`${o.x + x},${o.y + y}`);
-    for (let x = SIDE; x < SIDE + (isLast(k) ? 3 : 2); x++) open.add(`${o.x + x},${o.y + row}`);
+    for (let x = SIDE; x < SIDE + 2; x++) open.add(`${o.x + x},${o.y + row}`);
   });
   for (const r of ISLAND_RECTS) for (let x = r.x; x < r.x + r.width; x++) for (let y = r.y; y < r.y + r.height; y++) if (!open.has(`${x},${y}`)) walls.add(`${x},${y}`);
   const placed: Placed[] = [...walls].map((key) => {
@@ -119,7 +126,7 @@ export function islandGoal(k: number): Goal {
   const red = level.blocks[0]!;
   // The last square's target is past the clearing: after the bay, the blocker moves up out of
   // the row and the red block goes on (two more moves: the bay is only seen into first).
-  const target = isLast(k) ? { x: CLEARING.x + 2, y: o.y + red[1] } : { x: o.x + SIDE, y: o.y + red[1] };
+  const target = isLast(k) ? { x: BLOCKER.x + 2, y: o.y + red[1] } : { x: o.x + SIDE, y: o.y + red[1] };
   if (isLast(k)) {
     solution.push({ id: BLOCKER.id, from: { x: BLOCKER.x, y: BLOCKER.y }, to: { x: BLOCKER.x, y: BLOCKER.y - 1 } });
     solution.push({ id: redId(k), from: pos[0]!, to: target });

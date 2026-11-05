@@ -55,7 +55,7 @@ for (let k = 0; k < 9; k++) {
 }
 await page.screenshot({ path: `${out}/island-end.png` });
 // The whole island from afar, its squares numbered.
-await page.evaluate(() => { const s = 0.22; window.unblock.scene.camera = { scale: s, offsetX: 393 / 2 - 17 * 60 * s, offsetY: 700 / 2 - 6.5 * 60 * s }; window.unblock.redraw(); });
+await page.evaluate(() => { const s = 0.085; window.unblock.scene.camera = { scale: s, offsetX: 393 / 2 - 40 * 60 * s, offsetY: 700 / 2 - 0 * 60 * s }; window.unblock.redraw(); });
 await page.waitForTimeout(300);
 await page.screenshot({ path: `${out}/island-overview.png` });
 await b.close(); server.close();
