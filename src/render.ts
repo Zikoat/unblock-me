@@ -71,7 +71,7 @@ const throbScale = (t: number) => (t <= 0 || t >= 1 ? 1 : 1 + 0.15 * Math.sin(Ma
 export function draw(
   canvas: HTMLCanvasElement,
   scene: Scene,
-  { fullscreen, density, fps = true, sliding, sparkles = [], throb = null, cue = null, ripples = [], shake = null, pinThrob = null, used = 0, trace, finish = null, soul = null, detail = 1, now = 0, hud = null }: {
+  { fullscreen, density, fps = true, sliding, sparkles = [], throb = null, cue = null, ripples = [], shake = null, pinThrob = null, used = 0, trace, finish = null, soul = null, detail = 1, now = 0, hud = null, surface = null, labels = [] }: {
     fullscreen: boolean;
     density: number;
     /** Whether the fps counter is showing. */
@@ -100,6 +100,10 @@ export function draw(
     /** On an island square: its number, how many there are, and the moves so far (shown over
      * the surface at the top). */
     hud?: { level: number; of: number; moves: number } | null;
+    /** The island's surface fading out (`alpha`) round its last square (`rects`), once reached. */
+    surface?: { rects: Rect[]; alpha: number } | null;
+    /** Out in the world: the island squares' numbers, on their top walls (lattice units). */
+    labels?: { x: number; y: number; text: string }[];
     /** The last red block's soul flying to the new one (world px), and when it set off. */
     soul?: { from: { x: number; y: number; width: number; height: number }; toId: string; born: number } | null;
     /** How much of the finish's detail to draw (less when frames come late: main.ts). */
@@ -360,6 +364,14 @@ export function draw(
   }
 
   if (scene.locked) greyOutside(ctx, scene, scene.locked);
+  else if (surface) greyOutside(ctx, scene, surface.rects, surface.alpha);
+  if (labels.length) {
+    ctx.font = `800 ${UNIT * 0.55}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = COLORS.hud;
+    for (const l of labels) ctx.fillText(l.text, l.x * UNIT, l.y * UNIT + UNIT * 0.03);
+  }
   targets.forEach((t, i) => t.goal === goal && drawTarget(i));
 
   // Each target's score track, over the blocks: the current goal's as it is played, a
@@ -504,7 +516,7 @@ const easeOutCubic = (t: number) => 1 - (1 - t) ** 3;
  * colour: the view's area with a hole the shape of the square's inside and its bay (`rects`:
  * the square and bay with their walls), traced along the walls' inner edges and rounded like
  * them, so the walls are part of it with no seam. */
-function greyOutside(ctx: CanvasRenderingContext2D, scene: Scene, rects: Rect[]): void {
+function greyOutside(ctx: CanvasRenderingContext2D, scene: Scene, rects: Rect[], alpha = 1): void {
   const c = scene.camera;
   const view = { x: -c.offsetX / c.scale, y: -c.offsetY / c.scale, width: scene.width / c.scale, height: scene.height / c.scale };
   const [sq, bay] = rects as [Rect, Rect];
@@ -516,6 +528,7 @@ function greyOutside(ctx: CanvasRenderingContext2D, scene: Scene, rects: Rect[])
     .map(([x, y]) => [x! * UNIT, y! * UNIT] as const)
     .filter(([x, y], i, all) => x !== all[(i + 1) % all.length]![0] || y !== all[(i + 1) % all.length]![1]); // a bay on the top or bottom row
   ctx.save();
+  ctx.globalAlpha = alpha;
   ctx.fillStyle = COLORS.outside;
   ctx.beginPath();
   ctx.rect(view.x, view.y, view.width, view.height);

@@ -41,6 +41,10 @@ for (let k = 0; k < 9; k++) {
     await page.mouse.up();
     await page.waitForTimeout(150);
   }
+  if (k === 7) {
+    await page.waitForTimeout(900);
+    await page.screenshot({ path: `${out}/island-reveal.png` });
+  }
   // Its finish plays in a card; the next button cuts to the next square.
   await page.waitForSelector("#next:not([hidden])", { timeout: 20000 }).catch(() => console.log("no next button"));
   await page.waitForTimeout(1500);
@@ -48,4 +52,8 @@ for (let k = 0; k < 9; k++) {
   await page.click("#next").catch(() => {});
 }
 await page.screenshot({ path: `${out}/island-end.png` });
+// The whole island from afar, its squares numbered.
+await page.evaluate(() => { const s = 0.22; window.unblock.scene.camera = { scale: s, offsetX: 393 / 2 - 17 * 60 * s, offsetY: 700 / 2 - 6.5 * 60 * s }; window.unblock.redraw(); });
+await page.waitForTimeout(300);
+await page.screenshot({ path: `${out}/island-overview.png` });
 await b.close(); server.close();

@@ -12,7 +12,7 @@ import { bestKnown, medal, shownUsed, viewCentre, type Goal } from "./goal";
 import type { GoalRequest } from "./goal-worker";
 import { Gestures, type Input } from "./gestures";
 import { ISLAND_LEVELS } from "./island-levels";
-import { ISLAND_AREA, islandCamera, islandRects, nextIslandGoal, SIDE, squareAt, squareOf } from "./island";
+import { inIsland, isLast, islandCamera, islandRects, nextIslandGoal, SIDE, squareAt, squareOf } from "./island";
 import { fixedLayout, MAX_TRIES, MIN_TRIES, randomLayout, TRIES, UNIT, type Placed, type Ui } from "./layout";
 import { CUE_MS, draw, fading, islandCardRect, resetFades, RIPPLE_MS, SHAKE_MS, THROB_MS, redArrow, uiArrow, type Sparkle } from "./render";
 import { ease, slideDuration } from "./slide";
@@ -247,9 +247,9 @@ function requestGoal(near: Point = viewCentre(scene.camera, scene.width, scene.h
   // The island's squares come first, in turn.
   const square = withIsland ? nextIslandGoal(scene.done) : null;
   if (square) return showGoal(square);
-  // Past the last square, the world's first goal is made just beyond the island's edge (the
-  // search looks only round `near`, and no block there may be the red block).
-  if (near.x >= ISLAND_AREA.x && near.x < ISLAND_AREA.x + ISLAND_AREA.width && near.y >= ISLAND_AREA.y && near.y < ISLAND_AREA.y + ISLAND_AREA.height) near = { x: ISLAND_AREA.x + ISLAND_AREA.width + 2, y: near.y };
+  // Past the last square, the world's first goal is made just out of its open bay (the
+  // search looks only round `near`, and no island block may be the red block).
+  if (withIsland) while (inIsland(near)) near = { x: near.x + 1, y: near.y };
   const exclude = scene.done.map((g) => g.id);
   // Made already while the red block was one move away: no wait.
   const key = boardKey(scene.moved, exclude, near);
@@ -426,7 +426,13 @@ function reachGoal(now: number): void {
   const last = scene.history.at(-1);
   const dir = last?.id === goal.id ? { x: Math.sign(last.to.x - last.from.x), y: Math.sign(last.to.y - last.from.y) } : { x: 0, y: 0 };
   const times = finishTimes(bestKnown(goal) ?? goal.solution.length, shownUsed(goal)!);
-  const island = squareOf(goal) !== null;
+  // The island's last square ends as goals in the world do, its bay open to the world: the
+  // view glides slowly out to the bay as the island's surface fades, revealing the world.
+  const square = squareOf(goal), island = square !== null && !isLast(square);
+  if (square !== null && isLast(square)) {
+    reveal = { born: now, rects: islandRects(square) };
+    flyTo({ x: goal.target.x + 1, y: goal.target.y + 0.5 }, 0, REVEAL_MS);
+  }
   finish = { id: goal.id, born: now, end: timeWarp(times, times.medalAt !== null && !goal.undone).raw(times.end), next: goal.target, dir, heard: -1, island };
   if (island) return save();
   const red = scene.layout.byId(goal.id)!;
@@ -672,6 +678,19 @@ function restoreCamera(): void {
   }
 }
 
+// The island's last square reached: its surface fading out over REVEAL_MS (see reachGoal).
+const REVEAL_MS = 1800;
+let reveal: { born: number; rects: Rect[] } | null = null;
+/** The island's surface as it fades, or null. */
+function surface(now: number): { rects: Rect[]; alpha: number } | null {
+  if (!reveal) return null;
+  const alpha = 1 - (now - reveal.born) / REVEAL_MS;
+  if (alpha <= 0) return (reveal = null);
+  return { rects: reveal.rects, alpha };
+}
+/** Out in the world, each island square's number on its top wall. */
+const LABELS = ISLAND_LEVELS.map((_, k) => ({ x: squareAt(k).x + SIDE / 2, y: squareAt(k).y - 0.5, text: String(k + 1) }));
+
 // The island's next button: once a square's finish has shown its stars, it cuts straight to
 // the next square (no soul, no glide), or past the last one to the world.
 const nextButton = document.querySelector<HTMLButtonElement>("#next")!;
@@ -875,6 +894,8 @@ function paint(now: number, moving: ReturnType<typeof sliding>, to: HTMLCanvasEl
         soul,
         trace,
         hud: scene.locked ? islandHud() : null,
+        surface: surface(now),
+        labels: withIsland && !scene.locked ? LABELS : [],
         now,
         detail: DETAIL[detailStep],
       }),

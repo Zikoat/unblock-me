@@ -1,7 +1,7 @@
 // The island's squares: each level's solution is legal by the game's own rules and lands the
 // red block on its target; nothing random is generated inside the island.
 import { describe, expect, test } from "bun:test";
-import { ISLAND_AREA, islandGoal, nextIslandGoal, redId } from "../../src/island";
+import { ISLAND_AREA, ISLAND_RECTS, islandGoal, nextIslandGoal, redId } from "../../src/island";
 import { ISLAND_LEVELS } from "../../src/island-levels";
 import { intersects, randomLayout } from "../../src/layout";
 import { slideRange } from "../../src/rules";
@@ -29,11 +29,14 @@ describe("island", () => {
   test("the random blocks keep out of the island, and its goals come in turn", () => {
     for (const seed of [1, 2, 3]) {
       const blocks = randomLayout(seed, { island: true }).blocksIn(ISLAND_AREA);
-      expect(blocks.every((b) => b.wall || b.id.startsWith("isle "))).toBe(true);
+      // Random blocks fill up to the island's footprints (and the gap past a part-full last
+      // row), never into them.
+      expect(blocks.every((b) => b.wall || b.id.startsWith("isle ") || !ISLAND_RECTS.some((r) => intersects(b, r)))).toBe(true);
+      expect(blocks.some((b) => !b.wall && !b.id.startsWith("isle "))).toBe(true);
     }
     const done = [islandGoal(0), islandGoal(1)];
     expect(nextIslandGoal(done)?.id).toBe(redId(2));
     expect(nextIslandGoal(ISLAND_LEVELS.map((_, k) => islandGoal(k)))).toBeNull();
-    expect(intersects({ x: -1, y: 0, w: 3, h: 5 }, ISLAND_AREA)).toBe(false); // clear of the debug UI
+    expect(ISLAND_RECTS.some((r) => intersects({ x: -1, y: 0, w: 3, h: 5 }, r))).toBe(false); // clear of the debug UI
   });
 });

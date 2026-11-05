@@ -8,12 +8,17 @@ import type { Goal } from "./goal";
 import { ISLAND_LEVELS } from "./island-levels";
 import { UNIT, type Placed } from "./layout";
 
-/** A square's size inside its walls, and the distance from one square to the next (10 cells
- * of square and bay, a gap of 2). Each square's exit is on its red block's row. */
+/** A square's size inside its walls. Squares sit in rows, as near a square as their number
+ * allows (the last row maybe part full), packed in one block of wall: a square's bay ends in
+ * the next square's left wall, and rows share the wall between them. So a square's footprint
+ * is 10 x 8 cells (wall, inside, exit and bay, wall), 9 x 7 apart. Each square's exit is on
+ * its red block's row; the last square's bay is open to the world. */
 export const SIDE = 6;
-const STRIDE = 12;
+const STEP = { x: SIDE + 3, y: SIDE + 1 };
+const COLS = Math.ceil(Math.sqrt(ISLAND_LEVELS.length));
 /** The first square's top-left inside cell. */
 const ORIGIN = { x: 4, y: -3 };
+const LAST = ISLAND_LEVELS.length - 1;
 /** How many of the first squares hide their stars (the score track while playing). */
 export const UNRATED = 3;
 
@@ -43,34 +48,42 @@ export function squareOf(goal: { id: string } | null): number | null {
 }
 
 /** Square `k`'s top-left inside cell. */
-export const squareAt = (k: number) => ({ x: ORIGIN.x + k * STRIDE, y: ORIGIN.y });
+export const squareAt = (k: number) => ({ x: ORIGIN.x + (k % COLS) * STEP.x, y: ORIGIN.y + Math.floor(k / COLS) * STEP.y });
+/** Square `k`'s footprint: it, its walls and its bay. */
+const footprint = (k: number): Rect => ({ x: squareAt(k).x - 1, y: squareAt(k).y - 1, width: SIDE + 4, height: SIDE + 2 });
+/** The island's cells: the squares' footprints (nothing random is generated there). */
+export const ISLAND_RECTS: Rect[] = ISLAND_LEVELS.map((_, k) => footprint(k));
+export const inIsland = (p: { x: number; y: number }) => ISLAND_RECTS.some((r) => p.x >= r.x && p.x < r.x + r.width && p.y >= r.y && p.y < r.y + r.height);
+/** Whether square `k` is the last: its bay opens to the world. */
+export const isLast = (k: number) => k === LAST;
 /** A square's red block. */
 export const redId = (k: number) => `isle ${k} 0`;
 
-/** Everything on the island: walls round each square and its bay, and the level's blocks. */
+/** Everything on the island: wall wherever a footprint isn't a square's inside or its exit
+ * and bay (the last square's bay open at its end), and the levels' blocks. */
 export function islandBlocks(): Placed[] {
-  return ISLAND_LEVELS.flatMap((level, k) => {
+  const open = new Set<string>(), walls = new Set<string>();
+  ISLAND_LEVELS.forEach((level, k) => {
     const o = squareAt(k), row = level.blocks[0]![1];
-    const walls: Placed[] = [];
-    const wall = (x: number, y: number) => walls.push({ id: `wall ${o.x + x},${o.y + y}`, x: o.x + x, y: o.y + y, w: 1, h: 1, wall: true });
-    for (let i = -1; i <= SIDE; i++) {
-      wall(i, -1);
-      wall(i, SIDE);
-      if (i >= 0 && i < SIDE) wall(-1, i);
-      if (i >= 0 && i < SIDE && i !== row) wall(SIDE, i);
-    }
-    // The bay: walls above, below and at the end of the exit's two cells.
-    for (const x of [SIDE + 1, SIDE + 2]) (wall(x, row - 1), wall(x, row + 1));
-    wall(SIDE + 2, row);
-    const blocks = level.blocks.map(([x, y, h], i): Placed => ({ id: `isle ${k} ${i}`, x: o.x + x, y: o.y + y, w: h ? 2 : 1, h: h ? 1 : 2, island: true }));
-    return [...walls, ...blocks];
+    for (let x = 0; x < SIDE; x++) for (let y = 0; y < SIDE; y++) open.add(`${o.x + x},${o.y + y}`);
+    for (let x = SIDE; x < SIDE + (isLast(k) ? 3 : 2); x++) open.add(`${o.x + x},${o.y + row}`);
   });
+  for (const r of ISLAND_RECTS) for (let x = r.x; x < r.x + r.width; x++) for (let y = r.y; y < r.y + r.height; y++) if (!open.has(`${x},${y}`)) walls.add(`${x},${y}`);
+  const placed: Placed[] = [...walls].map((key) => {
+    const [x, y] = key.split(",").map(Number) as [number, number];
+    return { id: `wall ${key}`, x, y, w: 1, h: 1, wall: true };
+  });
+  ISLAND_LEVELS.forEach((level, k) => {
+    const o = squareAt(k);
+    level.blocks.forEach(([x, y, h], i) => placed.push({ id: `isle ${k} ${i}`, x: o.x + x, y: o.y + y, w: h ? 2 : 1, h: h ? 1 : 2, island: true }));
+  });
+  return placed;
 }
 
-/** The island's cells, and a free cell round it (kept clear of generated blocks). */
+/** The island's bounds. */
 export const ISLAND_AREA: Rect = (() => {
-  const first = squareAt(0), last = squareAt(ISLAND_LEVELS.length - 1);
-  return { x: first.x - 2, y: first.y - 2, width: last.x + SIDE + 4 - (first.x - 2), height: SIDE + 4 };
+  const x = Math.min(...ISLAND_RECTS.map((r) => r.x)), y = Math.min(...ISLAND_RECTS.map((r) => r.y));
+  return { x, y, width: Math.max(...ISLAND_RECTS.map((r) => r.x + r.width)) - x, height: Math.max(...ISLAND_RECTS.map((r) => r.y + r.height)) - y };
 })();
 
 const known = (moves: number): Difficulty => ({ moves, atLeast: moves, searched: 0, branching: 2, score: moves });

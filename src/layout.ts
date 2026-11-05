@@ -1,5 +1,5 @@
 import type { Rect } from "./camera";
-import { ISLAND_AREA, islandBlocks } from "./island";
+import { ISLAND_RECTS, islandBlocks } from "./island";
 
 /** A 1x1 control on the board: it never slides, a tap runs it. */
 export type Ui = "home" | "reset" | "fullscreen" | "reports" | "density" | "border" | "upload" | "fps" | "testbed";
@@ -107,7 +107,7 @@ function chunkSeed(seed: number, cx: number, cy: number): number {
 export function randomLayout(seed: number, { tries = TRIES, ...shown }: { tries?: number } & UiShown = {}): Layout {
   // The UI blocks and the island are fixed; the random blocks keep out of their areas.
   const ui = [...uiBlocks(shown), ...(shown.island ? islandBlocks() : [])].map((p) => toBlock(p, p.id!));
-  const area = uiArea(shown), island = shown.island ? ISLAND_AREA : null;
+  const area = uiArea(shown), island = shown.island ? ISLAND_RECTS : [];
   const cache = new Map<string, Block[]>();
 
   function chunk(cx: number, cy: number): Block[] {
@@ -125,7 +125,7 @@ export function randomLayout(seed: number, { tries = TRIES, ...shown }: { tries?
       const y = cy * CHUNK + Math.floor(next() * (CHUNK - h + 1));
       const cells = horizontal ? [`${x},${y}`, `${x + 1},${y}`] : [`${x},${y}`, `${x},${y + 1}`];
       const candidate = toBlock({ x, y, w, h }, `${cx},${cy},${i}`);
-      if (cells.some((c) => taken.has(c)) || (area && intersects(candidate, area)) || (island && intersects(candidate, island))) continue;
+      if (cells.some((c) => taken.has(c)) || (area && intersects(candidate, area)) || island.some((r) => intersects(candidate, r))) continue;
       cells.forEach((c) => taken.add(c));
       blocks.push(candidate);
     }
