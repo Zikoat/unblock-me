@@ -63,7 +63,7 @@ const html = `<!doctype html>
 <h2>What it shows</h2>
 <ul>
   <li>Without the ramp the world is flat from its first goal: about 10 fewest moves at the median, spikes over 20, right after the island's last square (15).</li>
-  <li>With it the goals follow the target closely: 6 at first, 10 by goal 30, nearly every goal within a move of it, the red block nearer its target too (4-8 cells at the median, against 5-10).</li>
+  <li>With it the goals follow the target closely: 4 at first, 10 by goal 30, nearly every goal within a move or two of it.</li>
   <li>Past goal 30 (no target) both are alike, as they should be: varied again, 4 to over 20.</li>
   <li>An earlier try capped the fewest moves instead (8 rising to 20): it trimmed the spikes but hardly moved the median (8 for goals 1-10, about 10 by goal 30), as the search seldom picks a goal near the cap.</li>
   <li>The game's quick measure agrees with the long one as tuned: the long one found fewer moves than the goal's proof for 4-7% of goals, 0.1-0.2 moves on average.</li>

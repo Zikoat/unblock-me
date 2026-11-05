@@ -56,7 +56,7 @@ export type GoalOptions = {
  * median without one, then none (reports/world-ramp.html: without it the world's goals
  * took about 10 fewest moves at the median from the very first, spikes over 20; a cap
  * instead, 8 rising to 20, trimmed the spikes but hardly moved the median). */
-export const RAMP = 30, RAMP_FROM = 6, RAMP_TO = 10;
+export const RAMP = 30, RAMP_FROM = 4, RAMP_TO = 10;
 export function rampTarget(n: number): number | undefined {
   return n >= RAMP ? undefined : Math.round(RAMP_FROM + ((RAMP_TO - RAMP_FROM) * n) / RAMP);
 }
