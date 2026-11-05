@@ -18,8 +18,8 @@
   #view { position: fixed; pointer-events: none; }
   #view > * { pointer-events: auto; }
   /* Turns a little every frame, so frames keep coming and the fps counter shows the real rate. */
-  #spin { position: absolute; top: 7px; left: 9px; width: 7px; height: 7px; border-radius: 1.5px; background: #b9b6ad; pointer-events: none !important; }
-  #fps { position: absolute; top: 6px; left: 22px; font: 11px/1 ui-monospace, monospace; color: #8a877e; pointer-events: none !important; }
+  #spin { position: absolute; top: 15px; left: 6px; width: 8px; height: 8px; border-radius: 2px; background: #b9b6ad; pointer-events: none !important; }
+  #fps { position: absolute; top: 6px; left: 20px; padding: 6px 10px; border-radius: 8px; background: rgba(29, 29, 31, 0.82); color: #f3f2ee; font: 13px/1.5 ui-monospace, monospace; white-space: pre; pointer-events: none !important; }
   #tip { position: fixed; display: none; white-space: pre-line; max-width: 260px; padding: 7px 10px; border-radius: 8px; background: #1d1d1f; color: #f3f2ee; font: 13px/1.4 system-ui, sans-serif; pointer-events: none; box-shadow: 0 4px 14px rgba(0,0,0,.18); z-index: 2; }
   /* The island's next button, under its finish card (main.ts sets its top). */
   #next { position: absolute; left: 50%; transform: translateX(-50%); padding: 0.8em 1.7em; border: 0; border-radius: 999px; background: #f2b632; color: #fff; font: 800 18px/1 system-ui, -apple-system, "Segoe UI", sans-serif; box-shadow: 0 4px 16px rgba(0,0,0,.3); cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }

@@ -820,7 +820,13 @@ const builtAt = parseInt(__BUILD_ID__, 36);
 const frames: number[] = [];
 function showFps(now: number): void {
   while (frames.length && frames[0]! <= now - 1000) frames.shift();
-  fps.textContent = `${frames.length} fps · ${ago(Date.now() - builtAt)} · ${__COMMIT__}`;
+  // And the world's goals solved, and the ramp's cap on the goal being played (or next).
+  const cap = capFor(worldGoals());
+  fps.textContent = [
+    `${frames.length} fps · ${ago(Date.now() - builtAt)} · ${__COMMIT__}`,
+    `World goals solved: ${worldGoals()}`,
+    `Ramp limit: ${cap === undefined ? "none" : `${cap} fewest moves`}`,
+  ].join("\n");
 }
 setInterval(() => showFps(performance.now()), 500);
 
