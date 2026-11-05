@@ -34,8 +34,13 @@ const FILL = 0.9;
  * stays out of it (and the same height free at the bottom, so it stays centred). */
 export const HUD_BAR = 44;
 /** How big (CSS px) a square's inside shows in `view` (the screen, or the smaller border when
- * that is on): FILL of its shorter side, or less when squarish, to leave the bar free. */
-export const islandSide = (view: Rect) => Math.min(FILL * Math.min(view.width, view.height), view.height - 2 * HUD_BAR);
+ * that is on): FILL of its shorter side, or less when squarish, to leave the bar free; but on
+ * a screen too short for the bar, half its shorter side (never nothing: a zero zoom made the
+ * view endless and drawing hung). */
+export const islandSide = (view: Rect) => {
+  const short = Math.max(1, Math.min(view.width, view.height));
+  return Math.max(Math.min(FILL * short, view.height - 2 * HUD_BAR), 0.5 * short);
+};
 
 /** The view while square `k` is played: its inside in the middle of `view`, islandSide big. */
 export function islandCamera(k: number, view: Rect): Camera {

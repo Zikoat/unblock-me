@@ -122,6 +122,9 @@ export function draw(
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.fillStyle = COLORS.background;
   ctx.fillRect(0, 0, width, height);
+  // A view with no size (a window shrunk to nothing) or a zoom that isn't a size: nothing to
+  // draw, and drawing would never end (the view's lattice would be endless).
+  if (!(camera.scale > 0) || !Number.isFinite(camera.scale) || width <= 0 || height <= 0) return;
 
   ctx.setTransform(dpr * camera.scale, 0, 0, dpr * camera.scale, dpr * camera.offsetX, dpr * camera.offsetY);
   // The finish's effects round the block (finish-fx.ts); its hits jolt the whole board.
@@ -501,7 +504,7 @@ export function islandCardRect(view: Rect): Rect {
   // The title over it (about 0.14 of its width) and the button under it (NEXT px) fit too,
   // all of it centred: on a short screen the card is smaller.
   const NEXT = 28 + 52, title = 0.14, margin = 16;
-  const w = Math.max(80, Math.min(0.82 * view.width, 460, (view.height - NEXT - 2 * margin) / (title + 0.5))), h = w / 2;
+  const w = Math.max(40, Math.min(0.82 * view.width, 460, (view.height - NEXT - 2 * margin) / (title + 0.5))), h = w / 2;
   const top = view.y + (view.height - (title * w + h + NEXT)) / 2;
   return { x: view.x + (view.width - w) / 2, y: top + title * w, width: w, height: h };
 }

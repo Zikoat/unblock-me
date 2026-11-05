@@ -697,7 +697,8 @@ function showNext(on: boolean): void {
   if (on) {
     const view = borderOnScreen(scene), r = islandCardRect(view);
     nextButton.textContent = nextIslandGoal(scene.done) ? "Next level" : "Continue";
-    nextButton.style.top = `${r.y + r.height + 28 - view.y}px`;
+    // (Kept on the screen when that is too short for the card and it together.)
+    nextButton.style.top = `${Math.max(0, Math.min(r.y + r.height + 28, view.y + view.height - 54) - view.y)}px`;
   }
   nextButton.hidden = !on;
 }
