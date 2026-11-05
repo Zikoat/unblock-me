@@ -1144,8 +1144,10 @@ const hitsArrow = (e: PointerEvent) => markerAt(e) !== null;
 // A tapped arrow throbs, then the view glides, so it is clear the arrow did it.
 let pinThrob: { pin: "red" | "ui"; born: number } | null = null;
 
+// Sound can start only from a touch, a click or a key (iPhones: one that ends), and starts
+// again after the page was in the background: every one tries.
+for (const type of ["pointerdown", "pointerup", "touchend", "click", "keydown"]) addEventListener(type, () => sfx.unlock(), { capture: true, passive: true });
 canvas.addEventListener("pointerdown", (e) => {
-  sfx.unlock(); // sound can start only from a touch
   if (inspector?.open) return; // the board is a replay while it is open
   if (finish?.island) return; // under an island square's finish card
   if (e.pointerType === "mouse" && e.button !== 0) return;

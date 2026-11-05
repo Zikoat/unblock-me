@@ -9,9 +9,15 @@ let master: GainNode | null = null;
  * animation inspector, playing: only the frames just played, not its replays from the start). */
 let window_: "all" | "none" | [number, number] = "all";
 
-/** Start sound (call from a touch or click). */
+/** Start sound (call from every touch, click and key: see main.ts). iPhones need more than
+ * other browsers: a context started or resumed only from a touch that ends (touchend or
+ * click, not pointerdown), a sound played in that touch, and resuming again after the page
+ * was in the background (its state is then "interrupted"). And their silent switch mutes
+ * Web Audio unless the page asks for playback, as a game's sound does. */
 export function unlock(): void {
   try {
+    const session = (navigator as unknown as { audioSession?: { type: string } }).audioSession;
+    if (session && session.type !== "playback") session.type = "playback";
     if (!ctx) {
       const AC = globalThis.AudioContext ?? (globalThis as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
       if (!AC) return;
@@ -20,7 +26,14 @@ export function unlock(): void {
       master.gain.value = 0.45;
       master.connect(ctx.destination);
     }
-    if (ctx.state === "suspended") void ctx.resume();
+    if (ctx.state !== "running") {
+      void ctx.resume().catch(() => {});
+      // A silent sample, played in the touch itself.
+      const source = ctx.createBufferSource();
+      source.buffer = ctx.createBuffer(1, 1, 22050);
+      source.connect(ctx.destination);
+      source.start(0);
+    }
   } catch {
     ctx = null; // no sound here
   }
