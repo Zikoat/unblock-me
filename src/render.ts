@@ -96,8 +96,8 @@ export function draw(
     used?: number;
     /** The goal just reached, and when: its score track plays the finish. An island square's
      * (`island`) plays in a card in the middle of the screen instead, with no effects round
-     * the block. */
-    finish?: { id: string; born: number; dir?: { x: number; y: number }; island?: boolean } | null;
+     * the block; a square's earlier goal's (`quiet`) has neither. */
+    finish?: { id: string; born: number; dir?: { x: number; y: number }; island?: boolean; quiet?: boolean } | null;
     /** On an island square: its number and the moves so far (shown over
      * the surface at the top). */
     hud?: { level: number; moves: number } | null;
@@ -128,7 +128,7 @@ export function draw(
 
   ctx.setTransform(dpr * camera.scale, 0, 0, dpr * camera.scale, dpr * camera.offsetX, dpr * camera.offsetY);
   // The finish's effects round the block (finish-fx.ts); its hits jolt the whole board.
-  const fx = finish?.island ? null : finishFx(scene, finish, now, worldRect(camera, { x: 0, y: 0, width, height }), camera.scale, detail);
+  const fx = finish?.island || finish?.quiet ? null : finishFx(scene, finish, now, worldRect(camera, { x: 0, y: 0, width, height }), camera.scale, detail);
   // The soul still on its way: the new red block shows as it was until it arrives.
   const soulK = soul ? now - soul.born : Infinity;
   if (fx) {
@@ -237,7 +237,7 @@ export function draw(
   const doneColor = (id: string) => {
     if (finish?.island && finish.id === id) return COLORS.goal; // an island square's stays red (its card goes gold)
     const g = finish?.id === id ? scene.done.find((d) => d.id === id) : null;
-    if (!g || g.used === undefined) return COLORS.done;
+    if (!g || g.used === undefined || g.step) return COLORS.done;
     const k = Math.max(0, Math.min(1, (finishClock(scene, finish, now)! - finishTimes(fewestOf(g), shownUsed(g)!).gather) / FINISH.GATHER_MS));
     return mix(COLORS.goal, COLORS.done, k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2);
   };
@@ -384,7 +384,7 @@ export function draw(
     for (const { goal: g, cells } of targets) {
       // (Not an island square's: the bar at the top has its moves.)
       if (g === goal && !g.unrated && !scene.locked) drawScoreTrack(ctx, trackRect(cells), fewestOf(g), used, { undone: g.undone });
-      else if (g.used !== undefined && !(finish?.island && finish.id === g.id)) drawScoreTrack(ctx, trackRect(cells), fewestOf(g), shownUsed(g)!, { t: finish?.id === g.id ? (finishClock(scene, finish, now) ?? Infinity) : Infinity, undone: g.undone, trace: finish?.id === g.id ? trace : undefined, detail });
+      else if (g.used !== undefined && !g.step && !(finish?.island && finish.id === g.id)) drawScoreTrack(ctx, trackRect(cells), fewestOf(g), shownUsed(g)!, { t: finish?.id === g.id ? (finishClock(scene, finish, now) ?? Infinity) : Infinity, undone: g.undone, trace: finish?.id === g.id ? trace : undefined, detail });
     }
   });
   timed(ctx, "sparkles", () => sparkles.forEach((s) => sparkle(ctx, s, now)));

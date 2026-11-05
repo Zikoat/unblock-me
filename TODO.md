@@ -15,7 +15,7 @@
 - Hovering a reached goal highlights the blocks its solution needed, and differently those moved without need; waits on you picking it.
 - Progress is lost when moving between browsers (Telegram's in-app one, phone, computer: separate storage); intended fix: on entry redirect to a URL with a temporary user id whose progress lives on the server, so the same link in another browser continues it, carried until a later login; waits on the server (and login).
 - A way to make goals hard without blocks on the red block's track (since the penalty, goals made ahead need about 11 fewest moves instead of 17, reports/blocks-on-track.html); waits on you picking it.
-- Island squares that teach one thing each (a half-way drag, a block on the goal, a yellow block off its goal), squares with several goals, other sizes; waits on you playing the first island.
+- Island squares that teach a half-way drag (a tap-push can't solve it; none turned up in a 5x5 search, a tap stops the red block on its target), and squares with several goals that are rated (the card scores only the last goal); waits on you playing the teaching squares.
 - Group picture puzzles in Telegram (your idea): a picture made of 2x1 blocks, scrambled by legal moves, solved together by a group, everyone seeing each other; waits on the multiplayer server and a Telegram mini app.
 
 ## User testing
@@ -23,7 +23,7 @@
 Notes from play tests (not AI generated): issues, observations and ideas, many without a clear solution yet. **Done** marks the fixed ones.
 
 ### Subject a
-- Needs a simple tutorial level that teaches how the game works without the huge map. **Started**: the island, 8 walled 6x6 squares (6 to 13 fewest moves, one more each; 1 to 13 was too easy at the start, 7 to 22 ramped too fast) before the generated world, stars hidden on the first 3.
+- Needs a simple tutorial level that teaches how the game works without the huge map. **Started**: the island before the generated world: two teaching squares (4x4 with 2 goals, 5x5 with 3: a block on the target, reached blocks in a later goal's way), then 8 walled 6x6 squares (6 to 13 fewest moves, one more each; 1 to 13 was too easy at the start, 7 to 22 ramped too fast), stars hidden on the first 3.
 - **Done**: tapping the gradient (way cue) did something; disabled.
 - **Done**: fullscreen didn't work in Telegram's browser.
 - **Done**: Telegram's browser slid left and up, making most things hard.

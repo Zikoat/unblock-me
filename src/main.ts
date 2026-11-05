@@ -12,21 +12,21 @@ import { bestKnown, medal, shownUsed, viewCentre, type Goal } from "./goal";
 import type { GoalRequest } from "./goal-worker";
 import { Gestures, type Input } from "./gestures";
 import { ISLAND_LEVELS } from "./island-levels";
-import { bayReached, inIsland, isLast, islandCamera, islandRects, nextIslandGoal, SIDE, squareAt, squareOf } from "./island";
+import { bayReached, inIsland, isLast, islandCamera, islandRects, nextIslandGoal, squareAt, squareMiddle, squareOf } from "./island";
 import { fixedLayout, MAX_TRIES, MIN_TRIES, randomLayout, TRIES, UNIT, type Placed, type Ui } from "./layout";
 import { CARD, CUE_MS, draw, fading, islandCardRect, resetFades, RIPPLE_MS, SHAKE_MS, THROB_MS, redArrow, uiArrow, type Sparkle } from "./render";
 import { ease, slideDuration } from "./slide";
 import { blockAt, blocksIn, slideRange, type Move } from "./rules";
 import { borderOnScreen, goalSolved, latticeRect, newScene, quickPush, record, relayout, resize, restart, undo, visibleBlocks, whereIs } from "./scene";
 
-// v10: varied island squares; v9 a slower island ramp; v8 harder island squares (their
+// v11: teaching squares first, of several sizes; v10 varied island squares; v9 a slower island ramp; v8 harder island squares (their
 // blocks' stored places no longer fit, each time); v7 the island (everyone starts on it); v6
 // UI blocks in a game row and a debug row (generation changed); v5 two rows of UI blocks, v4
 // one row, v3 one 2x2 reset block, v2 no seed, v1 free positions.
-const SEED_KEY = "unblock-me:v10:seed";
-const MOVED_KEY = "unblock-me:v10:moved";
-const HISTORY_KEY = "unblock-me:v10:history";
-const GOAL_KEY = "unblock-me:v10:goal";
+const SEED_KEY = "unblock-me:v11:seed";
+const MOVED_KEY = "unblock-me:v11:moved";
+const HISTORY_KEY = "unblock-me:v11:history";
+const GOAL_KEY = "unblock-me:v11:goal";
 const BORDER_KEY = "unblock-me:border";
 const FPS_KEY = "unblock-me:fps"; // whether the fps counter shows
 const TRIES_KEY = "unblock-me:tries";
@@ -299,7 +299,7 @@ function showGoal(goal: Goal | null): void {
     soul = { from: soulFrom, toId: goal.id, born: -1 };
     const k = squareOf(goal);
     if (k === null) flyTo({ x: at.x + red.w / 2, y: at.y + red.h / 2 }, 0, SOUL.TRAVEL_MS);
-    else flyTo({ x: squareAt(k).x + SIDE / 2, y: squareAt(k).y + SIDE / 2 }, 0, SOUL.TRAVEL_MS, islandCamera(k, borderOnScreen(scene)).scale);
+    else flyTo(squareMiddle(k), 0, SOUL.TRAVEL_MS, islandCamera(k, borderOnScreen(scene)).scale);
   }
   soulFrom = null;
   // The new red block throbs once; its clock starts at the first frame drawn (after the soul
@@ -405,8 +405,10 @@ let shake: { id: string; born: number } | null = null;
 // The goal just reached: its score track plays the finish (stars fill, the medal, the row).
 // The next goal shows once the stars have gathered (`next`: where it is made).
 // An island square's (`island`) plays in a card in the middle of the screen and waits there
-// for the next button; the view stays.
-let finish: { id: string; born: number; end: number; next: Point; dir: Point; heard: number; island?: boolean } | null = null;
+// for the next button; the view stays. A square's earlier goal's (`quiet`) only sparkles.
+let finish: { id: string; born: number; end: number; next: Point; dir: Point; heard: number; island?: boolean; quiet?: boolean } | null = null;
+/** How long a square's earlier goal sparkles before the next one's soul sets off. */
+const STEP_MS = 700;
 // Once the finish is over, the red block's soul flies from it (`soulFrom`, world px) to the
 // next red block, the view gliding along; the new block throbs once it arrives.
 type WorldRect = { x: number; y: number; width: number; height: number };
@@ -427,8 +429,9 @@ function reachGoal(now: number): void {
   const dir = last?.id === goal.id ? { x: Math.sign(last.to.x - last.from.x), y: Math.sign(last.to.y - last.from.y) } : { x: 0, y: 0 };
   const times = finishTimes(bestKnown(goal) ?? goal.solution.length, shownUsed(goal)!);
   // The island's last square ends as goals in the world do (its target is out there).
-  const square = squareOf(goal), island = square !== null && !isLast(square);
-  finish = { id: goal.id, born: now, end: timeWarp(times, times.medalAt !== null && !goal.undone).raw(times.end), next: goal.target, dir, heard: -1, island };
+  const square = squareOf(goal), island = square !== null && !isLast(square) && !goal.step;
+  finish = { id: goal.id, born: now, end: goal.step ? STEP_MS : timeWarp(times, times.medalAt !== null && !goal.undone).raw(times.end), next: goal.target, dir, heard: -1, island, quiet: goal.step };
+  if (goal.step) sfx.play("chime", now);
   if (island) {
     scene.hover = null; // the board rests under the finish card
     return save();
@@ -687,7 +690,7 @@ function surface(now: number): { rects: Rect[]; alpha: number } | null {
   return { rects: reveal.rects, alpha };
 }
 /** Each island square's level, on its top wall. */
-const LABELS = ISLAND_LEVELS.map((_, k) => ({ x: squareAt(k).x + SIDE / 2, y: squareAt(k).y - 0.5, text: `Level ${k + 1}` }));
+const LABELS = ISLAND_LEVELS.map((_, k) => ({ x: squareMiddle(k).x, y: squareAt(k).y - 0.5, text: `Level ${k + 1}` }));
 
 // The island's next button: once a square's finish has shown its stars, it cuts straight to
 // the next square (no soul, no glide), or past the last one to the world.
@@ -715,17 +718,18 @@ nextButton.addEventListener("click", () => {
   redraw();
 });
 /** The level and the moves so far on the island square being played (or just
- * finished), for the bar at the top. */
+ * finished), for the bar at the top: since its first goal. */
 function islandHud(): { level: number; moves: number } {
   const g = scene.goal ?? scene.done.find((d) => d.id === finish?.id) ?? null;
   const k = squareOf(g) ?? 0;
-  return { level: k + 1, moves: g?.used ?? (g ? movesSince(g.begun ?? 0) : 0) };
+  const first = [...scene.done, scene.goal].find((d) => d && squareOf(d) === k);
+  return { level: k + 1, moves: first ? movesSince(first.begun ?? 0) : 0 };
 }
 
 /** While an island square is played its view is fixed (see islandCamera): set every frame,
  * so a resize keeps it, except while the view glides there. */
 function lockView(): void {
-  let k = withIsland ? (squareOf(scene.goal) ?? (finish?.island ? squareOf(finish) : null)) : null;
+  let k = withIsland ? (squareOf(scene.goal) ?? (finish?.island || finish?.quiet ? squareOf(finish) : null)) : null;
   // The last square's red block in its bay: the world shows, the view free from then on.
   // Getting there (not on a load that finds it there), the view glides slowly out over the
   // bay and the clearing past it as the island's surface fades.
@@ -870,7 +874,7 @@ function advance(now: number): ReturnType<typeof sliding> {
       if (g && g.used !== undefined) {
         const times = finishTimes(bestKnown(g) ?? g.solution.length, shownUsed(g)!), medal = times.medalAt !== null && !g.undone;
         const t = timeWarp(times, medal).warp(now - finish.born);
-        for (const cue of [...finishCues({ times, medal }), ...(finish.island ? [] : moreCues({ times, medal }))]) if (cue.at > finish.heard && cue.at <= t) sfx.play(cue.sound, now, cue.n);
+        if (!finish.quiet) for (const cue of [...finishCues({ times, medal }), ...(finish.island ? [] : moreCues({ times, medal }))]) if (cue.at > finish.heard && cue.at <= t) sfx.play(cue.sound, now, cue.n);
         finish.heard = t;
       }
     }

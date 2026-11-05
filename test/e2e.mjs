@@ -189,7 +189,7 @@ const browser = await chromium.launch();
   check(await page.evaluate(() => unblock.scene.camera.offsetX === 170 && unblock.scene.camera.offsetY === 370 && unblock.scene.camera.scale === 1), "and the view centred");
   await page.evaluate(() => unblock.goalReady());
   const stored = await page.evaluate(() => Object.fromEntries(Object.keys(localStorage).sort().map((k) => [k, localStorage.getItem(k)])));
-  const { "unblock-me:v10:goal": storedGoal, "unblock-me:camera": storedCamera, "unblock-me:log": storedLog, "unblock-me:device": storedDevice, ...rest } = stored;
+  const { "unblock-me:v11:goal": storedGoal, "unblock-me:camera": storedCamera, "unblock-me:log": storedLog, "unblock-me:device": storedDevice, ...rest } = stored;
   check(/^[0-9a-f-]{36}$/.test(storedDevice), `the device id for automatic uploads survives the reset (${storedDevice})`);
   const kinds = JSON.parse(storedLog ?? "[]").map((e) => e.e);
   check(kinds.includes("move") && kinds.slice(-3).join() === "reset,load,goal", `the play log survives the reset, which it records, then the page load and the new goal (${kinds.join(",")})`);
@@ -200,9 +200,9 @@ const browser = await chromium.launch();
     "unblock-me:debug": "true",
     "unblock-me:fps": "false",
     "unblock-me:tries": "12",
-    "unblock-me:v10:history": "[]",
-    "unblock-me:v10:moved": "[]",
-    "unblock-me:v10:seed": String(seedAfter),
+    "unblock-me:v11:history": "[]",
+    "unblock-me:v11:moved": "[]",
+    "unblock-me:v11:seed": String(seedAfter),
   }), `storage holds only fresh defaults, and other pages' keys are left alone (${JSON.stringify(rest)})`);
   check(JSON.parse(storedGoal ?? "null")?.seed === seedAfter, "and a new goal for the new seed");
   await expectColor(page, cell(-0.85, 4.15), "reset", "the reset block is still in its place");
@@ -821,8 +821,8 @@ const browser = await chromium.launch();
   check((await page.evaluate(() => unblock.scene.camera.scale)) > 1.5, "wheel zooms in");
 }
 
-// --- The island: a fresh start opens on its first square; its goals come in turn, the
-// first unrated (no score track while it is played).
+// --- The island: a fresh start opens on its first square; its goals come in turn (the
+// first square's earlier one first), the first unrated (no score track while it is played).
 {
   const page = await browser.newPage({ viewport: { width: 393, height: 700 }, hasTouch: true });
   await page.goto(root);
@@ -830,14 +830,16 @@ const browser = await chromium.launch();
   await page.goto(root);
   await frame(page);
   const goal = await page.evaluate(() => unblock.scene.goal);
-  check(goal?.id === "isle 0 0" && goal.unrated === true, `a fresh start's goal is the island's first square, unrated (${goal?.id})`);
+  check(goal?.id === "isle 0 1" && goal.unrated === true && goal.step === true, `a fresh start's goal is the island's first square's earlier one, unrated (${goal?.id})`);
   const screen = (x, y) => page.evaluate(([x, y]) => { const c = unblock.scene.camera; return [x * 60 * c.scale + c.offsetX, y * 60 * c.scale + c.offsetY]; }, [x, y]);
   // Its view is fixed: the square's inside centred, 90% of the screen's width; the bay
   // outside the right wall is mostly out of view.
   const view = await page.evaluate(() => ({ ...unblock.scene.camera, locked: unblock.scene.locked }));
-  const [left] = await screen(goal.target.x - 6, 0), [right] = await screen(goal.target.x, 0);
-  check(view.locked && Math.abs(right - left - 0.9 * 393) < 1 && Math.abs((left + right) / 2 - 393 / 2) < 1, `the first square's inside is centred and fills 90% of the width (${left.toFixed(0)}..${right.toFixed(0)})`);
-  await expectColor(page, [393 / 2 - 2.5 * (0.9 * 393) / 6, 700 / 2 - 3.5 * (0.9 * 393) / 6], "wall", "its square is walled in (the top wall, left of its level)");
+  const walled = view.locked[0], side = walled.width - 2;
+  const [left] = await screen(walled.x + 1, 0), [right] = await screen(walled.x + 1 + side, 0);
+  check(side === 4 && Math.abs(right - left - 0.9 * 393) < 1 && Math.abs((left + right) / 2 - 393 / 2) < 1, `the first square's inside (4x4) is centred and fills 90% of the width (${left.toFixed(0)}..${right.toFixed(0)})`);
+  const cell = (0.9 * 393) / side;
+  await expectColor(page, [393 / 2 - (side / 2 - 0.5) * cell, 700 / 2 - (side / 2 + 0.5) * cell], "wall", "its square is walled in (the top wall, left of its level)");
   await page.mouse.move(100, 650); // the empty margin under the square
   await page.mouse.down();
   await page.mouse.move(300, 650, { steps: 8 });
@@ -850,16 +852,26 @@ const browser = await chromium.launch();
   await page.mouse.click(5, 650);
   check((await page.evaluate(() => unblock.scene.circle)) === null, "and a tap there does nothing");
   await page.screenshot({ path: shots + "island-first-square.png" });
-  // Its solution, dragged move by move, solves it; the red block's last drag stops a cell
-  // short of its target (out of view) and it slides on in.
-  for (const m of goal.solution) {
-    const b = await page.evaluate((id) => unblock.scene.layout.byId(id), m.id);
-    const short = m === goal.solution.at(-1) ? 1 : 0;
-    const from = await screen(m.from.x + b.w / 2, m.from.y + b.h / 2), to = await screen(m.to.x - short + b.w / 2, m.to.y + b.h / 2);
-    await page.mouse.move(...from);
-    await page.mouse.down();
-    await page.mouse.move(...to, { steps: 8 });
-    await page.mouse.up();
+  // Its goals' solutions, dragged move by move, solve them in turn, the next goal following
+  // in the same square; the red block's last drag stops a cell short of its target (out of
+  // view) and it slides on in.
+  let played = 0;
+  for (let g = goal; g && g.id.startsWith("isle 0 "); ) {
+    for (const m of g.solution) {
+      const b = await page.evaluate((id) => unblock.scene.layout.byId(id), m.id);
+      const short = !g.step && m === g.solution.at(-1) ? 1 : 0;
+      const from = await screen(m.from.x + b.w / 2, m.from.y + b.h / 2), to = await screen(m.to.x - short + b.w / 2, m.to.y + b.h / 2);
+      await page.mouse.move(...from);
+      await page.mouse.down();
+      await page.mouse.move(...to, { steps: 8 });
+      await page.mouse.up();
+      played++;
+    }
+    if (!g.step) break;
+    const id = g.id;
+    await page.waitForFunction((id) => unblock.scene.goal && unblock.scene.goal.id !== id, id, { timeout: 5000 }).catch(() => {});
+    g = await page.evaluate(() => unblock.scene.goal);
+    check(g?.id === "isle 0 0" && (await page.evaluate(() => unblock.scene.locked !== null)), `its earlier goal reached, the square's red block is next, the view still fixed (${g?.id})`);
   }
   // Its finish plays in a card in the middle, the view staying; then the next button cuts
   // to the next square.
@@ -868,8 +880,8 @@ const browser = await chromium.launch();
   check(shown && still.offsetX === view.offsetX && still.offsetY === view.offsetY, "once solved, its finish shows a next button, and the view stays");
   await page.screenshot({ path: shots + "island-finish.png" });
   await page.click("#next");
-  await page.waitForFunction(() => unblock.scene.goal?.id === "isle 1 0", null, { timeout: 20000 }).catch(() => {});
-  check((await page.evaluate(() => unblock.scene.goal?.id)) === "isle 1 0", `and the next square's goal follows at once (after dragging its ${goal.solution.length} solution moves)`);
+  await page.waitForFunction(() => unblock.scene.goal?.id === "isle 1 6", null, { timeout: 20000 }).catch(() => {});
+  check((await page.evaluate(() => unblock.scene.goal?.id)) === "isle 1 6", `and the next square's goal follows at once (after dragging its ${played} solution moves)`);
   await page.close();
 }
 
