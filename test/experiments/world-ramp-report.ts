@@ -3,12 +3,12 @@
 //   bun test/experiments/world-ramp-report.ts <dir> reports/world-ramp.html
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { RAMP, RAMP_FROM, RAMP_TO, rampCap } from "../../src/goal";
+import { RAMP, RAMP_FROM, RAMP_TO, rampTarget } from "../../src/goal";
 import { islandGoals, isLast, sideOf } from "../../src/island";
 import { ISLAND_LEVELS } from "../../src/island-levels";
 
 const [dir, out] = process.argv.slice(2);
-type Row = { n: number; distance: number; proof: number; quick: number | null; quickAtLeast: number; long: number | null; longAtLeast: number; longUpper: number | null; cap: number | null };
+type Row = { n: number; distance: number; proof: number; quick: number | null; quickAtLeast: number; long: number | null; longAtLeast: number; longUpper: number | null; target: number | null };
 const runs: { seed: number; mode: string; rows: Row[] }[] = [];
 // (From their logs, a row a line: a run stopped by its time limit still counts as far as it got.)
 for (const f of (await readdir(dir!)).filter((f) => /^(before|after)-\d+\.log$/.test(f)).sort()) {
@@ -24,15 +24,15 @@ const island = ISLAND_LEVELS.map((level, k) => {
   return { level: k + 1, side, goals: goals.length, fewest: level.fewest + (isLast(k) ? 2 : 0), each: goals.map((g) => g.solution.length), distance: side - red[0] + (isLast(k) ? 3 : 0) };
 });
 
-const data = { runs, island, ramp: { goals: RAMP, from: RAMP_FROM, to: RAMP_TO, caps: Array.from({ length: RAMP }, (_, n) => rampCap(n)) } };
+const data = { runs, island, ramp: { goals: RAMP, from: RAMP_FROM, to: RAMP_TO, targets: Array.from({ length: RAMP }, (_, n) => rampTarget(n)!) } };
 const date = new Date().toISOString().slice(0, 10);
 const html = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>World ramp</title>
 <meta name="date" content="${date}">
 <style>
-  :root { color-scheme: light dark; --bg: #f9f9f7; --card: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --line: #e1e0d9; --old: #8a8d91; --new: #d64545; --cap: #3a6fb0; }
-  @media (prefers-color-scheme: dark) { :root { --bg: #0d0d0d; --card: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --line: #2c2c2a; --old: #9a9da2; --new: #e86a6a; --cap: #7aa6e0; } }
+  :root { color-scheme: light dark; --bg: #f9f9f7; --card: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --line: #e1e0d9; --old: #8a8d91; --new: #d64545; --target: #3a6fb0; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0d0d0d; --card: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --line: #2c2c2a; --old: #9a9da2; --new: #e86a6a; --target: #7aa6e0; } }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 system-ui, sans-serif; }
   main { max-width: 900px; margin: 0 auto; padding: 24px 16px 56px; }
@@ -46,7 +46,7 @@ const html = `<!doctype html>
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; overflow-x: auto; }
   .legend { display: flex; flex-wrap: wrap; gap: 16px; font-size: 13px; color: var(--ink-2); margin-bottom: 6px; }
   .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
-  .legend i.dash { height: 0; border-top: 2px dashed var(--cap); border-radius: 0; vertical-align: 3px; }
+  .legend i.dash { height: 0; border-top: 2px dashed var(--target); border-radius: 0; vertical-align: 3px; }
   svg { display: block; width: 100%; height: auto; }
   svg text { fill: var(--ink-2); font-size: 11px; }
   table { border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
@@ -57,15 +57,16 @@ const html = `<!doctype html>
 </style></head><body><main>
 <a class="back" href="./">← All reports</a>
 <h1>World ramp</h1>
-<p class="sub">The island's squares, then the first 40 goals of the generated world, as a player who plays each goal's proof gets them: before the ramp (each goal the best the search finds near the last) and after it (the same, but at most a capped number of fewest moves, rising from ${RAMP_FROM} to ${RAMP_TO} over the first ${RAMP} goals, then no cap). Seeds: <span id="seeds"></span>.</p>
+<p class="sub">The island's squares, then the first 40 goals of the generated world, as a player who plays each goal's proof gets them: before the ramp (each goal the best the search finds near the last) and after it (the goals nearest a target number of fewest moves first, the target rising from ${RAMP_FROM} to ${RAMP_TO} over the first ${RAMP} goals; then none, as before). Seeds: <span id="seeds"></span>.</p>
 <div class="tiles" id="tiles"></div>
 
 <h2>What it shows</h2>
 <ul>
-  <li>Before the ramp the world is flat from its first goal: about 10 fewest moves at the median, spikes to over 20, right after the island's last square (15).</li>
-  <li>The cap trims the spikes early on, but the median rises little (8 for goals 1-10, about 10 by goal 30): the search ranks goals by difficulty for their distance, so it seldom picks one near the cap. It is a gentler start, not a climb.</li>
-  <li>Past goal 30 (no cap) both are alike, as they should be.</li>
-  <li>The game's quick measure is nearly always right: the long one found fewer moves than the goal's proof for 4-7% of goals, 0.1-0.2 moves on average.</li>
+  <li>Without the ramp the world is flat from its first goal: about 10 fewest moves at the median, spikes over 20, right after the island's last square (15).</li>
+  <li>With it the goals follow the target closely: 6 at first, 10 by goal 30, nearly every goal within a move of it, the red block nearer its target too (4-8 cells at the median, against 5-10).</li>
+  <li>Past goal 30 (no target) both are alike, as they should be: varied again, 4 to over 20.</li>
+  <li>An earlier try capped the fewest moves instead (8 rising to 20): it trimmed the spikes but hardly moved the median (8 for goals 1-10, about 10 by goal 30), as the search seldom picks a goal near the cap.</li>
+  <li>The game's quick measure agrees with the long one as tuned: the long one found fewer moves than the goal's proof for 4-7% of goals, 0.1-0.2 moves on average.</li>
 </ul>
 
 <h2>The island</h2>
@@ -74,7 +75,7 @@ const html = `<!doctype html>
 
 <h2>Fewest moves, goal by goal</h2>
 <p class="sub">The long measure's fewest moves (or its lower bound where it stopped) per goal after the island: the line is the median over the seeds, the band the lowest to highest.</p>
-<div class="card"><div class="legend"><span><i style="background:var(--old)"></i>Before</span><span><i style="background:var(--new)"></i>After</span><span><i class="dash"></i>Cap</span></div><svg id="fewest" role="img" aria-label="Fewest moves per goal, before and after the ramp"></svg></div>
+<div class="card"><div class="legend"><span><i style="background:var(--old)"></i>Before</span><span><i style="background:var(--new)"></i>After</span><span><i class="dash"></i>Target</span></div><svg id="fewest" role="img" aria-label="Fewest moves per goal, before and after the ramp"></svg></div>
 
 <h2>Distance to the target</h2>
 <p class="sub">Cells between the red block and its target when the goal is shown, median and range.</p>
@@ -117,10 +118,10 @@ $("tiles").innerHTML = tiles.map(([v, w]) => '<div class="tile"><div class="big"
 $("island").innerHTML = "<tr><th>Level</th><th>Size</th><th>Goals</th><th>Fewest (all goals)</th><th>Each goal's proof</th><th>Distance</th></tr>" +
   DATA.island.map((s) => "<tr><td>" + s.level + "</td><td>" + s.side + "×" + s.side + "</td><td>" + s.goals + "</td><td>" + s.fewest + "</td><td>" + s.each.join(" + ") + "</td><td>" + s.distance + "</td></tr>").join("");
 
-function chart(svg, f, cap) {
+function chart(svg, f, target) {
   const W = 860, H = 300, L = 36, R = 10, T = 10, B = 28;
   const series = modes.map((m) => per(m, f));
-  const top = Math.max(...series.flat(2), ...(cap ? DATA.ramp.caps : [])) + 1;
+  const top = Math.max(...series.flat(2), ...(target ? DATA.ramp.targets : [])) + 1;
   const x = (n) => L + (n / (goals - 1)) * (W - L - R), y = (v) => T + (1 - v / top) * (H - T - B);
   let s = "";
   for (let v = 0; v <= top; v += 5) s += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y(v) + '" y2="' + y(v) + '" stroke="var(--line)"/><text x="' + (L - 6) + '" y="' + (y(v) + 4) + '" text-anchor="end">' + v + "</text>";
@@ -134,7 +135,7 @@ function chart(svg, f, cap) {
     s += '<polyline points="' + line + '" fill="none" stroke="' + color + '" stroke-width="2"/>';
     v.forEach((a, n) => { if (a.length) s += '<circle cx="' + x(n) + '" cy="' + y(median(a)) + '" r="5" fill="' + color + '" opacity="0.001"><title>' + m + ", goal " + (n + 1) + ": median " + median(a) + ", " + Math.min(...a) + "–" + Math.max(...a) + " (" + a.length + " seeds)</title></circle>"; });
   });
-  if (cap) s += '<polyline points="' + DATA.ramp.caps.map((c, n) => x(n) + "," + y(c)).join(" ") + '" fill="none" stroke="var(--cap)" stroke-width="2" stroke-dasharray="5 4"/>';
+  if (target) s += '<polyline points="' + DATA.ramp.targets.map((c, n) => x(n) + "," + y(c)).join(" ") + '" fill="none" stroke="var(--target)" stroke-width="2" stroke-dasharray="5 4"/>';
   svg.setAttribute("viewBox", "0 0 " + W + " " + H);
   svg.innerHTML = s;
 }
@@ -150,8 +151,8 @@ $("measures").innerHTML = "<tr><th></th><th>Goals</th><th>Quick exact</th><th>Lo
   }).join("");
 
 const shown = (v, low) => (v ?? "≥" + low);
-$("all").innerHTML = "<tr><th>Run</th><th>Goal</th><th>Cap</th><th>Quick</th><th>Long</th><th>Proof</th><th>Distance</th></tr>" +
-  DATA.runs.flatMap((run) => run.rows.filter((r) => !r.none).map((r) => "<tr><td>" + run.mode + " " + run.seed + "</td><td>" + (r.n + 1) + "</td><td>" + (r.cap ?? "") + "</td><td>" + shown(r.quick, r.quickAtLeast) + "</td><td>" + shown(r.long, r.longAtLeast) + "</td><td>" + r.proof + "</td><td>" + r.distance + "</td></tr>")).join("");
+$("all").innerHTML = "<tr><th>Run</th><th>Goal</th><th>Target</th><th>Quick</th><th>Long</th><th>Proof</th><th>Distance</th></tr>" +
+  DATA.runs.flatMap((run) => run.rows.filter((r) => !r.none).map((r) => "<tr><td>" + run.mode + " " + run.seed + "</td><td>" + (r.n + 1) + "</td><td>" + (r.target ?? "") + "</td><td>" + shown(r.quick, r.quickAtLeast) + "</td><td>" + shown(r.long, r.longAtLeast) + "</td><td>" + r.proof + "</td><td>" + r.distance + "</td></tr>")).join("");
 </script>
 </main></body></html>
 `;

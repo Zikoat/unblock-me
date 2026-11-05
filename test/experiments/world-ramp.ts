@@ -3,12 +3,12 @@
 // (quick: its own measure, as shown), a long measure (more boards, a wider window), and the
 // red block's distance to its target. Run capped, one seed per process:
 //   scripts/capped.sh 2500 3000 bun test/experiments/world-ramp.ts <seed> <goals> <before|after> <out.json> [long limit 1M]
-// "before" ranks goals as the game did before the ramp (the hardest near the last); "after"
-// as it does now (src/goal.ts rampCap).
+// "before" ranks goals as the game did before the ramp (the best ranked near the last); "after"
+// as it does now (src/goal.ts rampTarget).
 import { Board } from "../../src/board";
 import type { Point, Rect } from "../../src/camera";
 import { measure } from "../../src/difficulty";
-import { rampCap } from "../../src/goal";
+import { rampTarget } from "../../src/goal";
 import { makeGoalHard } from "../../src/goal-search";
 import { inIsland, islandGoals } from "../../src/island";
 import { ISLAND_LEVELS } from "../../src/island-levels";
@@ -32,7 +32,7 @@ const rows = [];
 for (let n = 0; n < count; n++) {
   const t0 = performance.now();
   // The first is made while the player waits (effort 0); the rest ahead (effort 2).
-  const goal = makeGoalHard(layout, near, { moved, exclude: new Set(exclude), avoid, ...(mode === "after" ? { cap: rampCap(n) } : {}) }, n === 0 ? 0 : 2);
+  const goal = makeGoalHard(layout, near, { moved, exclude: new Set(exclude), avoid, ...(mode === "after" ? { target: rampTarget(n) } : {}) }, n === 0 ? 0 : 2);
   const made = performance.now() - t0;
   if (!goal) {
     rows.push({ n, none: true });
@@ -45,7 +45,7 @@ for (let n = 0; n < count; n++) {
   const row = {
     n, id: goal.id, distance: Math.abs(goal.target.x - start.x) + Math.abs(goal.target.y - start.y), proof: goal.solution.length,
     quick: goal.difficulty.moves, quickAtLeast: goal.difficulty.atLeast, score: Math.round(goal.difficulty.score * 10) / 10,
-    long: deep.moves, longAtLeast: deep.atLeast, longUpper: deep.solution?.length ?? null, cap: mode === "after" ? rampCap(n) : null,
+    long: deep.moves, longAtLeast: deep.atLeast, longUpper: deep.solution?.length ?? null, target: mode === "after" ? (rampTarget(n) ?? null) : null,
     madeMs: Math.round(made), longMs: Math.round(performance.now() - t1),
   };
   rows.push(row);
