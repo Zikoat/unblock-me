@@ -68,8 +68,12 @@ for (let n = 0; n < 40; n++) {
   await page.click("#next").catch(() => {});
 }
 await page.screenshot({ path: `${out}/island-end.png` });
-// The whole island from afar, its squares numbered.
-await page.evaluate(() => { const s = 0.085; window.unblock.scene.camera = { scale: s, offsetX: 393 / 2 - 40 * 60 * s, offsetY: 700 / 2 - 0 * 60 * s }; window.unblock.redraw(); });
-await page.waitForTimeout(300);
-await page.screenshot({ path: `${out}/island-overview.png` });
+// The whole island from afar, its squares numbered, and its first squares closer (once the
+// view has got to the world's first goal).
+await page.waitForTimeout(2500);
+for (const [name, s, x] of [["island-overview", 0.085, 45], ["island-start", 0.3, 14]]) {
+  await page.evaluate(([s, x]) => { window.unblock.scene.camera = { scale: s, offsetX: 393 / 2 - x * 60 * s, offsetY: 700 / 2 - 0 * 60 * s }; window.unblock.redraw(); }, [s, x]);
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: `${out}/${name}.png` });
+}
 await b.close(); server.close();

@@ -9,14 +9,15 @@ import type { Goal } from "./goal";
 import { ISLAND_LEVELS } from "./island-levels";
 import { UNIT, type Placed } from "./layout";
 
-/** Square `k`'s size inside its walls. Squares sit in one strip packed in one band of wall,
- * as high as the biggest square and its walls, each square in the middle of it: a square's
- * bay ends in the next square's left wall. So a square's footprint is its size and 4 wide
- * (wall, inside, exit and bay, wall), 3 more apart; the last square's ends at its right
- * wall, its bay out in the world. Each square's exit is on its red block's row. */
+/** Square `k`'s size inside its walls. Squares sit in one strip, each in the middle of the
+ * biggest's height, walled no higher than itself (the world fills round a smaller one): a
+ * square's bay ends in the next square's left wall. So a square's footprint is its size and
+ * 2 high, and 4 wide (wall, inside, exit and bay, wall), 3 more apart; the last square's
+ * ends at its right wall, its bay out in the world. Each square's exit is on its red block's
+ * row. */
 export const sideOf = (k: number) => ISLAND_LEVELS[k]!.side ?? 6;
 const MAX_SIDE = Math.max(...ISLAND_LEVELS.map((_, k) => sideOf(k)));
-/** The first square's left inside column, and the band's top inside row. */
+/** The first square's left inside column, and the biggest square's top inside row. */
 const ORIGIN = { x: 4, y: -3 };
 const LAST = ISLAND_LEVELS.length - 1;
 /** Whether square `k` is the last: its bay opens to the world. */
@@ -72,9 +73,9 @@ export const squareAt = (k: number) => {
   for (let j = 0; j < k; j++) x += sideOf(j) + 3;
   return { x, y: ORIGIN.y + Math.floor((MAX_SIDE - sideOf(k)) / 2) };
 };
-/** Square `k`'s footprint: the band's height, it, its walls and its bay (and the wall past
- * it); the last's ends at its right wall, its bay out in the clearing. */
-const footprint = (k: number): Rect => ({ x: squareAt(k).x - 1, y: ORIGIN.y - 1, width: sideOf(k) + (isLast(k) ? 2 : 4), height: MAX_SIDE + 2 });
+/** Square `k`'s footprint: it, its walls and its bay (and the wall past it); the last's
+ * ends at its right wall, its bay out in the clearing. */
+const footprint = (k: number): Rect => ({ x: squareAt(k).x - 1, y: squareAt(k).y - 1, width: sideOf(k) + (isLast(k) ? 2 : 4), height: sideOf(k) + 2 });
 /** The island's cells: the squares' footprints (nothing random is generated there). */
 export const ISLAND_RECTS: Rect[] = ISLAND_LEVELS.map((_, k) => footprint(k));
 /** The last square's way out: its bay (no walls round it) in a clearing in the world, a
