@@ -19,13 +19,15 @@ export type GoalRequest = {
   exclude: string[];
   /** Earlier targets' cells. */
   avoid: Rect[];
+  /** The most fewest moves it may take (goal.ts rampCap); none when absent. */
+  cap?: number;
 };
 
 self.onmessage = (event: MessageEvent<GoalRequest>) => {
-  const { job, seed, tries, ui, placed, near, moved, level = 1, exclude, avoid } = event.data;
+  const { job, seed, tries, ui, placed, near, moved, level = 1, exclude, avoid, cap } = event.data;
   const layout = placed ? fixedLayout(placed) : randomLayout(seed, { tries, ...ui });
   // The push search's targets ranked by the difficulty measure (docs/goal-search.md).
-  const found = makeGoalHard(layout, near, { moved: new Map(moved), exclude: new Set(exclude), avoid }, level);
+  const found = makeGoalHard(layout, near, { moved: new Map(moved), exclude: new Set(exclude), avoid, cap }, level);
   if (!found) {
     postMessage({ job, goal: null });
     return;

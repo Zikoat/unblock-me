@@ -105,7 +105,11 @@ export type TournamentOptions = GoalOptions & {
    * the last. */
   stride?: number;
   tuning?: Tuning;
+  /** The most fewest moves a goal may take (goal.ts rampCap): the best ranked at or under it
+   * wins. */
+  cap?: number;
 };
+
 
 export type Ranked = Goal & { difficulty: Difficulty; distance: number; train?: number };
 
@@ -121,7 +125,7 @@ export const LEVELS_OF_EFFORT: TournamentOptions[] = [
 ];
 
 /** A hard goal near `near` at an effort level (LEVELS_OF_EFFORT). */
-export function makeGoalHard(layout: Layout, near: Point, options: GoalOptions = {}, level = 1): Ranked | null {
+export function makeGoalHard(layout: Layout, near: Point, options: GoalOptions & { cap?: number } = {}, level = 1): Ranked | null {
   return makeGoalTournament(layout, near, { ...LEVELS_OF_EFFORT[Math.max(0, Math.min(level, LEVELS_OF_EFFORT.length - 1))], ...options });
 }
 
@@ -151,7 +155,7 @@ export function onTrack(board: Board, id: string, target: Point): number {
 
 /** The push search's targets, ranked by the difficulty measure. */
 export function makeGoalTournament(layout: Layout, near: Point, options: TournamentOptions = {}): Ranked | null {
-  const { moved = new Map(), avoid = [], rough = 3_000, exact = 50_000, finalists = 4, stride = 1, tuning = { prune: true, lookahead: true, goalBudget: 50_000 } } = options;
+  const { moved = new Map(), avoid = [], rough = 3_000, exact = 50_000, finalists = 4, stride = 1, tuning = { prune: true, lookahead: true, goalBudget: 50_000 }, cap = Infinity } = options;
   const board = new Board(layout, moved);
   const all = pushes(board, layout, near, { ...options, perCell: options.perCell ?? 6 }, tuning);
   // Every cell of every push is a candidate, measured roughly; each notes the blocks on its
@@ -172,7 +176,10 @@ export function makeGoalTournament(layout: Layout, near: Point, options: Tournam
   // Rank by difficulty for the distance (a lower bound counts as the moves): a near goal
   // that is nearly as hard beats a far one. Then the proof's length (shorter is likelier to
   // be the real fewest).
-  const rank = (a: Ranked, b: Ranked) => balance(b) - balance(a) || a.solution.length - b.solution.length || a.distance - b.distance;
+  // Under a cap, those over it (as far as is known: the fewest, or else at least) lose to
+  // any under it; of those over it, the nearest the cap wins.
+  const over = (c: Ranked) => Math.max(0, (c.difficulty.moves ?? c.difficulty.atLeast) - cap);
+  const rank = (a: Ranked, b: Ranked) => over(a) - over(b) || balance(b) - balance(a) || a.solution.length - b.solution.length || a.distance - b.distance;
   candidates.sort(rank);
   const top = candidates.slice(0, finalists);
   for (const c of top) {
