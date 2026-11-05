@@ -43,7 +43,7 @@ export function listen(w: typeof window_): void {
   window_ = w;
 }
 
-export type Sound = "thud" | "glitch" | "heartbeat" | "riser" | "zap" | "stamp" | "beat" | "chime" | "fall" | "drumroll" | "boom" | "confetti" | "fanfare" | "cheer" | "firework" | "whoosh" | "land" | "jingle" | "twinkle" | "incoming" | "soul";
+export type Sound = "thud" | "glitch" | "heartbeat" | "riser" | "zap" | "stamp" | "beat" | "chime" | "fall" | "drumroll" | "boom" | "confetti" | "fanfare" | "cheer" | "firework" | "whoosh" | "land" | "jingle" | "twinkle" | "incoming" | "soul" | "press" | "release" | "tick" | "push";
 
 /** Play `sound` (the moment it belongs to is `at`; `n` picks a variant, e.g. which star). */
 export function play(sound: Sound, at: number, n = 0): void {
@@ -228,6 +228,21 @@ const SOUNDS: Record<Sound, Make> = {
     tone(a, out, b, 90, 40, 0.4, 0.6);
     noise(a, out, b, 0.6, 0.4, "lowpass", 4000, 300);
     for (let i = 0; i < 12; i++) noise(a, out, b + 0.15 + Math.random() * 0.7, 0.03, 0.12, "highpass", 4000, 6000, 0.002);
+  },
+  // Moving blocks: small and quiet, as they come often. A soft click when a block is pressed,
+  // a lower one when a drag lets go, a tiny tick per cell it crosses (`n`: the cell, for a
+  // little pitch), and a short swish for a tap's push.
+  press(a, out, t) {
+    tone(a, out, t, 900, 650, 0.035, 0.05, "triangle", 0.002);
+  },
+  release(a, out, t) {
+    tone(a, out, t, 520, 380, 0.05, 0.06, "triangle", 0.002);
+  },
+  tick(a, out, t, n) {
+    tone(a, out, t, 1500 + (n % 3) * 120, 1300, 0.018, 0.025, "square", 0.001);
+  },
+  push(a, out, t) {
+    noise(a, out, t, 0.12, 0.05, "bandpass", 700, 2200, 0.01, 1.5);
   },
   whoosh(a, out, t) {
     noise(a, out, t, 0.85, 0.3, "bandpass", 300, 3000, 0.3, 2);

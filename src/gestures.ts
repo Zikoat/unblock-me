@@ -22,7 +22,7 @@ type Mode =
   | { kind: "pressed"; id: number; start: Point; block: Block | null; at: number }
   | { kind: "panning"; id: number; last: Point }
   /** `grab` is where the finger went down, `lo`..`hi` how far the block can slide. */
-  | { kind: "dragging"; id: number; block: Block; grab: Point; lo: number; hi: number; at: number }
+  | { kind: "dragging"; id: number; block: Block; grab: Point; lo: number; hi: number; at: number; cell: number }
   /** Dragging sideways on the density block. */
   | { kind: "adjusting"; id: number; ui: Ui; start: Point; dx: number }
   | { kind: "pinching"; ids: [number, number]; from: [Point, Point]; start: Camera };
@@ -54,6 +54,7 @@ export class Gestures {
       onStuck = () => {},
       onPanAfterPush = () => {},
       onInput = () => {},
+      onSound = () => {},
       onSnap = () => {},
       now = () => performance.now(),
     }: {
@@ -69,6 +70,9 @@ export class Gestures {
       onPanAfterPush?: (ms: number) => void;
       /** How the move about to be recorded was made (just before onChange). */
       onInput?: (input: Input) => void;
+      /** A block pressed, a drag let go, a dragged block over a new cell (`cell`: which), a
+       * tap's push: for their sounds. */
+      onSound?: (sound: "press" | "release" | "tick" | "push", cell?: number) => void;
       /** A dropped red block slides on into its target (to animate it): from where it was
        * dropped to the target. Just before the move is recorded. */
       onSnap?: (slide: Move) => void;
@@ -82,12 +86,14 @@ export class Gestures {
     this.onStuck = onStuck;
     this.onPanAfterPush = onPanAfterPush;
     this.onInput = onInput;
+    this.onSound = onSound;
     this.onSnap = onSnap;
     this.now = now;
   }
 
   private readonly onSnap: (slide: Move) => void;
   private readonly onInput: (input: Input) => void;
+  private readonly onSound: (sound: "press" | "release" | "tick" | "push", cell?: number) => void;
   private readonly onPanAfterPush: (ms: number) => void;
   private readonly now: () => number;
 
@@ -113,6 +119,7 @@ export class Gestures {
     } else if (this.pointers.size === 1) {
       const block = tool?.block ?? blockAt(visibleBlocks(this.scene), this.lattice(at));
       this.mode = { kind: "pressed", id, start: at, block, at: this.now() };
+      if (block && !block.ui && !block.wall) this.onSound("press");
     }
     // A third finger is ignored until one of the first two lifts.
   }
@@ -136,7 +143,7 @@ export class Gestures {
           this.mode = { kind: "panning", id, last: mode.start };
           this.panStarted();
         } else {
-          this.mode = { kind: "dragging", id, block: mode.block, grab: this.lattice(mode.start), lo, hi, at: mode.at };
+          this.mode = { kind: "dragging", id, block: mode.block, grab: this.lattice(mode.start), lo, hi, at: mode.at, cell: mode.block.w > mode.block.h ? mode.block.x : mode.block.y };
         }
       }
     }
@@ -158,6 +165,7 @@ export class Gestures {
           this.onInput(this.inputFor("tap", mode.at));
           this.pushedAt = this.now();
           record(this.scene, move);
+          this.onSound("push");
           this.onPush(move);
           this.onChange();
         } else {
@@ -196,6 +204,11 @@ export class Gestures {
       this.scene.dragging = block.w > block.h
         ? { id: block.id, x: clamp(block.x + now.x - grab.x), y: block.y }
         : { id: block.id, x: block.x, y: clamp(block.y + now.y - grab.y) };
+      const cell = Math.round(block.w > block.h ? this.scene.dragging.x : this.scene.dragging.y);
+      if (cell !== mode.cell) {
+        mode.cell = cell;
+        this.onSound("tick", cell);
+      }
     } else if (mode.kind === "adjusting" && mode.id === id) {
       mode.dx = at.x - mode.start.x;
       this.onAdjust(mode.ui, mode.dx, false);
@@ -224,6 +237,7 @@ export class Gestures {
     const { block, lo, hi } = this.mode;
     const dropped = { x: Math.round(drag.x), y: Math.round(drag.y) };
     this.scene.dragging = null;
+    this.onSound("release");
     const goal = this.scene.goal, horizontal = block.w > block.h;
     const along = (p: Point) => (horizontal ? p.x : p.y);
     const target = goal?.id === block.id ? goal.target : null;
