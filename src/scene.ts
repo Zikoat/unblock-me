@@ -40,6 +40,9 @@ export type Scene = {
    * bay). The view is fixed (no panning or zooming, no edge pins), everything else is greyed
    * out, and touches there do nothing. */
   locked?: Rect[] | null;
+  /** With the view fixed on an island square, whether the UI blocks show (and work) over its
+   * surface: only with the debug UI on. */
+  uiOnTop?: boolean;
 };
 
 export function newScene(
@@ -178,4 +181,31 @@ export function visibleBlocks(scene: Scene): Block[] {
   const index = drag ? blocks.findIndex((b) => b.id === drag.id) : -1;
   if (drag && index >= 0) blocks.push({ ...blocks.splice(index, 1)[0]!, x: drag.x, y: drag.y });
   return blocks;
+}
+
+/** Screen px a UI block takes in the toolbar on an island square (at most), and the
+ * toolbar's corner (under the bar at the top). */
+const TOOL = 40;
+const TOOLBAR = { x: 12, y: 56 };
+/** On an island square with the debug UI on, the UI blocks show as a toolbar (the board's own
+ * are out of view there): at the screen's top left, laid out as on the board, left of the
+ * square, or at the bottom left, on its side under the square, whichever lets them be bigger
+ * (up to TOOL). Each block and where it is on the screen; empty otherwise. */
+export function uiToolbar(scene: Scene): { block: Block; rect: Rect }[] {
+  if (!scene.locked || !scene.uiOnTop) return [];
+  const ui = scene.layout.blocksIn({ x: -3, y: -3, width: 8, height: 10 }).filter((b) => b.ui);
+  if (!ui.length) return [];
+  const x0 = Math.min(...ui.map((b) => b.x)), y0 = Math.min(...ui.map((b) => b.y));
+  const cols = Math.max(...ui.map((b) => b.x + b.w)) - x0, rows = Math.max(...ui.map((b) => b.y + b.h)) - y0;
+  // The square's inside on the screen (its walls are a cell in from the locked area).
+  const c = scene.camera, sq = scene.locked[0]!;
+  const left = (sq.x + 1) * UNIT * c.scale + c.offsetX, bottom = (sq.y + sq.height - 1) * UNIT * c.scale + c.offsetY;
+  const beside = Math.min(TOOL, (left - TOOLBAR.x - 8) / cols, (scene.height - TOOLBAR.y - TOOLBAR.x) / rows);
+  const under = Math.min(TOOL, (scene.height - bottom - 2 * TOOLBAR.x) / cols, (scene.width - 2 * TOOLBAR.x) / rows);
+  const upright = beside >= under, size = Math.max(beside, under);
+  return ui.map((block) => {
+    const [i, j] = upright ? [block.x - x0, block.y - y0] : [block.y - y0, block.x - x0];
+    const y = upright ? TOOLBAR.y + j * size : scene.height - TOOLBAR.x - (cols - j) * size;
+    return { block, rect: { x: TOOLBAR.x + i * size, y, width: size, height: size } };
+  });
 }

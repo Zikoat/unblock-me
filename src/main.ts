@@ -735,6 +735,7 @@ function lockView(): void {
     k = null;
   }
   scene.locked = k === null ? null : islandRects(k);
+  scene.uiOnTop = k !== null && debug;
   if (k !== null && !flight) scene.camera = islandCamera(k, scene.width, scene.height);
 }
 

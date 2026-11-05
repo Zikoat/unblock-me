@@ -8,7 +8,7 @@ import { HUD_BAR, islandSide } from "./island";
 import { timed } from "./perf";
 import { cinemaOverlay, dance, glitch, glitchShift, lit, overMore, tilt } from "./finish-fx2";
 import { onBlock, over, punch, quake, screenFlash, soul as drawSoul, SOUL, squash, timeWarp, under, wave, type Fx } from "./finish-fx";
-import { borderOnScreen, latticeRect, quickPush, visibleBlocks, whereIs, type Scene } from "./scene";
+import { borderOnScreen, latticeRect, quickPush, uiToolbar, visibleBlocks, whereIs, type Scene } from "./scene";
 
 export const COLORS = {
   background: "#f3f2ee",
@@ -271,11 +271,23 @@ export function draw(
 
   // A throbbing block grows over its neighbours, so it goes on top.
   if (throb) blocks.sort((a, b) => Number(a.id === throb.id) - Number(b.id === throb.id));
+  const uiIcon = (block: Block) => {
+    if (block.ui === "reset") resetIcon(ctx, block);
+    else if (block.ui === "border") borderIcon(ctx, block, scene.border);
+    else if (block.ui === "fullscreen") fullscreenIcon(ctx, block, fullscreen);
+    else if (block.ui === "upload") uploadIcon(ctx, block);
+    else if (block.ui === "reports") reportsIcon(ctx, block);
+    else if (block.ui === "testbed") testbedIcon(ctx, block);
+    else if (block.ui === "fps") fpsIcon(ctx, block, fps);
+    else if (block.ui === "density") densityIcon(ctx, block, density);
+    else if (block.ui === "home") homeIcon(ctx, block);
+  };
   timed(ctx, "blocks", () => {
     // On an island square its walls are the colour of the surface round it.
     drawWalls(ctx, blocks.filter((b) => b.wall), scene.locked ? COLORS.outside : COLORS.wall);
     for (const shown of blocks) {
       if (shown.wall) continue;
+      if (shown.ui && scene.locked) continue; // over the island's surface instead (below)
       const block = shown.id === sliding?.id ? { ...shown, x: sliding.x, y: sliding.y } : shown;
       // Red blocks stay red after their goal is reached, a darker red.
       const isGoal = block.id === goal?.id;
@@ -326,15 +338,7 @@ export function draw(
         onBlock(ctx, fx!);
         ctx.restore();
       }
-      if (block.ui === "reset") resetIcon(ctx, block);
-      else if (block.ui === "border") borderIcon(ctx, block, scene.border);
-      else if (block.ui === "fullscreen") fullscreenIcon(ctx, block, fullscreen);
-      else if (block.ui === "upload") uploadIcon(ctx, block);
-      else if (block.ui === "reports") reportsIcon(ctx, block);
-      else if (block.ui === "testbed") testbedIcon(ctx, block);
-      else if (block.ui === "fps") fpsIcon(ctx, block, fps);
-      else if (block.ui === "density") densityIcon(ctx, block, density);
-      else if (block.ui === "home") homeIcon(ctx, block);
+      uiIcon(block);
       if (beat !== 1 || jolt) ctx.restore();
       if (squashed) ctx.restore();
       if (hop > 0.3) ctx.restore();
@@ -385,13 +389,39 @@ export function draw(
   // their stars too.
   if (scene.locked) greyOutside(ctx, scene, scene.locked);
   else if (surface) greyOutside(ctx, scene, surface.rects, surface.alpha);
+  // On an island square the UI blocks show over its surface as a toolbar at the top left, but
+  // only with the debug UI on (the fullscreen block too: otherwise none show there). Each is
+  // drawn as on the board, scaled to its place.
+  for (const { block, rect } of uiToolbar(scene)) {
+    const k = rect.width / (block.w * UNIT);
+    ctx.save();
+    ctx.setTransform(dpr * k, 0, 0, dpr * k, dpr * (rect.x - block.x * UNIT * k), dpr * (rect.y - block.y * UNIT * k));
+    ctx.fillStyle = COLORS.ui;
+    ctx.beginPath();
+    ctx.roundRect(block.x * UNIT + GAP, block.y * UNIT + GAP, block.w * UNIT - 2 * GAP, block.h * UNIT - 2 * GAP, 8);
+    ctx.fill();
+    uiIcon(block);
+    ctx.restore();
+  }
   // The squares' levels on their top walls (over the surface: the one being played shows it).
-  if (labels.length) {
-    ctx.font = `800 ${UNIT * 0.5}px system-ui, -apple-system, "Segoe UI", sans-serif`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = COLORS.hud;
-    for (const l of labels) ctx.fillText(l.text, l.x * UNIT, l.y * UNIT + UNIT * 0.03);
+  // On a square, its level keeps on the screen and to a readable size: when the square fills
+  // the height, its top wall is mostly above the screen.
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = COLORS.hud;
+  for (const l of labels) {
+    if (!scene.locked) {
+      ctx.font = `800 ${UNIT * 0.5}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+      ctx.fillText(l.text, l.x * UNIT, l.y * UNIT + UNIT * 0.03);
+      continue;
+    }
+    const size = Math.min(UNIT * 0.5 * camera.scale, 34);
+    const y = Math.max((l.y * UNIT + UNIT * 0.03) * camera.scale + camera.offsetY, size * 0.7 + 8);
+    ctx.save();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.font = `800 ${size}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+    ctx.fillText(l.text, l.x * UNIT * camera.scale + camera.offsetX, y);
+    ctx.restore();
   }
   if (fx) {
     over(ctx, fx);

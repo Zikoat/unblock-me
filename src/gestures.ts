@@ -1,5 +1,5 @@
 import { pan, pinch, toWorld, zoomAt, type Camera, type Point } from "./camera";
-import { limits, quickPush, record, visibleBlocks, type Scene } from "./scene";
+import { limits, quickPush, record, uiToolbar, visibleBlocks, type Scene } from "./scene";
 import { UNIT, type Block, type Ui } from "./layout";
 import { blockAt, slideRange, type Move } from "./rules";
 
@@ -100,15 +100,18 @@ export class Gestures {
   private readonly onAdjust: (ui: Ui, dx: number, done: boolean) => void;
 
   down(id: number, at: Point): void {
-    // Outside the island square being played, touches do nothing.
+    // Outside the island square being played, touches do nothing (but on UI blocks shown over
+    // its surface).
     const cell = this.lattice(at);
-    if (this.scene.locked && !this.scene.locked.some((r) => cell.x >= r.x && cell.x < r.x + r.width && cell.y >= r.y && cell.y < r.y + r.height)) return;
+    const tool = uiToolbar(this.scene).find(({ rect: r }) => at.x >= r.x && at.x < r.x + r.width && at.y >= r.y && at.y < r.y + r.height);
+    const outside = this.scene.locked && !this.scene.locked.some((r) => cell.x >= r.x && cell.x < r.x + r.width && cell.y >= r.y && cell.y < r.y + r.height);
+    if (outside && !tool) return;
     this.pointers.set(id, at);
     if (this.pointers.size === 2) {
       this.startPinch();
       this.panStarted();
     } else if (this.pointers.size === 1) {
-      const block = blockAt(visibleBlocks(this.scene), this.lattice(at));
+      const block = tool?.block ?? blockAt(visibleBlocks(this.scene), this.lattice(at));
       this.mode = { kind: "pressed", id, start: at, block, at: this.now() };
     }
     // A third finger is ignored until one of the first two lifts.
