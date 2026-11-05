@@ -819,12 +819,14 @@ const builtAt = parseInt(__BUILD_ID__, 36);
 const frames: number[] = [];
 function showFps(now: number): void {
   while (frames.length && frames[0]! <= now - 1000) frames.shift();
-  // And the world's goals solved, and the ramp's target for the goal being played (or next).
+  // And the world's goals solved, the ramp's target for the goal being played (or next), and
+  // how sound is doing.
   const target = rampTarget(worldGoals());
   fps.textContent = [
     `${frames.length} fps · ${ago(Date.now() - builtAt)} · ${__COMMIT__}`,
     `World goals solved: ${worldGoals()}`,
     `Ramp target: ${target === undefined ? "none" : `${target} fewest moves`}`,
+    `Audio: ${sfx.audioState()}`,
   ].join("\n");
 }
 setInterval(() => showFps(performance.now()), 500);
@@ -1145,9 +1147,11 @@ const hitsArrow = (e: PointerEvent) => markerAt(e) !== null;
 // A tapped arrow throbs, then the view glides, so it is clear the arrow did it.
 let pinThrob: { pin: "red" | "ui"; born: number } | null = null;
 
-// Sound can start only from a touch, a click or a key (iPhones: one that ends), and starts
-// again after the page was in the background: every one tries.
-for (const type of ["pointerdown", "pointerup", "touchend", "click", "keydown"]) addEventListener(type, () => sfx.unlock(), { capture: true, passive: true });
+// Sound can start only from a touch (some iPhones: only one that ends), a click or a key, and
+// starts again after the page was in the background: every one tries. It is let go when the
+// page goes away.
+for (const type of ["touchstart", "touchend", "pointerup", "click", "keydown"]) addEventListener(type, () => sfx.unlock(type), { capture: true, passive: true });
+addEventListener("pagehide", () => sfx.release());
 canvas.addEventListener("pointerdown", (e) => {
   if (inspector?.open) return; // the board is a replay while it is open
   if (finish?.island) return; // under an island square's finish card

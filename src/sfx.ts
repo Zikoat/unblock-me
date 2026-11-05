@@ -9,15 +9,22 @@ let master: GainNode | null = null;
  * animation inspector, playing: only the frames just played, not its replays from the start). */
 let window_: "all" | "none" | [number, number] = "all";
 
-/** Start sound (call from every touch, click and key: see main.ts). iPhones need more than
- * other browsers: a context started or resumed only from a touch that ends (touchend or
- * click, not pointerdown), a sound played in that touch, and resuming again after the page
- * was in the background (its state is then "interrupted"). And their silent switch mutes
- * Web Audio unless the page asks for playback, as a game's sound does. */
-export function unlock(): void {
+/** Start sound (call from every touch, click and key: see main.ts; `on` names the event, for
+ * audioState). iPhones need more than other browsers: a context made or resumed in an event
+ * that counts as the player's (on some only touchend, on others touchstart), a sound
+ * played in it, and resuming again after the page was in the background. A context that
+ * still won't run after a few tries is replaced. Their silent switch mutes Web Audio unless
+ * the page asks for playback, as a game's sound does. */
+let tries = 0, lastOn = "", startedAfter = 0;
+export function unlock(on = ""): void {
+  lastOn = on;
   try {
     const session = (navigator as unknown as { audioSession?: { type: string } }).audioSession;
     if (session && session.type !== "playback") session.type = "playback";
+    if (ctx && ctx.state !== "running" && tries >= 3) {
+      void ctx.close().catch(() => {});
+      ctx = null;
+    }
     if (!ctx) {
       const AC = globalThis.AudioContext ?? (globalThis as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
       if (!AC) return;
@@ -25,8 +32,11 @@ export function unlock(): void {
       master = ctx.createGain();
       master.gain.value = 0.45;
       master.connect(ctx.destination);
+      tries = 0;
     }
     if (ctx.state !== "running") {
+      tries++;
+      startedAfter++;
       void ctx.resume().catch(() => {});
       // A silent sample, played in the touch itself.
       const source = ctx.createBufferSource();
@@ -37,6 +47,19 @@ export function unlock(): void {
   } catch {
     ctx = null; // no sound here
   }
+}
+
+/** Let the sound go (the page is going away: a reload on a new build, or closed), so the
+ * next page gets it at once: an iPhone kept the old page's for minutes. */
+export function release(): void {
+  void ctx?.close().catch(() => {});
+  ctx = null;
+}
+
+/** How sound is doing, for the debug counter: the context's state, the tries it took to
+ * start, and the last event that tried. */
+export function audioState(): string {
+  return `${ctx?.state ?? "none"} · ${startedAfter} tries · ${lastOn || "no touch yet"}`;
 }
 
 export function listen(w: typeof window_): void {
