@@ -686,8 +686,8 @@ function surface(now: number): { rects: Rect[]; alpha: number } | null {
   if (alpha <= 0) return (reveal = null);
   return { rects: reveal.rects, alpha };
 }
-/** Out in the world, each island square's number on its top wall. */
-const LABELS = ISLAND_LEVELS.map((_, k) => ({ x: squareAt(k).x + SIDE / 2, y: squareAt(k).y - 0.5, text: String(k + 1) }));
+/** Each island square's level, on its top wall. */
+const LABELS = ISLAND_LEVELS.map((_, k) => ({ x: squareAt(k).x + SIDE / 2, y: squareAt(k).y - 0.5, text: `Level ${k + 1}` }));
 
 // The island's next button: once a square's finish has shown its stars, it cuts straight to
 // the next square (no soul, no glide), or past the last one to the world.
@@ -905,7 +905,8 @@ function paint(now: number, moving: ReturnType<typeof sliding>, to: HTMLCanvasEl
         trace,
         hud: scene.locked ? islandHud() : null,
         surface: surface(now),
-        labels: withIsland && !scene.locked ? LABELS : [],
+        // Out in the world, every square's; on one, its own (the rest are under the surface).
+        labels: !withIsland ? [] : scene.locked ? LABELS.filter((_, k) => k === islandHud().level - 1) : LABELS,
         now,
         detail: DETAIL[detailStep],
       }),

@@ -103,7 +103,7 @@ export function draw(
     hud?: { level: number; moves: number } | null;
     /** The island's surface fading out (`alpha`) round its last square (`rects`), once reached. */
     surface?: { rects: Rect[]; alpha: number } | null;
-    /** Out in the world: the island squares' numbers, on their top walls (lattice units). */
+    /** The island squares' levels, on their top walls (lattice units). */
     labels?: { x: number; y: number; text: string }[];
     /** The last red block's soul flying to the new one (world px), and when it set off. */
     soul?: { from: { x: number; y: number; width: number; height: number }; toId: string; born: number } | null;
@@ -369,13 +369,6 @@ export function draw(
     }
   }
 
-  if (labels.length) {
-    ctx.font = `800 ${UNIT * 0.55}px system-ui, -apple-system, "Segoe UI", sans-serif`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = COLORS.hud;
-    for (const l of labels) ctx.fillText(l.text, l.x * UNIT, l.y * UNIT + UNIT * 0.03);
-  }
   targets.forEach((t, i) => t.goal === goal && drawTarget(i));
 
   // Each target's score track, over the blocks: the current goal's as it is played, a
@@ -392,6 +385,14 @@ export function draw(
   // their stars too.
   if (scene.locked) greyOutside(ctx, scene, scene.locked);
   else if (surface) greyOutside(ctx, scene, surface.rects, surface.alpha);
+  // The squares' levels on their top walls (over the surface: the one being played shows it).
+  if (labels.length) {
+    ctx.font = `800 ${UNIT * 0.5}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = COLORS.hud;
+    for (const l of labels) ctx.fillText(l.text, l.x * UNIT, l.y * UNIT + UNIT * 0.03);
+  }
   if (fx) {
     over(ctx, fx);
     overMore(ctx, fx);
@@ -464,7 +465,8 @@ export function islandCardRect(width: number, height: number): Rect {
   return { x: (width - w) / 2, y: (height - h) / 2 - 24, width: w, height: h };
 }
 
-/** The level and the moves so far, over the island's surface at the top of the screen. */
+/** The moves so far, over the island's surface at the top of the screen (the level is on
+ * the square's top wall). */
 function islandHud(ctx: CanvasRenderingContext2D, hud: { level: number; moves: number }, width: number, height: number, dpr: number): void {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const size = Math.max(15, Math.min(22, Math.min(width, height) * 0.05));
@@ -473,8 +475,6 @@ function islandHud(ctx: CanvasRenderingContext2D, hud: { level: number; moves: n
   ctx.fillStyle = COLORS.hud;
   // Halfway down the space over the square, but in the bar at least.
   const y = Math.max(HUD_BAR / 2, Math.min(44, (height - islandSide(width, height)) / 4));
-  ctx.textAlign = "left";
-  ctx.fillText(`Level ${hud.level}`, 16, y);
   ctx.textAlign = "right";
   ctx.fillText(`${hud.moves} ${hud.moves === 1 ? "move" : "moves"}`, width - 16, y);
 }
@@ -532,7 +532,9 @@ function greyOutside(ctx: CanvasRenderingContext2D, scene: Scene, rects: Rect[],
   ctx.globalAlpha = alpha;
   ctx.fillStyle = COLORS.outside;
   ctx.beginPath();
-  ctx.rect(view.x, view.y, view.width, view.height);
+  // Well past the screen's edges: the canvas can be a little taller than the scene thinks
+  // (a phone's browser bar coming and going).
+  ctx.rect(view.x - view.width, view.y - view.height, view.width * 3, view.height * 3);
   const at = (i: number) => pts[(i + pts.length) % pts.length]!;
   ctx.moveTo((at(-1)[0] + at(0)[0]) / 2, (at(-1)[1] + at(0)[1]) / 2);
   for (let i = 0; i < pts.length; i++) ctx.arcTo(at(i)[0], at(i)[1], at(i + 1)[0], at(i + 1)[1], WALL_RADIUS);
