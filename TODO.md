@@ -2,7 +2,6 @@
 
 ## Later
 
-- Lock the next red block (darker, immovable until the current goal is reached), chosen among blocks the current solution doesn't touch and locked where it stands when the current goal is made, so it can't strand the current goal; waits on you picking it.
 - Walls in generated boards (dead ends to plan around); waits on a difficulty measure to tune them against.
 - Density × walls report graph; waits on walls in generated boards.
 - Pins pointing the same way can overlap (red wins the tap); waits on seeing it bother you in play.
@@ -11,11 +10,10 @@
 - A* cap per density (95% finds the fewest moves): a background agent is tuning it; when it reports, review, test, push and update the report's "Being tuned" line.
 - Remove the dead `RANGE`/`starsFor`/old `starsEarned` in difficulty.ts; waits on the cap agent finishing with that file.
 - Log each goal's proof and measured difficulty, and page hides; widen the measure window (goal #37: 8 in the window, player did 6); waits on you picking it.
-- Score track instead of stars (reports/score-track.html: one cell per move, gaps where a star or the medal is lost, ends at about 2x fewest); waits on your review of the design.
-- Undo a reached goal: rewind to where its moves started counting and replay it for a better score; waits on the score track.
-- Undo during a goal (or undoing the goal) loses the medal (shown faded) and is stored with the goal; waits on the score track.
+- Undo a reached goal: rewind to where its moves started counting and replay it for a better score; waits on you picking it.
+- Undo during a goal (or undoing the goal) loses the medal (shown faded) and is stored with the goal; waits on you picking it.
 - Hovering a reached goal highlights the blocks its solution needed, and differently those moved without need; waits on you picking it.
-- Progress is lost when moving from Telegram’s in-app browser to the phone’s browser (separate storage); waits on the Telegram check’s reports, then maybe carry the save in the "Open in browser" link.
+- Progress is lost when moving between browsers (Telegram's in-app one, phone, computer: separate storage); intended fix: on entry redirect to a URL with a temporary user id whose progress lives on the server, so the same link in another browser continues it, carried until a later login; waits on the server (and login).
 - A way to make goals hard without blocks on the red block's track (since the penalty, goals made ahead need about 11 fewest moves instead of 17, reports/blocks-on-track.html); waits on you picking it.
 - Island squares that teach one thing each (a half-way drag, a block on the goal, a yellow block off its goal), squares with several goals, other sizes; waits on you playing the first island.
 - Group picture puzzles in Telegram (your idea): a picture made of 2x1 blocks, scrambled by legal moves, solved together by a group, everyone seeing each other; waits on the multiplayer server and a Telegram mini app.
