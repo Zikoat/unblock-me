@@ -12,7 +12,7 @@ import { bestKnown, medal, rampCap, shownUsed, viewCentre, type Goal } from "./g
 import type { GoalRequest } from "./goal-worker";
 import { Gestures, type Input } from "./gestures";
 import { ISLAND_LEVELS } from "./island-levels";
-import { bayReached, GATE, GATE_GONE, inIsland, opensGate, isLast, islandCamera, islandRects, nextIslandGoal, squareAt, squareMiddle, squareOf } from "./island";
+import { bayReached, GATE, GATE_GONE, inIsland, opensGate, isLast, islandCamera, islandGoals, islandRects, nextIslandGoal, squareAt, squareMiddle, squareOf } from "./island";
 import { fixedLayout, MAX_TRIES, MIN_TRIES, randomLayout, TRIES, UNIT, type Placed, type Ui } from "./layout";
 import { CARD, CUE_MS, draw, fading, islandCardRect, resetFades, RIPPLE_MS, SHAKE_MS, THROB_MS, redArrow, uiArrow, type Sparkle } from "./render";
 import { ease, slideDuration } from "./slide";
@@ -125,6 +125,8 @@ type LogEvent =
   // A move by a gesture also says how (tap or drag), press ms, ms since the last pan, and zoom.
   | { e: "move"; id: string; from: Point; to: Point; how: Input["how"]; ms: number; sincePan: number | null; zoom: number }
   | { e: "panAfterPush"; ms: number }
+  // The world's first goal was the one made while the island was played (prefetchFirst).
+  | { e: "prefetched" }
   | { e: "reached"; id: string; used: number }
   | { e: "reset"; goal: string | null }
   | { e: "density"; from: number; to: number; goal: string | null };
@@ -251,9 +253,12 @@ function requestGoal(near: Point = viewCentre(scene.camera, scene.width, scene.h
   // search looks only round `near`, and no island block may be the red block).
   if (withIsland) while (inIsland(near)) near = { x: near.x + 1, y: near.y };
   const exclude = scene.done.map((g) => g.id);
-  // Made already while the red block was one move away: no wait.
+  // Made already while the red block was one move away, or (the world's first) while the
+  // island was played: no wait.
   const key = boardKey(scene.moved, exclude, near);
-  if (ahead.ready?.key === key) {
+  const first = withIsland && worldGoals() === 0 ? boardKey(worldMoved(scene.moved), exclude, near) : null;
+  if (ahead.ready && (ahead.ready.key === key || ahead.ready.key === first)) {
+    if (ahead.ready.key === first) log({ e: "prefetched" });
     showGoal(ahead.ready.goal);
     return;
   }
@@ -338,11 +343,33 @@ function targetsOf(goals: Goal[]): Rect[] {
 function boardKey(moved: ReadonlyMap<string, Point>, exclude: string[], near: Point): string {
   return JSON.stringify([seed, tries, placed, [...moved].sort(([a], [b]) => (a < b ? -1 : 1)), exclude, near]);
 }
+/** The moves that matter to the world's first goal: those off the island, and the last
+ * square's blocker (its red block ends on its target, the rest are walled in). */
+const worldMoved = (moved: ReadonlyMap<string, Point>) => new Map([...moved].filter(([id]) => !id.startsWith("isle ") || id.endsWith(" blocker")));
+/** While the island is played the workers are idle: the world's first goal is made then, on
+ * the board as the island's proofs would leave it, trying hardest (effort 3). It is used if
+ * the board off the island is that when the island is done. */
+let prefetched = false;
+function prefetchFirst(): void {
+  if (prefetched || !withIsland || shared || testbed || placed) return;
+  const all = ISLAND_LEVELS.flatMap((_, k) => islandGoals(k)), rest = all.filter((g) => !scene.done.some((d) => d.id === g.id));
+  if (!rest.length) return;
+  prefetched = true;
+  const moved = new Map(scene.moved);
+  for (const g of rest) for (const m of g.solution) moved.set(m.id, m.to);
+  let near = rest.at(-1)!.target;
+  while (inIsland(near)) near = { x: near.x + 1, y: near.y };
+  const exclude = all.map((g) => g.id);
+  ahead.asked = boardKey(worldMoved(moved), exclude, near);
+  const request: GoalRequest = { job: ++ahead.job, seed, tries, ui: shownUi, placed, near, moved: [...moved], level: 3, exclude, avoid: targetsOf(all), cap: capFor(0) };
+  ahead.worker.postMessage(request);
+}
 function lookAhead(): void {
   const goal = scene.goal;
   const red = goal && scene.layout.byId(goal.id);
   const at = goal && whereIs(scene, goal.id);
-  if (shared || !goal || !red || !at || (withIsland && nextIslandGoal([...scene.done, goal]))) return;
+  // (Not on the island: the world's first is made while it is played, prefetchFirst.)
+  if (shared || !goal || !red || !at || (withIsland && squareOf(goal) !== null)) return;
   const { lo, hi } = slideRange(scene.layout, { ...red, ...at }, scene);
   const along = red.w > red.h ? goal.target.x : goal.target.y;
   const inLane = red.w > red.h ? goal.target.y === at.y : goal.target.x === at.x;
@@ -363,6 +390,7 @@ if (testbed) {
   // The testbed shows its first goal once its board is in place (below).
 } else if (!scene.goal) requestGoal();
 else lookAhead();
+prefetchFirst();
 
 // While a slider is held: where its knob is (0..1), following the finger.
 let slider: { ui: Ui; from: number; at: number } | null = null;

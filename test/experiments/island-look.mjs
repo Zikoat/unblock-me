@@ -29,7 +29,11 @@ for (let n = 0; n < 40; n++) {
   await page.waitForTimeout(600);
   const name = g ? g.id.replace(/ /g, "-") : "none";
   await page.screenshot({ path: `${out}/${name}.png` });
-  if (!g || !g.id.startsWith("isle ")) { console.log("after the island:", g?.id ?? "no goal"); break; }
+  if (!g || !g.id.startsWith("isle ")) {
+    const prefetched = await page.evaluate(() => (localStorage.getItem("unblock-me:log") ?? "").includes('"prefetched"'));
+    console.log("after the island:", g?.id ?? "no goal", prefetched ? "(made while the island was played)" : "(made after it)");
+    break;
+  }
   prev = g.id;
   const k = Number(g.id.split(" ")[1]);
   console.log(k, g.id, "fewest", g.difficulty.moves, "unrated", !!g.unrated, "step", !!g.step, "scale", await page.evaluate(() => window.unblock.scene.camera.scale.toFixed(2)));
