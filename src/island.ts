@@ -12,8 +12,8 @@ import { UNIT, type Placed } from "./layout";
 /** Square `k`'s size inside its walls. Squares sit in one strip packed in one band of wall,
  * as high as the biggest square and its walls, each square in the middle of it: a square's
  * bay ends in the next square's left wall. So a square's footprint is its size and 4 wide
- * (wall, inside, exit and bay, wall), 3 more apart; the last square's has no wall past its
- * bay, which opens to the world. Each square's exit is on its red block's row. */
+ * (wall, inside, exit and bay, wall), 3 more apart; the last square's ends at its right
+ * wall, its bay out in the world. Each square's exit is on its red block's row. */
 export const sideOf = (k: number) => ISLAND_LEVELS[k]!.side ?? 6;
 const MAX_SIDE = Math.max(...ISLAND_LEVELS.map((_, k) => sideOf(k)));
 /** The first square's left inside column, and the band's top inside row. */
@@ -73,16 +73,16 @@ export const squareAt = (k: number) => {
   return { x, y: ORIGIN.y + Math.floor((MAX_SIDE - sideOf(k)) / 2) };
 };
 /** Square `k`'s footprint: the band's height, it, its walls and its bay (and the wall past
- * it, but the last's). */
-const footprint = (k: number): Rect => ({ x: squareAt(k).x - 1, y: ORIGIN.y - 1, width: sideOf(k) + (isLast(k) ? 3 : 4), height: MAX_SIDE + 2 });
+ * it); the last's ends at its right wall, its bay out in the clearing. */
+const footprint = (k: number): Rect => ({ x: squareAt(k).x - 1, y: ORIGIN.y - 1, width: sideOf(k) + (isLast(k) ? 2 : 4), height: MAX_SIDE + 2 });
 /** The island's cells: the squares' footprints (nothing random is generated there). */
 export const ISLAND_RECTS: Rect[] = ISLAND_LEVELS.map((_, k) => footprint(k));
-/** The last square's way out: its bay opens on a clearing in the world, a blocker across the
- * red block's row (vertical, room above and below it) and the real target past it. Reaching
- * the bay only reveals the world (see bayReached). */
+/** The last square's way out: its bay (no walls round it) in a clearing in the world, a
+ * blocker across the red block's row (vertical, room above and below it) and the real target
+ * past it. Reaching the bay only reveals the world (see bayReached). */
 const exitRow = (k: number) => ISLAND_LEVELS[k]!.blocks[0]![1];
 const BLOCKER = { id: `isle ${LAST} blocker`, x: squareAt(LAST).x + sideOf(LAST) + 3, y: squareAt(LAST).y + exitRow(LAST) - 1 };
-const CLEARING: Rect = { x: BLOCKER.x - 1, y: BLOCKER.y - 1, width: 5, height: 5 };
+const CLEARING: Rect = { x: squareAt(LAST).x + sideOf(LAST) + 1, y: BLOCKER.y - 1, width: BLOCKER.x + 4 - (squareAt(LAST).x + sideOf(LAST) + 1), height: 5 };
 /** The last square's exit is shut by a wall while it has goals inside (they come first): it
  * goes (moved far off) as the goal before its red block's is reached. */
 export const GATE = ISLAND_LEVELS[LAST]!.goals ? { id: `isle ${LAST} gate`, x: squareAt(LAST).x + sideOf(LAST), y: squareAt(LAST).y + exitRow(LAST) } : null;
