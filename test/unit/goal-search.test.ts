@@ -3,7 +3,7 @@
 import { describe, expect, test } from "bun:test";
 import { Board } from "../../src/board";
 import { replay } from "../../src/frozen";
-import { makeGoalDeep, makeGoalHard, makeGoalTournament, onTrack } from "../../src/goal-search";
+import { LEVELS_OF_EFFORT, makeGoalDeep, makeGoalHard, makeGoalTournament, onTrack } from "../../src/goal-search";
 import { fixedLayout, randomLayout, type Placed } from "../../src/layout";
 import { isHorizontal } from "../../src/rules";
 
@@ -32,7 +32,8 @@ describe("goal search", () => {
       const exclude = new Set(first ? [first.id] : []);
       const avoid = [{ x: near.x - 2, y: near.y - 2, width: 4, height: 4 }];
       for (const make of [
-        () => makeGoalTournament(layout, near, { rough: 300, exact: 3_000, finalists: 2, exclude, avoid }),
+        // (The game's quickest settings: unbudgeted, a sparse board took seconds.)
+        () => makeGoalTournament(layout, near, { ...LEVELS_OF_EFFORT[0], exclude, avoid }),
         () => makeGoalDeep(layout, near, { states: 3_000, exclude, avoid }),
       ]) {
         const goal = make()!;
