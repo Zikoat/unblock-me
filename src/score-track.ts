@@ -176,7 +176,13 @@ export function drawScoreTrack(
   rect: { x: number; y: number; width: number; height: number },
   fewest: number,
   used: number,
-  { t = null, undone = false, radius = 12, trace, detail = 1 }: { t?: number | null; undone?: boolean; radius?: number; trace?: TraceEntry[]; detail?: number } = {},
+  { t = null, undone = false, radius = 12, trace, detail = 1, room = 14, grow = 1 }: {
+    t?: number | null; undone?: boolean; radius?: number; trace?: TraceEntry[]; detail?: number;
+    /** Room (px) left at each end of the row the stars gather into. */
+    room?: number;
+    /** How far the moves' fill (and the count) has grown to the moves used, 0..1. */
+    grow?: number;
+  } = {},
 ): void {
   const vertical = rect.height > rect.width;
   const L = vertical ? rect.height : rect.width, T = vertical ? rect.width : rect.height;
@@ -222,7 +228,7 @@ export function drawScoreTrack(
     ctx.roundRect(0, 0, L, T, radius);
     ctx.clip();
     ctx.fillStyle = TRACK_COLORS.fill;
-    ctx.fillRect(0, 0, Math.min(used, span) * w, T);
+    ctx.fillRect(0, 0, Math.min(used * grow, span) * w, T);
     ctx.globalAlpha = (1 - collapse) * linesShown;
     ctx.strokeStyle = LINE;
     ctx.lineWidth = 1.5;
@@ -236,7 +242,7 @@ export function drawScoreTrack(
     // The move count, white with a shadow, at the start of the track.
     const size = Math.min(T * 0.42, Math.max(8, ((fewest - 1) * w - T * 0.3) / (0.62 * String(used).length)));
     // A picture made once (text with a shadow drawn every frame was slow).
-    const text = String(used), font = `700 ${size}px system-ui, sans-serif`;
+    const text = String(Math.round(used * grow)), font = `700 ${size}px system-ui, sans-serif`;
     ctx.save();
     ctx.globalAlpha = 1 - collapse;
     ctx.font = font;
@@ -269,7 +275,7 @@ export function drawScoreTrack(
   const row = [...(medalP !== null ? ["medal"] : []), ...lost.map((st) => st.at), ...kept.map((st) => st.at)];
   // Sized so the whole row fits inside the red block on the target (the target reaches 3
   // px past it, the block stops 3 px short of its cells), with room at each end.
-  const sf = Math.min(T * 0.55, (L - 28) / ((row.length - 1) * 1.2 + 1.2));
+  const sf = Math.min(T * 0.55, (L - 2 * room) / ((row.length - 1) * 1.2 + 1.2));
   const size = s0 + (sf - s0) * ease;
   const placeAt = (key: number | "medal", u: number, e: number) => u + (L / 2 + (row.indexOf(key) - (row.length - 1) / 2) * sf * 1.2 - u) * e;
   const place = (key: number | "medal", u: number) => placeAt(key, u, ease);

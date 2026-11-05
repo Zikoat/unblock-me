@@ -146,13 +146,16 @@ export function draw(
     .filter((t): t is { goal: Goal; cells: Cells } => !!t.cells && intersects(t.cells, inView));
   const onTarget = (x: number, y: number) => targets.some(({ cells: c }) => x >= c.x * UNIT - TARGET_MARGIN && x <= (c.x + c.w) * UNIT + TARGET_MARGIN && y >= c.y * UNIT - TARGET_MARGIN && y <= (c.y + c.h) * UNIT + TARGET_MARGIN);
   const litDots: number[] = [];
+  // No dot where a corner touches a wall: it would peek out of the gap beside the wall.
+  const wallCells = new Set(visibleBlocks(scene).filter((b) => b.wall).flatMap((b) => Array.from({ length: b.w * b.h }, (_, i) => `${b.x + (i % b.w)},${b.y + Math.floor(i / b.w)}`)));
+  const byWall = (x: number, y: number) => wallCells.has(`${x - 1},${y - 1}`) || wallCells.has(`${x},${y - 1}`) || wallCells.has(`${x - 1},${y}`) || wallCells.has(`${x},${y}`);
   // Round dots at the lattice corners (not on targets), all in one path so they cost one fill.
   timed(ctx, "dots", () => {
     ctx.fillStyle = COLORS.dot;
     ctx.beginPath();
     for (let x = Math.floor(view.x / UNIT) * UNIT; x < view.x + view.width + UNIT; x += UNIT) {
       for (let y = Math.floor(view.y / UNIT) * UNIT; y < view.y + view.height + UNIT; y += UNIT) {
-        if (onTarget(x, y)) continue;
+        if (onTarget(x, y) || (wallCells.size && byWall(x / UNIT, y / UNIT))) continue;
         // The finish's shock waves ripple through the dots.
         const w = fx ? wave(fx, x, y) : null, dx = x + (w?.dx ?? 0), dy = y + (w?.dy ?? 0), r = DOT_SIZE / 2 + (w ? Math.min(DOT_SIZE, w.lift * 0.15) : 0);
         // Lit gold where a wave is passing (drawn after, in one path of their own).
@@ -178,7 +181,8 @@ export function draw(
   // Reached targets side by side overlap by their margins: each is filled only where no
   // earlier one was, so touching ones read as one shape. The current target is drawn whole,
   // over them.
-  const area = (c: Cells, path: Path2D) => path.roundRect(c.x * UNIT - TARGET_MARGIN, c.y * UNIT - TARGET_MARGIN, c.w * UNIT + 2 * TARGET_MARGIN, c.h * UNIT + 2 * TARGET_MARGIN, 12);
+  // (An island square's target fits its bay, so its corners are as round as the walls'.)
+  const area = (c: Cells, path: Path2D, radius = 12) => path.roundRect(c.x * UNIT - TARGET_MARGIN, c.y * UNIT - TARGET_MARGIN, c.w * UNIT + 2 * TARGET_MARGIN, c.h * UNIT + 2 * TARGET_MARGIN, radius);
   const outside = (others: typeof targets) => {
     const clip = new Path2D();
     clip.rect(view.x - UNIT, view.y - UNIT, view.width + 2 * UNIT, view.height + 2 * UNIT);
@@ -188,7 +192,7 @@ export function draw(
   const drawTarget = (i: number) => {
     const { goal: g, cells } = targets[i]!;
     const own = new Path2D();
-    area(cells, own);
+    area(cells, own, scene.locked && g === goal ? WALL_RADIUS : 12);
     // The current target: a pale coral area with an outline. A reached one: a pale gold area
     // with an outline, faded out while its block stands on it (no ring round the block).
     const shown = g === goal ? 1 : areaShown(g, now);
@@ -228,6 +232,7 @@ export function draw(
   /** A reached block's colour: red until its finish gathers the stars, fading to gold
    * as they gather. */
   const doneColor = (id: string) => {
+    if (finish?.island && finish.id === id) return COLORS.goal; // an island square's stays red (its card goes gold)
     const g = finish?.id === id ? scene.done.find((d) => d.id === id) : null;
     if (!g || g.used === undefined) return COLORS.done;
     const k = Math.max(0, Math.min(1, (finishClock(scene, finish, now)! - finishTimes(fewestOf(g), shownUsed(g)!).gather) / FINISH.GATHER_MS));
@@ -495,9 +500,10 @@ function islandCard(ctx: CanvasRenderingContext2D, g: Goal, t: number, width: nu
   ctx.beginPath();
   ctx.roundRect(r.x, r.y, r.width, r.height, 14);
   ctx.fill();
-  // The track a little in from the block's ends, so the stars have room either side.
-  const pad = r.width * 0.07;
-  drawScoreTrack(ctx, { ...r, x: r.x + pad, width: r.width - 2 * pad }, fewest, used, { t, undone: g.undone, radius: 14, detail });
+  // The moves' fill grows from none to the moves used as the finish starts; the stars'
+  // row keeps room at each end.
+  const grow = easeOutCubic(Math.min(1, Math.max(0, t / FINISH.START_MS)));
+  drawScoreTrack(ctx, r, fewest, used, { t, undone: g.undone, radius: 14, detail, room: r.width * 0.09, grow });
   ctx.font = `800 ${Math.round(r.width * 0.075)}px system-ui, -apple-system, "Segoe UI", sans-serif`;
   ctx.textAlign = "center";
   ctx.textBaseline = "alphabetic";

@@ -434,7 +434,10 @@ function reachGoal(now: number): void {
     flyTo({ x: goal.target.x + 1, y: goal.target.y + 0.5 }, 0, REVEAL_MS);
   }
   finish = { id: goal.id, born: now, end: timeWarp(times, times.medalAt !== null && !goal.undone).raw(times.end), next: goal.target, dir, heard: -1, island };
-  if (island) return save();
+  if (island) {
+    scene.hover = null; // the board rests under the finish card
+    return save();
+  }
   const red = scene.layout.byId(goal.id)!;
   const at = whereIs(scene, goal.id)!;
   const cx = (at.x + red.w / 2) * UNIT;
@@ -1031,7 +1034,7 @@ function goalTip(at: Point): string | null {
 const covered = (world: Point) => !!scene.locked && !scene.locked.some((r) => world.x >= r.x && world.x < r.x + r.width && world.y >= r.y && world.y < r.y + r.height);
 function showTip(e: PointerEvent): void {
   const world = { x: (e.offsetX - scene.camera.offsetX) / scene.camera.scale / UNIT, y: (e.offsetY - scene.camera.offsetY) / scene.camera.scale / UNIT };
-  const hovering = e.pointerType === "mouse" && e.buttons === 0 && !covered(world);
+  const hovering = e.pointerType === "mouse" && e.buttons === 0 && !covered(world) && !finish?.island;
   const ui = hovering ? blockAt(visibleBlocks(scene), world)?.ui : null;
   const text = ui ? tooltip(ui) : hovering ? goalTip(world) : null;
   if (!text) {
@@ -1051,7 +1054,7 @@ canvas.addEventListener("pointerleave", () => {
 /** A resting mouse over a sliding block hints where a click would send it. */
 function hoverAt(e: PointerEvent): void {
   const world = { x: (e.offsetX - scene.camera.offsetX) / scene.camera.scale / UNIT, y: (e.offsetY - scene.camera.offsetY) / scene.camera.scale / UNIT };
-  const b = e.pointerType === "mouse" && e.buttons === 0 && !covered(world) ? blockAt(visibleBlocks(scene), world) : null;
+  const b = e.pointerType === "mouse" && e.buttons === 0 && !covered(world) && !finish?.island ? blockAt(visibleBlocks(scene), world) : null;
   scene.hover = b && !b.ui && !b.wall ? b.id : null;
 }
 
@@ -1079,6 +1082,7 @@ let pinThrob: { pin: "red" | "ui"; born: number } | null = null;
 canvas.addEventListener("pointerdown", (e) => {
   sfx.unlock(); // sound can start only from a touch
   if (inspector?.open) return; // the board is a replay while it is open
+  if (finish?.island) return; // under an island square's finish card
   if (e.pointerType === "mouse" && e.button !== 0) return;
   canvas.setPointerCapture(e.pointerId);
   if (onArrow === null && hitsArrow(e)) {
