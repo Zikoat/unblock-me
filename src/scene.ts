@@ -198,14 +198,15 @@ export function uiToolbar(scene: Scene): { block: Block; rect: Rect }[] {
   const x0 = Math.min(...ui.map((b) => b.x)), y0 = Math.min(...ui.map((b) => b.y));
   const cols = Math.max(...ui.map((b) => b.x + b.w)) - x0, rows = Math.max(...ui.map((b) => b.y + b.h)) - y0;
   // The square's inside on the screen (its walls are a cell in from the locked area).
-  const c = scene.camera, sq = scene.locked[0]!;
-  const left = (sq.x + 1) * UNIT * c.scale + c.offsetX, bottom = (sq.y + sq.height - 1) * UNIT * c.scale + c.offsetY;
-  const beside = Math.min(TOOL, (left - TOOLBAR.x - 8) / cols, (scene.height - TOOLBAR.y - TOOLBAR.x) / rows);
-  const under = Math.min(TOOL, (scene.height - bottom - 2 * TOOLBAR.x) / cols, (scene.width - 2 * TOOLBAR.x) / rows);
+  // Measured in the view: the screen, or the smaller border when that is on.
+  const c = scene.camera, sq = scene.locked[0]!, v = borderOnScreen(scene);
+  const left = (sq.x + 1) * UNIT * c.scale + c.offsetX - v.x, bottom = (sq.y + sq.height - 1) * UNIT * c.scale + c.offsetY - v.y;
+  const beside = Math.min(TOOL, (left - TOOLBAR.x - 8) / cols, (v.height - TOOLBAR.y - TOOLBAR.x) / rows);
+  const under = Math.min(TOOL, (v.height - bottom - 2 * TOOLBAR.x) / cols, (v.width - 2 * TOOLBAR.x) / rows);
   const upright = beside >= under, size = Math.max(beside, under);
   return ui.map((block) => {
     const [i, j] = upright ? [block.x - x0, block.y - y0] : [block.y - y0, block.x - x0];
-    const y = upright ? TOOLBAR.y + j * size : scene.height - TOOLBAR.x - (cols - j) * size;
-    return { block, rect: { x: TOOLBAR.x + i * size, y, width: size, height: size } };
+    const y = upright ? TOOLBAR.y + j * size : v.height - TOOLBAR.x - (cols - j) * size;
+    return { block, rect: { x: v.x + TOOLBAR.x + i * size, y: v.y + y, width: size, height: size } };
   });
 }

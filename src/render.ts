@@ -387,7 +387,8 @@ export function draw(
   timed(ctx, "sparkles", () => sparkles.forEach((s) => sparkle(ctx, s, now)));
   // The island's surface goes over everything round the square: other squares' targets and
   // their stars too.
-  if (scene.locked) greyOutside(ctx, scene, scene.locked);
+  // (With the smaller border on, it lets the world show through: the view outside, to test.)
+  if (scene.locked) greyOutside(ctx, scene, scene.locked, scene.border ? 0.7 : 1);
   else if (surface) greyOutside(ctx, scene, surface.rects, surface.alpha);
   // On an island square the UI blocks show over its surface as a toolbar at the top left, but
   // only with the debug UI on (the fullscreen block too: otherwise none show there). Each is
@@ -404,8 +405,8 @@ export function draw(
     ctx.restore();
   }
   // The squares' levels on their top walls (over the surface: the one being played shows it).
-  // On a square, its level keeps on the screen and to a readable size: when the square fills
-  // the height, its top wall is mostly above the screen.
+  // On a square, its level keeps on the screen and clear of the square, to a readable size:
+  // when the square fills the height, its top wall is mostly above the screen.
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillStyle = COLORS.hud;
@@ -415,8 +416,11 @@ export function draw(
       ctx.fillText(l.text, l.x * UNIT, l.y * UNIT + UNIT * 0.03);
       continue;
     }
-    const size = Math.min(UNIT * 0.5 * camera.scale, 34);
-    const y = Math.max((l.y * UNIT + UNIT * 0.03) * camera.scale + camera.offsetY, size * 0.7 + 8);
+    // In the space over the square: on its top wall where that shows, else halfway up it,
+    // and never bigger than it fits.
+    const view = borderOnScreen(scene), over = (view.height - islandSide(view)) / 2;
+    const size = Math.min(UNIT * 0.5 * camera.scale, 0.6 * over, 34);
+    const y = view.y + Math.max(over - (UNIT * camera.scale) / 2, over / 2);
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.font = `800 ${size}px system-ui, -apple-system, "Segoe UI", sans-serif`;
@@ -482,44 +486,47 @@ export function draw(
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     timed(ctx, "glitch", () => glitch(ctx, fx, width, height));
   }
-  if (hud && !finish?.island) islandHud(ctx, hud, width, height, dpr); // (the card has its level)
+  // All laid out in the view: the screen, or the smaller border when that is on.
+  const shown = borderOnScreen(scene);
+  if (hud && !finish?.island) islandHud(ctx, hud, shown, dpr); // (the card has its level)
   if (finish?.island) {
     const g = scene.done.find((d) => d.id === finish.id);
-    if (g && g.used !== undefined) islandCard(ctx, g, finishClock(scene, finish, now) ?? 0, width, height, dpr, detail, hud?.level ?? 0);
+    if (g && g.used !== undefined) islandCard(ctx, g, finishClock(scene, finish, now) ?? 0, width, height, shown, dpr, detail, hud?.level ?? 0);
   }
 }
 
-/** Where an island square's finish card sits on the screen (CSS px), for the next button. */
-export function islandCardRect(width: number, height: number): Rect {
-  const w = Math.min(0.82 * width, 460), h = w / 2;
-  return { x: (width - w) / 2, y: (height - h) / 2 - 24, width: w, height: h };
+/** Where an island square's finish card sits on the screen (CSS px), in the middle of `view`
+ * (the screen or the smaller border), for the next button too. */
+export function islandCardRect(view: Rect): Rect {
+  const w = Math.min(0.82 * view.width, 460), h = w / 2;
+  return { x: view.x + (view.width - w) / 2, y: view.y + (view.height - h) / 2 - 24, width: w, height: h };
 }
 
 /** The moves so far, over the island's surface at the top of the screen (the level is on
  * the square's top wall). */
-function islandHud(ctx: CanvasRenderingContext2D, hud: { level: number; moves: number }, width: number, height: number, dpr: number): void {
+function islandHud(ctx: CanvasRenderingContext2D, hud: { level: number; moves: number }, view: Rect, dpr: number): void {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const size = Math.max(15, Math.min(22, Math.min(width, height) * 0.05));
+  const size = Math.max(15, Math.min(22, Math.min(view.width, view.height) * 0.05));
   ctx.font = `700 ${size}px system-ui, -apple-system, "Segoe UI", sans-serif`;
   ctx.textBaseline = "middle";
   ctx.fillStyle = COLORS.hud;
   // Halfway down the space over the square, but in the bar at least.
-  const y = Math.max(HUD_BAR / 2, Math.min(44, (height - islandSide(width, height)) / 4));
+  const y = view.y + Math.max(HUD_BAR / 2, Math.min(44, (view.height - islandSide(view)) / 4));
   ctx.textAlign = "right";
-  ctx.fillText(`${hud.moves} ${hud.moves === 1 ? "move" : "moves"}`, width - 16, y);
+  ctx.fillText(`${hud.moves} ${hud.moves === 1 ? "move" : "moves"}`, view.x + view.width - 16, y);
 }
 
 /** An island square's finish, in the middle of the screen: the board dimmed, and a card
  * like the reached target (the red block on it, its score track over it) playing the same
  * finish as a target does (`t`: the finish's clock), with the level above. */
-function islandCard(ctx: CanvasRenderingContext2D, g: Goal, t: number, width: number, height: number, dpr: number, detail: number, level: number): void {
+function islandCard(ctx: CanvasRenderingContext2D, g: Goal, t: number, width: number, height: number, view: Rect, dpr: number, detail: number, level: number): void {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const fewest = bestKnown(g) ?? g.solution.length, used = shownUsed(g)!;
   const times = finishTimes(fewest, used);
   const shown = Math.min(1, Math.max(0, t / 300));
   ctx.fillStyle = `rgba(20, 20, 18, ${0.55 * shown})`;
   ctx.fillRect(0, 0, width, height);
-  const r = islandCardRect(width, height);
+  const r = islandCardRect(view);
   // It rises a little into place as the dim comes up.
   const rise = (1 - easeOutCubic(shown)) * 30;
   ctx.globalAlpha = shown;

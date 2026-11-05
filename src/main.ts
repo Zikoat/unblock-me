@@ -299,7 +299,7 @@ function showGoal(goal: Goal | null): void {
     soul = { from: soulFrom, toId: goal.id, born: -1 };
     const k = squareOf(goal);
     if (k === null) flyTo({ x: at.x + red.w / 2, y: at.y + red.h / 2 }, 0, SOUL.TRAVEL_MS);
-    else flyTo({ x: squareAt(k).x + SIDE / 2, y: squareAt(k).y + SIDE / 2 }, 0, SOUL.TRAVEL_MS, islandCamera(k, scene.width, scene.height).scale);
+    else flyTo({ x: squareAt(k).x + SIDE / 2, y: squareAt(k).y + SIDE / 2 }, 0, SOUL.TRAVEL_MS, islandCamera(k, borderOnScreen(scene)).scale);
   }
   soulFrom = null;
   // The new red block throbs once; its clock starts at the first frame drawn (after the soul
@@ -695,7 +695,7 @@ const nextButton = document.querySelector<HTMLButtonElement>("#next")!;
 let cutToGoal = false;
 function showNext(on: boolean): void {
   if (on) {
-    const r = islandCardRect(scene.width, scene.height), view = borderOnScreen(scene);
+    const view = borderOnScreen(scene), r = islandCardRect(view);
     nextButton.textContent = nextIslandGoal(scene.done) ? "Next level" : "Continue";
     nextButton.style.top = `${r.y + r.height + 28 - view.y}px`;
   }
@@ -736,7 +736,7 @@ function lockView(): void {
   }
   scene.locked = k === null ? null : islandRects(k);
   scene.uiOnTop = k !== null && debug;
-  if (k !== null && !flight) scene.camera = islandCamera(k, scene.width, scene.height);
+  if (k !== null && !flight) scene.camera = islandCamera(k, borderOnScreen(scene));
 }
 
 function saveCamera(): void {

@@ -33,14 +33,15 @@ const FILL = 0.9;
 /** The bar at the top of the screen (CSS px) with the level and moves: a square's inside
  * stays out of it (and the same height free at the bottom, so it stays centred). */
 export const HUD_BAR = 44;
-/** How big (CSS px) a square's inside shows: FILL of the screen's shorter side, or less on a
- * squarish screen, to leave the bar free. */
-export const islandSide = (width: number, height: number) => Math.min(FILL * Math.min(width, height), height - 2 * HUD_BAR);
+/** How big (CSS px) a square's inside shows in `view` (the screen, or the smaller border when
+ * that is on): FILL of its shorter side, or less when squarish, to leave the bar free. */
+export const islandSide = (view: Rect) => Math.min(FILL * Math.min(view.width, view.height), view.height - 2 * HUD_BAR);
 
-/** The view while square `k` is played: its inside centred, islandSide big. */
-export function islandCamera(k: number, width: number, height: number): Camera {
-  const o = squareAt(k), scale = islandSide(width, height) / (SIDE * UNIT);
-  return { scale, offsetX: width / 2 - (o.x + SIDE / 2) * UNIT * scale, offsetY: height / 2 - (o.y + SIDE / 2) * UNIT * scale };
+/** The view while square `k` is played: its inside in the middle of `view`, islandSide big. */
+export function islandCamera(k: number, view: Rect): Camera {
+  const o = squareAt(k), scale = islandSide(view) / (SIDE * UNIT);
+  const cx = view.x + view.width / 2, cy = view.y + view.height / 2;
+  return { scale, offsetX: cx - (o.x + SIDE / 2) * UNIT * scale, offsetY: cy - (o.y + SIDE / 2) * UNIT * scale };
 }
 
 /** Square `k`'s cells: the square in its walls, and its bay (with its walls). */
