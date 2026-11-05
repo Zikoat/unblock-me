@@ -12,9 +12,13 @@ describe("island", () => {
     const scene = newScene(800, 800, { layout: randomLayout(7, { island: true }) });
     ISLAND_LEVELS.forEach((level, k) => {
       const goals = islandGoals(k), goal = goals.at(-1)!;
-      expect(goals.slice(0, -1).every((g) => g.step && g.unrated) && !goal.step && goal.id === redId(k)).toBe(true);
+      // The red block into the bay first; the last goal is scored for the whole square.
+      expect(goals[0]!.id).toBe(redId(k));
+      expect(goals.slice(0, -1).every((g) => g.step && g.unrated) && !goal.step).toBe(true);
       // (The last square's: two more, the blocker and on past the bay to its target.)
-      expect(goal.solution.length).toBe(level.fewest + (k === ISLAND_LEVELS.length - 1 ? 2 : 0));
+      const total = goals.reduce((n, g) => n + g.solution.length, 0);
+      expect(total).toBe(level.fewest + (k === ISLAND_LEVELS.length - 1 ? 2 : 0));
+      expect(goal.difficulty?.moves).toBe(total);
       for (const g of goals) {
         scene.goal = g;
         for (const move of g.solution) {
@@ -46,9 +50,10 @@ describe("island", () => {
       // Random blocks fill up to the island's footprints, never into them.
       expect(blocks.every((b) => b.wall || b.id.startsWith("isle ") || !ISLAND_RECTS.some((r) => intersects(b, r)))).toBe(true);
     }
-    expect(nextIslandGoal([])?.id).toBe("isle 0 1"); // the first square's earlier goal first
-    const done = [...islandGoals(0), ...islandGoals(1)];
-    expect(nextIslandGoal(done)?.id).toBe(redId(2));
+    const several = ISLAND_LEVELS.findIndex((l) => l.goals);
+    const before = ISLAND_LEVELS.slice(0, several).flatMap((_, k) => islandGoals(k));
+    expect(nextIslandGoal(before)?.id).toBe(redId(several)); // its bay first,
+    expect(nextIslandGoal([...before, islandGoals(several)[0]!])?.id).toBe(`isle ${several} ${ISLAND_LEVELS[several]!.goals![0]!.block}`); // then inside
     expect(nextIslandGoal(ISLAND_LEVELS.flatMap((_, k) => islandGoals(k)))).toBeNull();
     expect(ISLAND_RECTS.some((r) => intersects({ x: -1, y: 0, w: 3, h: 5 }, r))).toBe(false); // clear of the debug UI
   });

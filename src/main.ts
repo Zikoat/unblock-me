@@ -19,14 +19,14 @@ import { ease, slideDuration } from "./slide";
 import { blockAt, blocksIn, slideRange, type Move } from "./rules";
 import { borderOnScreen, goalSolved, latticeRect, newScene, quickPush, record, relayout, resize, restart, undo, visibleBlocks, whereIs } from "./scene";
 
-// v11: teaching squares first, of several sizes; v10 varied island squares; v9 a slower island ramp; v8 harder island squares (their
+// v12: bay goals first, a few squares with goals inside later; v11 teaching squares first, of several sizes; v10 varied island squares; v9 a slower island ramp; v8 harder island squares (their
 // blocks' stored places no longer fit, each time); v7 the island (everyone starts on it); v6
 // UI blocks in a game row and a debug row (generation changed); v5 two rows of UI blocks, v4
 // one row, v3 one 2x2 reset block, v2 no seed, v1 free positions.
-const SEED_KEY = "unblock-me:v11:seed";
-const MOVED_KEY = "unblock-me:v11:moved";
-const HISTORY_KEY = "unblock-me:v11:history";
-const GOAL_KEY = "unblock-me:v11:goal";
+const SEED_KEY = "unblock-me:v12:seed";
+const MOVED_KEY = "unblock-me:v12:moved";
+const HISTORY_KEY = "unblock-me:v12:history";
+const GOAL_KEY = "unblock-me:v12:goal";
 const BORDER_KEY = "unblock-me:border";
 const FPS_KEY = "unblock-me:fps"; // whether the fps counter shows
 const TRIES_KEY = "unblock-me:tries";
@@ -419,7 +419,9 @@ function reachGoal(now: number): void {
   if (!goal || !goalSolved(scene) || animation?.move.id === goal.id) return;
   // Done: its target plays the finish, and once the stars have gathered the next goal
   // starts from a block close to it.
-  goal.used = Math.max(1, movesSince(goal.begun ?? 0));
+  // (An island square's last goal counts its moves from the square's first: it scores them all.)
+  const first = squareOf(goal) === null ? undefined : scene.done.find((d) => squareOf(d) === squareOf(goal));
+  goal.used = Math.max(1, movesSince((first ?? goal).begun ?? 0));
   logMoves();
   log({ e: "reached", id: goal.id, used: goal.used });
   scene.done.push(goal);

@@ -23,7 +23,7 @@
 Notes from play tests (not AI generated): issues, observations and ideas, many without a clear solution yet. **Done** marks the fixed ones.
 
 ### Subject a
-- Needs a simple tutorial level that teaches how the game works without the huge map. **Started**: the island before the generated world: two teaching squares (4x4 with 2 goals, 5x5 with 3: a block on the target, reached blocks in a later goal's way), then 8 walled 6x6 squares (6 to 13 fewest moves, one more each; 1 to 13 was too easy at the start, 7 to 22 ramped too fast), stars hidden on the first 3.
+- Needs a simple tutorial level that teaches how the game works without the huge map. **Started**: the island before the generated world: 10 walled squares growing from 4x4 to 6x6 (4 to 13 fewest moves), each won by its red block out into its bay; levels 5 and 8 then have one and two goals inside (a block on the target, a reached block in the next goal's way); stars hidden on the first 3.
 - **Done**: tapping the gradient (way cue) did something; disabled.
 - **Done**: fullscreen didn't work in Telegram's browser.
 - **Done**: Telegram's browser slid left and up, making most things hard.

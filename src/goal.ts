@@ -31,8 +31,8 @@ export type Goal = {
   /** An early island goal: no stars while it is played, and its finish is the full one
    * however many moves it took (src/island.ts). */
   unrated?: boolean;
-  /** An island square's earlier goal (a block onto a cell inside it): reached, it sparkles
-   * and the next one follows, no finish nor stars. */
+  /** An island square's goal with more to come in it: reached, it sparkles and the next one
+   * follows, no finish nor stars. */
   step?: boolean;
 };
 

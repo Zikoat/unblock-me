@@ -1,7 +1,7 @@
 // The island: the first goals, in handcrafted squares in a row right of the start. Each is a
 // room walled in all round, its red block leaving through a gap in the right wall on its own
 // row into its target, a 2x1 bay outside it (as in the original Unblock Me); a square may
-// have earlier goals inside it first. Squares grow from small to 6x6. The generated world
+// have more goals inside it after that. Squares grow from small to 6x6. The generated world
 // begins past the last square; nothing is generated in the island's area.
 import type { Camera, Rect } from "./camera";
 import type { Difficulty } from "./difficulty";
@@ -122,9 +122,10 @@ export const ISLAND_AREA: Rect = (() => {
 
 const known = (moves: number): Difficulty => ({ moves, atLeast: moves, searched: 0, branching: 2, score: moves });
 
-/** Square `k`'s goals, in turn: its earlier ones (`step`: a block onto a cell inside), then
- * its red block into the bay; each with the level's shortest solution from where the one
- * before left the blocks. */
+/** Square `k`'s goals, in turn: its red block into the bay, then any inside it (a block onto
+ * a cell); each with the level's shortest solution from where the one before left the
+ * blocks. All but the last are `step`s; the last is scored for the whole square (its fewest
+ * moves are all the goals', and the moves counted from the first goal on). */
 export function islandGoals(k: number): Goal[] {
   const level = ISLAND_LEVELS[k]!, o = squareAt(k), side = sideOf(k);
   const pos = level.blocks.map(([x, y]) => ({ x: o.x + x, y: o.y + y }));
@@ -135,10 +136,6 @@ export function islandGoals(k: number): Goal[] {
       pos[i] = next;
       return { id: `isle ${k} ${i}`, from, to: next };
     });
-  const goals: Goal[] = (level.goals ?? []).map(({ block, at, solution: steps }) => {
-    const start = { ...pos[block]! }, solution = play(steps);
-    return { id: `isle ${k} ${block}`, target: { x: o.x + at[0], y: o.y + at[1] }, start, solution, difficulty: known(solution.length), unrated: true, step: true };
-  });
   const red = level.blocks[0]!, start = { ...pos[0]! }, solution = play(level.solution);
   // The last square's target is past the clearing: after the bay, the blocker moves up out of
   // the row and the red block goes on (two more moves: the bay is only seen into first).
@@ -147,8 +144,17 @@ export function islandGoals(k: number): Goal[] {
     solution.push({ id: BLOCKER.id, from: { x: BLOCKER.x, y: BLOCKER.y }, to: { x: BLOCKER.x, y: BLOCKER.y - 1 } });
     solution.push({ id: redId(k), from: pos[0]!, to: target });
   }
-  goals.push({ id: redId(k), target, start, solution, difficulty: known(solution.length), unrated: k < UNRATED || undefined });
-  return goals;
+  const goals: Goal[] = [{ id: redId(k), target, start, solution }];
+  for (const { block, at, solution: steps } of level.goals ?? []) {
+    const start = { ...pos[block]! };
+    goals.push({ id: `isle ${k} ${block}`, target: { x: o.x + at[0], y: o.y + at[1] }, start, solution: play(steps) });
+  }
+  const total = goals.reduce((n, g) => n + g.solution.length, 0);
+  return goals.map((g, i) =>
+    i < goals.length - 1
+      ? { ...g, difficulty: known(g.solution.length), unrated: true, step: true }
+      : { ...g, difficulty: known(total), unrated: k < UNRATED || undefined },
+  );
 }
 
 /** The next island goal after `done` (the goals reached so far), or null once all are. */
