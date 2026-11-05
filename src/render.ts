@@ -4,6 +4,7 @@ import { worldRect, type Rect } from "./camera";
 import { intersects, UNIT, type Block } from "./layout";
 import { drawScoreTrack, FINISH, finishTimes, starPoints, type TraceEntry } from "./score-track";
 import { bestKnown, shownUsed, type Goal } from "./goal";
+import { HUD_BAR, islandSide } from "./island";
 import { timed } from "./perf";
 import { cinemaOverlay, dance, glitch, glitchShift, lit, overMore, tilt } from "./finish-fx2";
 import { onBlock, over, punch, quake, screenFlash, soul as drawSoul, SOUL, squash, timeWarp, under, wave, type Fx } from "./finish-fx";
@@ -363,8 +364,6 @@ export function draw(
     }
   }
 
-  if (scene.locked) greyOutside(ctx, scene, scene.locked);
-  else if (surface) greyOutside(ctx, scene, surface.rects, surface.alpha);
   if (labels.length) {
     ctx.font = `800 ${UNIT * 0.55}px system-ui, -apple-system, "Segoe UI", sans-serif`;
     ctx.textAlign = "center";
@@ -378,11 +377,16 @@ export function draw(
   // reached one's finish and then its row of stars.
   timed(ctx, "score tracks", () => {
     for (const { goal: g, cells } of targets) {
-      if (g === goal && !g.unrated) drawScoreTrack(ctx, trackRect(cells), fewestOf(g), used, { undone: g.undone });
+      // (Not an island square's: the bar at the top has its moves.)
+      if (g === goal && !g.unrated && !scene.locked) drawScoreTrack(ctx, trackRect(cells), fewestOf(g), used, { undone: g.undone });
       else if (g.used !== undefined && !(finish?.island && finish.id === g.id)) drawScoreTrack(ctx, trackRect(cells), fewestOf(g), shownUsed(g)!, { t: finish?.id === g.id ? (finishClock(scene, finish, now) ?? Infinity) : Infinity, undone: g.undone, trace: finish?.id === g.id ? trace : undefined, detail });
     }
   });
   timed(ctx, "sparkles", () => sparkles.forEach((s) => sparkle(ctx, s, now)));
+  // The island's surface goes over everything round the square: other squares' targets and
+  // their stars too.
+  if (scene.locked) greyOutside(ctx, scene, scene.locked);
+  else if (surface) greyOutside(ctx, scene, surface.rects, surface.alpha);
   if (fx) {
     over(ctx, fx);
     overMore(ctx, fx);
@@ -462,7 +466,8 @@ function islandHud(ctx: CanvasRenderingContext2D, hud: { level: number; of: numb
   ctx.font = `700 ${size}px system-ui, -apple-system, "Segoe UI", sans-serif`;
   ctx.textBaseline = "middle";
   ctx.fillStyle = COLORS.hud;
-  const y = Math.max(size, Math.min(44, (height - 0.9 * Math.min(width, height)) / 4));
+  // Halfway down the space over the square, but in the bar at least.
+  const y = Math.max(HUD_BAR / 2, Math.min(44, (height - islandSide(width, height)) / 4));
   ctx.textAlign = "left";
   ctx.fillText(`Level ${hud.level}/${hud.of}`, 16, y);
   ctx.textAlign = "right";

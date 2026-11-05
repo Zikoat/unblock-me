@@ -1026,9 +1026,12 @@ function goalTip(at: Point): string | null {
   }
   return null;
 }
+/** Under the island's surface (round the square being played): hidden, so nothing there
+ * reacts to the mouse. */
+const covered = (world: Point) => !!scene.locked && !scene.locked.some((r) => world.x >= r.x && world.x < r.x + r.width && world.y >= r.y && world.y < r.y + r.height);
 function showTip(e: PointerEvent): void {
   const world = { x: (e.offsetX - scene.camera.offsetX) / scene.camera.scale / UNIT, y: (e.offsetY - scene.camera.offsetY) / scene.camera.scale / UNIT };
-  const hovering = e.pointerType === "mouse" && e.buttons === 0;
+  const hovering = e.pointerType === "mouse" && e.buttons === 0 && !covered(world);
   const ui = hovering ? blockAt(visibleBlocks(scene), world)?.ui : null;
   const text = ui ? tooltip(ui) : hovering ? goalTip(world) : null;
   if (!text) {
@@ -1048,7 +1051,7 @@ canvas.addEventListener("pointerleave", () => {
 /** A resting mouse over a sliding block hints where a click would send it. */
 function hoverAt(e: PointerEvent): void {
   const world = { x: (e.offsetX - scene.camera.offsetX) / scene.camera.scale / UNIT, y: (e.offsetY - scene.camera.offsetY) / scene.camera.scale / UNIT };
-  const b = e.pointerType === "mouse" && e.buttons === 0 ? blockAt(visibleBlocks(scene), world) : null;
+  const b = e.pointerType === "mouse" && e.buttons === 0 && !covered(world) ? blockAt(visibleBlocks(scene), world) : null;
   scene.hover = b && !b.ui && !b.wall ? b.id : null;
 }
 

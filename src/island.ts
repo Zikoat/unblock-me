@@ -26,9 +26,16 @@ export const UNRATED = 3;
  * is played (the bay is mostly out of view; a drag onto its first cell still finishes). */
 const FILL = 0.9;
 
-/** The view while square `k` is played: its inside centred, FILL of the shorter side. */
+/** The bar at the top of the screen (CSS px) with the level and moves: a square's inside
+ * stays out of it (and the same height free at the bottom, so it stays centred). */
+export const HUD_BAR = 44;
+/** How big (CSS px) a square's inside shows: FILL of the screen's shorter side, or less on a
+ * squarish screen, to leave the bar free. */
+export const islandSide = (width: number, height: number) => Math.min(FILL * Math.min(width, height), height - 2 * HUD_BAR);
+
+/** The view while square `k` is played: its inside centred, islandSide big. */
 export function islandCamera(k: number, width: number, height: number): Camera {
-  const o = squareAt(k), scale = (FILL * Math.min(width, height)) / (SIDE * UNIT);
+  const o = squareAt(k), scale = islandSide(width, height) / (SIDE * UNIT);
   return { scale, offsetX: width / 2 - (o.x + SIDE / 2) * UNIT * scale, offsetY: height / 2 - (o.y + SIDE / 2) * UNIT * scale };
 }
 
