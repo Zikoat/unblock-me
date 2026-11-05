@@ -60,7 +60,17 @@ export const squareAt = (k: number) => ({ x: ORIGIN.x + (k % COLS) * STEP.x, y: 
 const footprint = (k: number): Rect => ({ x: squareAt(k).x - 1, y: squareAt(k).y - 1, width: SIDE + 4, height: SIDE + 2 });
 /** The island's cells: the squares' footprints (nothing random is generated there). */
 export const ISLAND_RECTS: Rect[] = ISLAND_LEVELS.map((_, k) => footprint(k));
-export const inIsland = (p: { x: number; y: number }) => ISLAND_RECTS.some((r) => p.x >= r.x && p.x < r.x + r.width && p.y >= r.y && p.y < r.y + r.height);
+/** The last square's way out: its bay opens on a clearing in the world, a blocker across the
+ * red block's row (vertical, room above and below it) and the real target past it. Reaching
+ * the bay only reveals the world (see bayReached). */
+const exitRow = (k: number) => ISLAND_LEVELS[k]!.blocks[0]![1];
+const BLOCKER = { id: `isle ${LAST} blocker`, x: squareAt(LAST).x + SIDE + 3, y: squareAt(LAST).y + exitRow(LAST) - 1 };
+const CLEARING: Rect = { x: BLOCKER.x, y: BLOCKER.y - 1, width: 4, height: 5 };
+/** Where nothing random is generated: the island and the clearing past its last bay. */
+export const ISLAND_KEEP_OUT: Rect[] = [...ISLAND_RECTS, CLEARING];
+/** Square `k`'s red block (at `at`) is in its bay: for the last square, the world shows. */
+export const bayReached = (k: number, at: { x: number }) => isLast(k) && at.x >= squareAt(k).x + SIDE;
+export const inIsland = (p: { x: number; y: number }) => ISLAND_KEEP_OUT.some((r) => p.x >= r.x && p.x < r.x + r.width && p.y >= r.y && p.y < r.y + r.height);
 /** Whether square `k` is the last: its bay opens to the world. */
 export const isLast = (k: number) => k === LAST;
 /** A square's red block. */
@@ -84,6 +94,7 @@ export function islandBlocks(): Placed[] {
     const o = squareAt(k);
     level.blocks.forEach(([x, y, h], i) => placed.push({ id: `isle ${k} ${i}`, x: o.x + x, y: o.y + y, w: h ? 2 : 1, h: h ? 1 : 2, island: true }));
   });
+  placed.push({ ...BLOCKER, w: 1, h: 2, island: true });
   return placed;
 }
 
@@ -106,12 +117,19 @@ export function islandGoal(k: number): Goal {
     return { id: `isle ${k} ${i}`, from, to: next };
   });
   const red = level.blocks[0]!;
+  // The last square's target is past the clearing: after the bay, the blocker moves up out of
+  // the row and the red block goes on (two more moves: the bay is only seen into first).
+  const target = isLast(k) ? { x: CLEARING.x + 2, y: o.y + red[1] } : { x: o.x + SIDE, y: o.y + red[1] };
+  if (isLast(k)) {
+    solution.push({ id: BLOCKER.id, from: { x: BLOCKER.x, y: BLOCKER.y }, to: { x: BLOCKER.x, y: BLOCKER.y - 1 } });
+    solution.push({ id: redId(k), from: pos[0]!, to: target });
+  }
   return {
     id: redId(k),
-    target: { x: o.x + SIDE, y: o.y + red[1] },
+    target,
     start: { x: o.x + red[0], y: o.y + red[1] },
     solution,
-    difficulty: known(level.fewest),
+    difficulty: known(solution.length),
     unrated: k < UNRATED || undefined,
   };
 }

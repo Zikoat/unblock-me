@@ -12,7 +12,7 @@ import { bestKnown, medal, shownUsed, viewCentre, type Goal } from "./goal";
 import type { GoalRequest } from "./goal-worker";
 import { Gestures, type Input } from "./gestures";
 import { ISLAND_LEVELS } from "./island-levels";
-import { inIsland, isLast, islandCamera, islandRects, nextIslandGoal, SIDE, squareAt, squareOf } from "./island";
+import { bayReached, inIsland, isLast, islandCamera, islandRects, nextIslandGoal, SIDE, squareAt, squareOf } from "./island";
 import { fixedLayout, MAX_TRIES, MIN_TRIES, randomLayout, TRIES, UNIT, type Placed, type Ui } from "./layout";
 import { CUE_MS, draw, fading, islandCardRect, resetFades, RIPPLE_MS, SHAKE_MS, THROB_MS, redArrow, uiArrow, type Sparkle } from "./render";
 import { ease, slideDuration } from "./slide";
@@ -426,13 +426,8 @@ function reachGoal(now: number): void {
   const last = scene.history.at(-1);
   const dir = last?.id === goal.id ? { x: Math.sign(last.to.x - last.from.x), y: Math.sign(last.to.y - last.from.y) } : { x: 0, y: 0 };
   const times = finishTimes(bestKnown(goal) ?? goal.solution.length, shownUsed(goal)!);
-  // The island's last square ends as goals in the world do, its bay open to the world: the
-  // view glides slowly out to the bay as the island's surface fades, revealing the world.
+  // The island's last square ends as goals in the world do (its target is out there).
   const square = squareOf(goal), island = square !== null && !isLast(square);
-  if (square !== null && isLast(square)) {
-    reveal = { born: now, rects: islandRects(square) };
-    flyTo({ x: goal.target.x + 1, y: goal.target.y + 0.5 }, 0, REVEAL_MS);
-  }
   finish = { id: goal.id, born: now, end: timeWarp(times, times.medalAt !== null && !goal.undone).raw(times.end), next: goal.target, dir, heard: -1, island };
   if (island) {
     scene.hover = null; // the board rests under the finish card
@@ -726,7 +721,19 @@ function islandHud(): { level: number; moves: number } {
 /** While an island square is played its view is fixed (see islandCamera): set every frame,
  * so a resize keeps it, except while the view glides there. */
 function lockView(): void {
-  const k = withIsland ? (squareOf(scene.goal) ?? (finish?.island ? squareOf(finish) : null)) : null;
+  let k = withIsland ? (squareOf(scene.goal) ?? (finish?.island ? squareOf(finish) : null)) : null;
+  // The last square's red block in its bay: the world shows, the view free from then on.
+  // Getting there (not on a load that finds it there), the view glides slowly out over the
+  // bay and the clearing past it as the island's surface fades.
+  const at = k !== null && scene.goal ? whereIs(scene, scene.goal.id) : null;
+  if (k !== null && at && bayReached(k, at)) {
+    if (scene.locked) {
+      reveal = { born: performance.now(), rects: islandRects(k) };
+      const t = scene.goal!.target, scale = Math.min(scene.camera.scale, scene.width / (10 * UNIT));
+      flyTo({ x: t.x - 1.5, y: t.y + 0.5 }, 0, REVEAL_MS, scale);
+    }
+    k = null;
+  }
   scene.locked = k === null ? null : islandRects(k);
   if (k !== null && !flight) scene.camera = islandCamera(k, scene.width, scene.height);
 }

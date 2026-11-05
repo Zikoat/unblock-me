@@ -13,7 +13,8 @@ describe("island", () => {
     ISLAND_LEVELS.forEach((level, k) => {
       const goal = islandGoal(k);
       scene.goal = goal;
-      expect(goal.solution.length).toBe(level.fewest);
+      // (The last square's: two more, the blocker and on past the bay to its target.)
+      expect(goal.solution.length).toBe(level.fewest + (k === ISLAND_LEVELS.length - 1 ? 2 : 0));
       for (const move of goal.solution) {
         const home = scene.layout.byId(move.id)!, at = whereIs(scene, move.id)!;
         expect(at).toEqual(move.from);

@@ -39,7 +39,9 @@ for (let k = 0; k < 9; k++) {
     await page.mouse.down();
     for (let s = 1; s <= 8; s++) await page.mouse.move(from.x + ((to.x - from.x) * s) / 8, from.y + ((to.y - from.y) * s) / 8);
     await page.mouse.up();
-    await page.waitForTimeout(150);
+    // (The last square's bay reveals the world: the view glides out before the next drag.)
+    await page.waitForTimeout(k === 7 ? 2200 : 150);
+    if (k === 7 && m === g.solution.at(-3)) await page.screenshot({ path: `${out}/island-bay.png` });
   }
   if (k === 7) {
     await page.waitForTimeout(900);
