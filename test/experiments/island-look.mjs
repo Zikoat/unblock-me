@@ -1,5 +1,7 @@
 // Look at the island in a phone-sized browser: a fresh start, then each goal solved with its
-// own solution, a screenshot at each (~1 min). node test/experiments/island-look.mjs <outdir>
+// own solution, a screenshot at each. node test/experiments/island-look.mjs <outdir>
+// The page's clock is Playwright's: each wait runs its animations through as fast as the CPU
+// goes instead of in real time (REAL_TIME=1 plays them as a player sees them).
 import { createServer } from "http";
 import { readFile } from "fs/promises";
 import { join, extname } from "path";
@@ -15,15 +17,19 @@ const server = createServer(async (req, res) => {
 const b = await chromium.launch();
 const page = await b.newPage({ viewport: { width: 393, height: 700 }, deviceScaleFactor: 2, hasTouch: true });
 page.on("pageerror", (e) => console.log("pageerror", e.message));
+const fake = !process.env.REAL_TIME;
+if (fake) await page.clock.install();
+/** Let `ms` of the page's time pass. */
+const pass = (ms) => (fake ? page.clock.runFor(ms) : pass(ms));
 await page.goto(`http://localhost:${server.address().port}/`);
-await page.waitForTimeout(1500);
+await pass(1500);
 const goal = () => page.evaluate(() => window.unblock.scene.goal && JSON.parse(JSON.stringify(window.unblock.scene.goal)));
 /** Screen point of a lattice point, by the camera now. */
 const screen = (x, y) => page.evaluate(([x, y]) => { const c = window.unblock.scene.camera; return { x: x * 60 * c.scale + c.offsetX, y: y * 60 * c.scale + c.offsetY }; }, [x, y]);
 const LAST = 9;
 // Where the time goes: seconds since the start, by what was waited for.
 const t0 = Date.now(), spent = {};
-const wait = async (what, ms) => { const t = Date.now(); await page.waitForTimeout(ms); spent[what] = (spent[what] ?? 0) + Date.now() - t; };
+const wait = async (what, ms) => { const t = Date.now(); await pass(ms); spent[what] = (spent[what] ?? 0) + Date.now() - t; };
 const timed = async (what, p) => { const t = Date.now(); const r = await p; spent[what] = (spent[what] ?? 0) + Date.now() - t; return r; };
 const shot = page.screenshot.bind(page), evaluate = page.evaluate.bind(page), mouse = page.mouse.move.bind(page.mouse);
 page.screenshot = (o) => timed("screenshots", shot(o));
@@ -60,32 +66,39 @@ for (let n = 0; n < 40; n++) {
     if (k === LAST && m === g.solution.at(-3)) await page.screenshot({ path: `${out}/island-bay.png` });
   }
   if (g.step) {
-    await page.waitForTimeout(250);
+    await pass(250);
     await page.screenshot({ path: `${out}/${name}-reached.png` });
     continue;
   }
   if (k === LAST) {
-    await page.waitForTimeout(900);
+    await pass(900);
     await page.screenshot({ path: `${out}/island-reveal.png` });
     continue;
   }
   // Its finish plays in a card; the next button cuts to the next square. Only the first
-  // square's is watched to its end (each takes ~5 s; FINISHES=1 watches them all): the
-  // others are cut short by clicking the button while it is still hidden.
+  // square's is watched to its end (FINISHES=1 watches them all): the others are skipped
+  // with a press.
+  const nextShown = () => page.evaluate(() => !document.querySelector("#next").hidden);
+  if (k !== 0 && !process.env.FINISHES) {
+    await page.mouse.move(196, 350);
+    await page.mouse.down();
+    await page.mouse.up();
+  }
+  for (let i = 0; i < 100 && !(await nextShown()); i++) await wait("finish", 100);
+  if (!(await nextShown())) console.log("no next button");
   if (k === 0 || process.env.FINISHES) {
-    await timed("finish", page.waitForSelector("#next:not([hidden])", { timeout: 20000 }).catch(() => console.log("no next button")));
     await wait("finish", 300);
     await page.screenshot({ path: `${out}/island-${k}-done.png` });
-    await page.click("#next").catch(() => {});
-  } else await timed("finish", page.waitForFunction(() => { document.querySelector("#next").click(); return !!window.unblock.scene.goal; }, null, { timeout: 20000 }));
+  }
+  await page.click("#next").catch(() => {});
 }
 await page.screenshot({ path: `${out}/island-end.png` });
 // The whole island from afar, its squares numbered, and its first squares closer (once the
 // view has got to the world's first goal).
-await page.waitForTimeout(2500);
+await pass(2500);
 for (const [name, s, x] of [["island-overview", 0.085, 45], ["island-start", 0.3, 14]]) {
   await page.evaluate(([s, x]) => { window.unblock.scene.camera = { scale: s, offsetX: 393 / 2 - x * 60 * s, offsetY: 700 / 2 - 0 * 60 * s }; window.unblock.redraw(); }, [s, x]);
-  await page.waitForTimeout(300);
+  await pass(300);
   await page.screenshot({ path: `${out}/${name}.png` });
 }
 console.log("time", ((Date.now() - t0) / 1000).toFixed(0), "s, of it:", Object.entries(spent).map(([k, v]) => `${k} ${(v / 1000).toFixed(0)}s`).join(", "));
