@@ -54,6 +54,7 @@ export class Gestures {
       onPush = () => {},
       onStuck = () => {},
       onPanAfterPush = () => {},
+      onViewTaken = () => {},
       onInput = () => {},
       onSound = () => {},
       onSnap = () => {},
@@ -69,6 +70,8 @@ export class Gestures {
       /** A pan or pinch began soon after a tap pushed a block (ms since): maybe the tap was a
        * pan that didn't get past the tap slop. */
       onPanAfterPush?: (ms: number) => void;
+      /** The player moves the view (a pan, pinch or wheel begins): it is theirs now. */
+      onViewTaken?: () => void;
       /** How the move about to be recorded was made (just before onChange). */
       onInput?: (input: Input) => void;
       /** A block pressed, a drag let go, a dragged block against another, a tap's push, a
@@ -86,6 +89,7 @@ export class Gestures {
     this.onPush = onPush;
     this.onStuck = onStuck;
     this.onPanAfterPush = onPanAfterPush;
+    this.onViewTaken = onViewTaken;
     this.onInput = onInput;
     this.onSound = onSound;
     this.onSnap = onSnap;
@@ -96,6 +100,7 @@ export class Gestures {
   private readonly onInput: (input: Input) => void;
   private readonly onSound: (sound: Sound) => void;
   private readonly onPanAfterPush: (ms: number) => void;
+  private readonly onViewTaken: () => void;
   private readonly now: () => number;
 
   private readonly onStuck: (id: string) => void;
@@ -186,6 +191,7 @@ export class Gestures {
 
   wheel(at: Point, deltaY: number): void {
     if (this.scene.locked) return;
+    this.onViewTaken();
     const factor = Math.exp(-deltaY * 0.002);
     this.zoomLimit(this.scene.camera.scale * factor);
     this.scene.camera = zoomAt(this.scene.camera, at, factor, limits(this.scene));
@@ -271,8 +277,10 @@ export class Gestures {
     return { how, ms: Math.round(now - pressed), sincePan: this.panEnded === null ? null : Math.round(now - this.panEnded) };
   }
 
-  /** A pan or pinch begins: report it if a tap pushed a block just before. */
+  /** A pan or pinch begins: the view is the player's; report it if a tap pushed a block
+   * just before. */
   private panStarted(): void {
+    this.onViewTaken();
     if (this.pushedAt === null) return;
     const ms = this.now() - this.pushedAt;
     this.pushedAt = null;

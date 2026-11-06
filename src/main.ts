@@ -578,6 +578,8 @@ const gestures = new Gestures(scene, {
     debugCode(null);
     pushed(move);
   },
+  // The view stops following the soul (or anything gliding it) as the player takes it.
+  onViewTaken: () => (flight = null),
   onInput: (how) => (input = how),
   onSound: (sound) => sfx.play(sound, performance.now()),
   onSnap: (slide) => animate(slide),
