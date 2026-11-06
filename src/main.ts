@@ -916,6 +916,7 @@ function keepDetail(): void {
 function advance(now: number): ReturnType<typeof sliding> {
     flying(now);
     lockView();
+    scene.held = finish?.id ?? null;
     placeView();
     cameraMoved();
     const moving = sliding(now);
@@ -1148,7 +1149,7 @@ canvas.addEventListener("pointerleave", () => {
 function hoverAt(e: PointerEvent): void {
   const world = { x: (e.offsetX - scene.camera.offsetX) / scene.camera.scale / UNIT, y: (e.offsetY - scene.camera.offsetY) / scene.camera.scale / UNIT };
   const b = e.pointerType === "mouse" && e.buttons === 0 && !covered(world) && !finish?.island ? blockAt(visibleBlocks(scene), world) : null;
-  scene.hover = b && !b.ui && !b.wall ? b.id : null;
+  scene.hover = b && !b.ui && !b.wall && b.id !== scene.held ? b.id : null;
 }
 
 // A press on the arrow to the UI blocks is the arrow's, not the board's.

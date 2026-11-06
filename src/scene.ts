@@ -40,6 +40,9 @@ export type Scene = {
    * bay). The view is fixed (no panning or zooming, no edge pins), everything else is greyed
    * out, and touches there do nothing. */
   locked?: Rect[] | null;
+  /** A block that can't be moved: a red block while its finish plays on it (a press on it
+   * is the background's). */
+  held?: string | null;
   /** With the view fixed on an island square, whether the UI blocks show (and work) over its
    * surface: only with the debug UI on. */
   uiOnTop?: boolean;

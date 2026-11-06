@@ -118,7 +118,8 @@ export class Gestures {
       this.startPinch();
       this.panStarted();
     } else if (this.pointers.size === 1) {
-      const block = tool?.block ?? blockAt(visibleBlocks(this.scene), this.lattice(at));
+      const under = tool?.block ?? blockAt(visibleBlocks(this.scene), this.lattice(at));
+      const block = under && under.id === this.scene.held ? null : under;
       this.mode = { kind: "pressed", id, start: at, block, at: this.now() };
       if (block && !block.ui && !block.wall) this.onSound("press");
     }
