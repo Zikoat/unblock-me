@@ -674,8 +674,9 @@ export function soulFlash(k: number): number {
  * its middle (the block gold under it), which sets off before it is all in, the red
  * following; it flies straight to the new block's middle, slow at first and faster all the
  * way, shedding sparks that drift back off its path; it hits: the block flashes (soulFlash,
- * in render.ts) and a ring goes out. */
-export function soul(ctx: CanvasRenderingContext2D, from: Rect, to: Rect, k: number, zoom: number, style: SoulStyle): void {
+ * in render.ts) and a ring goes out. The red drawing in is the `under` layer (right over the
+ * blocks, under the stars and the rest of the finish), the rest `over`. */
+export function soul(ctx: CanvasRenderingContext2D, from: Rect, to: Rect, k: number, zoom: number, style: SoulStyle, layer: "under" | "over"): void {
   const B = big(zoom), p = clamp(k / SOUL.TRAVEL_MS), r = UNIT * 0.21 * B;
   const c0 = { x: from.x + from.width / 2, y: from.y + from.height / 2 }, c1 = { x: to.x + to.width / 2, y: to.y + to.height / 2 };
   const len = Math.hypot(c1.x - c0.x, c1.y - c0.y) || 1, dir = { x: (c1.x - c0.x) / len, y: (c1.y - c0.y) / len };
@@ -684,6 +685,7 @@ export function soul(ctx: CanvasRenderingContext2D, from: Rect, to: Rect, k: num
     return { x: c0.x + (c1.x - c0.x) * e, y: c0.y + (c1.y - c0.y) * e };
   };
   const RED = "#d64545";
+  if (layer === "under" && p >= 1) return;
   ctx.save();
   if (p < 1) {
     const f = clamp((p - LEAVE) / (1 - LEAVE)), at = along(f), g = clamp(p / GATHER);
@@ -757,6 +759,11 @@ export function soul(ctx: CanvasRenderingContext2D, from: Rect, to: Rect, k: num
     };
     // The head shows as the red has drawn in (before, the red is the head).
     const head = clamp((g - 0.75) / 0.25);
+    if (layer === "under") {
+      if (g < 1) drawIn();
+      ctx.restore();
+      return;
+    }
     if (f > 0) {
       if (style === "comet") {
         ribbon(40, 0.012, r * 1.5, (t) => `rgba(214, 69, 69, ${0.75 * t})`);
@@ -781,7 +788,7 @@ export function soul(ctx: CanvasRenderingContext2D, from: Rect, to: Rect, k: num
         });
       }
     }
-    if (g < 1) {
+    function drawIn(): void {
       // The block's red drawing in, following the ball as it sets off, drawn out a little
       // the way it goes.
       const e = g < 0.5 ? 2 * g * g : 1 - (-2 * g + 2) ** 2 / 2;

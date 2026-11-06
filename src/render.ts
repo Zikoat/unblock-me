@@ -352,6 +352,12 @@ export function draw(
     }
   });
 
+  // The old red block's red drawing in to its soul: over the blocks, under the stars.
+  if (soul && soulK >= 0) {
+    const to = scene.layout.byId(soul.toId), at = whereIs(scene, soul.toId);
+    if (to && at) drawSoul(ctx, soul.from, { x: at.x * UNIT + GAP, y: at.y * UNIT + GAP, width: to.w * UNIT - 2 * GAP, height: to.h * UNIT - 2 * GAP }, soulK, camera.scale, soul.style, "under");
+  }
+
   // The new red block's way to its target: a red trail growing from it along its lane,
   // over the blocks in the way.
   // (Not before its clock starts: once the soul gets there.)
@@ -432,7 +438,7 @@ export function draw(
   }
   if (soul && soulK >= 0) {
     const to = scene.layout.byId(soul.toId), at = whereIs(scene, soul.toId);
-    if (to && at) drawSoul(ctx, soul.from, { x: at.x * UNIT + GAP, y: at.y * UNIT + GAP, width: to.w * UNIT - 2 * GAP, height: to.h * UNIT - 2 * GAP }, soulK, camera.scale, soul.style);
+    if (to && at) drawSoul(ctx, soul.from, { x: at.x * UNIT + GAP, y: at.y * UNIT + GAP, width: to.w * UNIT - 2 * GAP, height: to.h * UNIT - 2 * GAP }, soulK, camera.scale, soul.style, "over");
   }
 
   // A tap on the background: one small yellow ring spreading out and fading, like a drop
