@@ -68,13 +68,18 @@ const block = (page, id) => page.evaluate((id) => unblock.visibleBlocks().find((
 const blockIds = (page) => page.evaluate(() => unblock.visibleBlocks().map((b) => `${b.id}@${b.x},${b.y}`).sort().join(" "));
 
 const browser = await chromium.launch();
+// Each page runs on Playwright's clock: a wait lets that much of the page's time pass at once,
+// its animations run through as fast as the CPU goes (REAL_TIME=1 waits in real time).
+const fake = !process.env.REAL_TIME;
+const clocked = async (page) => (fake && (await page.clock.install()), page);
+const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(ms));
 
 // --- Phone: 400x800 CSS px at 2x, touch only. The view starts centred on the reset cell
 // (0,0), so lattice point (x,y) is at screen (170 + 60x, 370 + 60y); the border spans
 // about x -2.1..3.1, y -4.8..5.8.
 {
   const context = await browser.newContext({ viewport: { width: 400, height: 800 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
-  const page = await context.newPage();
+  const page = await clocked(await context.newPage());
   const cdp = await context.newCDPSession(page);
   const cell = (x, y) => [170 + x * UNIT, 370 + y * UNIT];
   const touch = (type, points) =>
@@ -123,7 +128,7 @@ const browser = await chromium.launch();
   }
   check(await debugReload, "five rounds of empty board then the stuck red block reset the game");
   await frame(page);
-  await page.waitForTimeout(300);
+  await pass(page, 300);
   const uis = await page.evaluate(() => [unblock.visibleBlocks().filter((b) => b.ui).length, localStorage.getItem("unblock-me:debug")]);
   check(uis[0] === 9 && uis[1] === "true", `and turn the debug UI on, reset among it (${uis})`);
 
@@ -132,10 +137,10 @@ const browser = await chromium.launch();
   check(await page.evaluate(() => document.body.innerText.trim() === "" && getComputedStyle(document.querySelector("#fps")).display === "none"), "no text on the page: the fps counter starts off");
   // The fps toggle shows and hides the counter.
   await tap(cell(-0.5, 3.5));
-  await page.waitForTimeout(100);
+  await pass(page, 100);
   const text = await page.evaluate(() => document.body.innerText.trim());
   check(/^\d+ fps · \d+[smhd] ago · [0-9a-f]{7,}\+?\nWorld goals solved: 0\nRamp target: 4 fewest moves\nAudio: [a-z]+ · \d+ tries · .+$/.test(text), `the fps toggle shows the debug counter: fps, build age and commit, world goals solved and the ramp's target ("${text}")`);
-  await page.waitForTimeout(1200);
+  await pass(page, 1200);
   const idleFps = await page.evaluate(() => parseInt(document.querySelector("#fps").textContent));
   check(idleFps > 10, `with nothing moving the counter still counts frames (${idleFps} fps)`);
   await tap(cell(-0.5, 3.5));
@@ -214,14 +219,14 @@ const browser = await chromium.launch();
 
   // The view is kept across a reload.
   await page.evaluate(() => { unblock.scene.camera = { scale: 1.3, offsetX: 110, offsetY: 292 }; unblock.redraw(); });
-  await page.waitForTimeout(400); // the view is stored once it rests
+  await pass(page, 400); // the view is stored once it rests
   const panned = await page.evaluate(() => ({ ...unblock.scene.camera }));
   await page.reload();
   await frame(page);
   const restored = await page.evaluate(() => ({ ...unblock.scene.camera }));
   check(JSON.stringify(restored) === JSON.stringify(panned) && panned.offsetX !== 170, `reloading keeps the view where it was (${restored.offsetX.toFixed(0)},${restored.offsetY.toFixed(0)})`);
   await page.evaluate(() => { unblock.scene.camera = { scale: 1, offsetX: 170, offsetY: 370 }; unblock.redraw(); });
-  await page.waitForTimeout(400);
+  await pass(page, 400);
 
   // Dragging a UI block pans instead.
   const cam = await page.evaluate(() => ({ ...unblock.scene.camera }));
@@ -255,11 +260,11 @@ const browser = await chromium.launch();
 
   // The fullscreen block.
   await tap(cell(1.5, 0.5));
-  await page.waitForTimeout(300);
+  await pass(page, 300);
   check(await page.evaluate(() => document.fullscreenElement !== null), "tapping the fullscreen block enters fullscreen");
   await page.screenshot({ path: shots + "phone-2c-fullscreen.png" });
   await tap(cell(1.5, 0.5));
-  await page.waitForTimeout(300);
+  await pass(page, 300);
   check(await page.evaluate(() => document.fullscreenElement === null), "tapping it again leaves fullscreen");
 
   // The density slider: its knob follows the finger, and the board follows the knob.
@@ -310,7 +315,8 @@ const browser = await chromium.launch();
     for (const [dx, dy] of [[2, 0], [-2, 0], [0, 2], [0, -2]]) await gesture([cell(x, y)], [cell(x + dx, y + dy)]);
   }
   check(await page.evaluate(() => unblock.visibleBlocks().every((b) => !b.moved)), "no block of the frozen pinwheel moves, however it is dragged");
-  check(await page.evaluate(() => !Object.keys(localStorage).some((k) => k.startsWith("unblock-me:"))), "and nothing is stored while a shared board is open");
+  const keys = await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("unblock-me:")));
+  check(keys.length === 0, `and nothing is stored while a shared board is open (${keys.join() || "nothing"})`);
 
   // The reports block opens the list of reports, which links back to the game.
   await fresh();
@@ -350,7 +356,7 @@ const browser = await chromium.launch();
   check(held === "stuck", `a block stuck at both ends turns grey while dragged (${held})`);
   check(pannedBy.offsetX === 230 && pannedBy.offsetY === 430, `and the drag pans the board instead (${pannedBy.offsetX},${pannedBy.offsetY})`);
   check(!(await block(page, "a")).moved, "and the block does not move");
-  await page.waitForTimeout(100);
+  await pass(page, 100);
   check((await colorAt(page, ...[200 + 60, 400 + 60 + 0.5 * 60 - 30])) !== "stuck", "it is back to its colour after letting go");
   await page.evaluate(() => { unblock.scene.camera = { scale: 1, offsetX: 170, offsetY: 370 }; unblock.redraw(); });
 
@@ -362,12 +368,12 @@ const browser = await chromium.launch();
   await place([...UI, Wall(-2, 4), H("a", -1, 4), Wall(3, 4)]);
   await tap(cell(0, 4.5));
   check((await block(page, "a")).x === 1, "a tap slides a free block right to the wall");
-  await page.waitForTimeout(450); // the slide is animated
+  await pass(page, 450); // the slide is animated
   await expectColor(page, cell(2, 4.5), "moved", "and it is drawn there");
   check(await page.evaluate(() => unblock.scene.circle === null), "a tap on a block does not move the circle");
   await tap(cell(2, 4.5));
   check((await block(page, "a")).x === -1, "against the wall, a tap sends it all the way back");
-  await page.waitForTimeout(450);
+  await pass(page, 450);
   // The slide is animated: just after the tap the block is drawn between its old and new cells.
   await page.evaluate(() => (unblock.frames = []));
   // Every frame of the slide, the block is drawn where the recorder says it is (row 4).
@@ -388,19 +394,19 @@ const browser = await chromium.launch();
   await tap(cell(0, 4.5)); // right again, animated
   const glided = await glide;
   check(glided.length >= 2 && glided.every(([, drawn]) => drawn), `a tapped block glides through the cells between (${glided.map(([x, d]) => `x ${x.toFixed(2)} ${d ? "drawn" : "missing"}`).join(", ")})`);
-  await page.waitForTimeout(300);
+  await pass(page, 300);
   const slideXs = await page.evaluate(() => { const f = unblock.frames.map((f) => f.x); unblock.frames = null; return f; });
   check(slideXs[0] === -1 && slideXs.every((x, i) => i === 0 || x >= slideXs[i - 1]) && slideXs.at(-1) <= 1,
     `the slide starts drawing at its start cell and only moves forward (${slideXs.map((x) => x.toFixed(2)).join(" ")})`);
   // Undo (no button now; unblock.undo) takes moves back one at a time.
   await page.evaluate(() => unblock.undo());
-  await page.waitForTimeout(450);
+  await pass(page, 450);
   check((await block(page, "a")).x === -1, "undo takes back the last move");
   await page.evaluate(() => unblock.undo());
-  await page.waitForTimeout(450);
+  await pass(page, 450);
   check((await block(page, "a")).x === 1, "and the one before");
   await page.evaluate(() => unblock.undo());
-  await page.waitForTimeout(450);
+  await pass(page, 450);
   check((await block(page, "a")).x === -1 && !(await block(page, "a")).moved, "and the first, back to the start");
   // A tap on the background: a yellow ring spreads out from it and fades; nothing stays.
   const drop = cell(-1.5, -3);
@@ -417,13 +423,13 @@ const browser = await chromium.launch();
   await tap(drop);
   const ringFrames = await ringWatch;
   check(ringFrames > 3, `a tap on the background sends out a yellow ripple (${ringFrames} frames with yellow above the tap)`);
-  await page.waitForTimeout(300);
+  await pass(page, 300);
   await expectColor(page, drop, "background", "and nothing stays where it landed");
 
   // An undo that happens entirely out of view shows a small green arrow towards it while it runs.
   await place([...UI, Wall(-1, 4), H("a", 0, 4), Wall(4, 4)]);
   await tap(cell(1, 4.5)); // a: 0 -> 2
-  await page.waitForTimeout(450);
+  await pass(page, 450);
   await page.evaluate(() => { unblock.scene.camera = { ...unblock.scene.camera, offsetX: 170, offsetY: 370 - 1500 }; unblock.redraw(); });
   await frame(page);
   const changeArrow = await page.evaluate(() => {
@@ -436,9 +442,9 @@ const browser = await chromium.launch();
   });
   check((await colorAt(page, ...changeArrow)) !== "moved", "no green arrow before the undo");
   await page.evaluate(() => unblock.undo());
-  await page.waitForTimeout(40);
+  await pass(page, 40);
   await expectColor(page, changeArrow, "moved", `while an off-screen undo runs, a green arrow at the edge points to it (${changeArrow.map((v) => v.toFixed(0)).join(",")})`);
-  await page.waitForTimeout(450);
+  await pass(page, 450);
   check((await colorAt(page, ...changeArrow)) !== "moved", "and it goes when the slide ends");
 
   // A block pushed out of view is drawn while it slides there, then culled.
@@ -466,7 +472,7 @@ const browser = await chromium.launch();
   await tap(cell(1, 4.5)); // open on the right: 8 cells, out past the border
   const seen = await watch;
   check(seen.length > 0 && seen.every(([, drawn]) => drawn), `a block pushed out of view is drawn on its way there (${seen.map(([x, d]) => `x ${x.toFixed(2)}: ${d ? "drawn" : "missing"}`).join(", ")})`);
-  await page.waitForTimeout(500);
+  await pass(page, 500);
   check(!(await block(page, "a")), "and culled once it has arrived outside the border");
   await page.evaluate(() => { unblock.frames = null; unblock.scene.border = false; });
 
@@ -492,7 +498,7 @@ const browser = await chromium.launch();
   await page.screenshot({ path: shots + "phone-5b-indicator.png" });
   // Tapping the arrow glides the view back to the UI blocks, at the same zoom.
   await tap(arrowAt);
-  await page.waitForTimeout(700);
+  await pass(page, 700);
   const home2 = await page.evaluate(() => unblock.scene.camera);
   check(Math.abs(home2.offsetX - 110) < 1 && Math.abs(home2.offsetY - 370) < 1, `tapping the arrow brings the view back to the UI blocks (offset ${home2.offsetX.toFixed(0)},${home2.offsetY.toFixed(0)})`);
   check(await page.evaluate(() => unblock.scene.circle === null && unblock.scene.history.length === 0), "and the tap does nothing to the board");
@@ -574,23 +580,28 @@ const browser = await chromium.launch();
   }), cell(0.5, 6));
   check(starsSeen > 20, `stars fly out when it lands (${starsSeen} star pixels at most)`);
   check(await page.evaluate(() => unblock.scene.done.map((g) => g.id).join() === "r"), "the goal counts as reached");
-  check(landedAt >= 0 && shownAt === -1 && !beat.some(Boolean), `the next red block waits while the finish plays (landed on frame ${landedAt}, no next goal in the frames after)`);
-  // Once the stars have gathered, the next red block (made ahead) shows and throbs once.
-  const [waited, beat2] = await page.evaluate(([x, y]) => new Promise((resolve) => {
+  check(landedAt >= 0 && !beat.some(Boolean), `the next red block doesn't throb while the finish plays (landed on frame ${landedAt}${shownAt >= 0 ? `, shown muted from frame ${shownAt}` : ""})`);
+  // Once the stars have gathered, the soul flies to the next red block (made ahead, shown
+  // already), and it throbs once.
+  const [waited, beat2] = await page.evaluate(([lx, ly]) => new Promise((resolve) => {
     const c = document.querySelector("canvas"), d = c.width / c.clientWidth;
     const start = performance.now(), beat = [];
     let shownAt = null;
     const look = (now) => {
       if (shownAt === null && unblock.scene.goal) shownAt = now;
       if (shownAt !== null) {
+        // (Where its top edge is now: the view follows the soul there.)
+        const cam = unblock.scene.camera, x = lx * 60 * cam.scale + cam.offsetX, y = ly * 60 * cam.scale + cam.offsetY;
         const [r, g] = c.getContext("2d").getImageData(Math.round(x * d), Math.round((y - 3) * d), 1, 1).data;
         beat.push(r - g > 80);
       }
-      if (beat.length < 40 && now - start < 8000) requestAnimationFrame(look); else resolve([shownAt === null ? null : shownAt - start, beat]);
+      // (A throb lasts frames; the soul's glow passing over the spot is a frame or two.)
+      const throbbed = /1{4,}0$/.test(beat.map(Number).join(""));
+      if (!throbbed && now - start < 10000) requestAnimationFrame(look); else resolve([shownAt === null ? null : shownAt - start, beat]);
     };
     requestAnimationFrame(look);
-  }), cell(0.5, 6));
-  check(waited !== null && beat2.indexOf(true) >= 0 && !beat2.at(-1), `then it shows and throbs once (${waited?.toFixed(0)} ms later, past its edge from frame ${beat2.indexOf(true)} for ${beat2.filter(Boolean).length} frames, then back)`);
+  }), [0.5, 6]);
+  check(waited !== null && /1{4,}0$/.test(beat2.map(Number).join("")), `then it throbs once (shown ${waited?.toFixed(0)} ms later, past its edge from frame ${beat2.indexOf(true)} for ${beat2.filter(Boolean).length} frames, then back)`);
   // The next goal: a block close to the reached target becomes the red block.
   await page.evaluate(() => unblock.goalReady());
   const next = await page.evaluate(() => unblock.scene.goal);
@@ -601,7 +612,7 @@ const browser = await chromium.launch();
   check(JSON.stringify(snapshot) === JSON.stringify([["r", 1, 4]]), `and the next goal's board snapshot (${JSON.stringify(snapshot)})`);
   // The red block's soul flies over to it (the view following), then it is red; the view
   // is put back for the checks.
-  await page.waitForTimeout(1600);
+  await pass(page, 1600);
   await page.evaluate((v) => { unblock.scene.camera = v; unblock.redraw(); }, view);
   await frame(page);
   await expectColor(page, cell(0.5, 6.5), "goal", "and it is red now");
@@ -614,20 +625,20 @@ const browser = await chromium.launch();
     for (let i = 0; i < data.length; i += 4) if (data[i] > 240 && data[i + 1] > 195 && data[i + 2] < 100) n++;
     return n;
   }, cell(1, 4));
-  await page.waitForTimeout(4000);
+  await pass(page, 4000);
   check((await starsOnTarget()) > 30, "a row of gold stars stays on the target, over the red block");
   await page.screenshot({ path: shots + "phone-7-solved.png" });
   // The check stays on the target after the red block leaves, and no stars come again.
   await tap(cell(2, 4.5)); // against the wall now, so it slides all the way back left
-  await page.waitForTimeout(500);
+  await pass(page, 500);
   check((await block(page, "r")).x === -3, "the red block can leave the target again");
   check((await starsOnTarget()) > 30, "and the stars stay on the target");
   await page.screenshot({ path: shots + "phone-7b-left.png" });
   await tap(cell(-2, 4.5));
-  await page.waitForTimeout(150);
+  await pass(page, 150);
   const again = await colorAt(page, ...cell(0, 3.5));
   check(again !== "star", `landing on it a second time sends no stars (${again})`);
-  await page.waitForTimeout(400);
+  await pass(page, 400);
 
   // With the border on, a goal area wholly outside it is culled, check and all. Moving the
   // view up puts the target (lattice row 4, x 1..3) at screen y 10..70: on screen, above
@@ -695,7 +706,7 @@ const browser = await chromium.launch();
   await frame(page);
   const beforeGlowTap = await page.evaluate(() => ({ ...unblock.scene.camera }));
   await tap(marks.glowEdge.map((v, i) => (i === 0 ? v - 10 : v)));
-  await page.waitForTimeout(500);
+  await pass(page, 500);
   const afterGlowTap = await page.evaluate(() => unblock.scene.camera);
   check(JSON.stringify(afterGlowTap) === JSON.stringify(beforeGlowTap), "tapping the glow does not move the view (it was hit by accident)");
   // Go to the target, then the arrow back to the red block.
@@ -710,10 +721,10 @@ const browser = await chromium.launch();
   });
   const pinBefore = await page.evaluate(() => ({ ...unblock.scene.camera }));
   await tap(back);
-  await page.waitForTimeout(90);
+  await pass(page, 90);
   const pinMid = await page.evaluate(() => ({ ...unblock.scene.camera }));
   check(pinMid.offsetX === pinBefore.offsetX, "a tapped arrow throbs first; the view waits for it");
-  await page.waitForTimeout(700);
+  await pass(page, 700);
   const atRed = await page.evaluate(() => unblock.scene.camera);
   check(Math.abs(atRed.offsetX - (200 + 6 * 60)) < 1, `tapping the red arrow brings the red block to the middle (${atRed.offsetX.toFixed(0)})`);
   check(await page.evaluate(() => unblock.scene.history.length === 0), "and the taps moved nothing on the board");
@@ -751,7 +762,7 @@ const browser = await chromium.launch();
 
 // --- Desktop: mouse drag and wheel on an exact board.
 {
-  const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  const page = await clocked(await browser.newPage({ viewport: { width: 1280, height: 800 } }));
   await page.goto(url);
   await page.evaluate(() => unblock.place([{ id: "a", x: 2, y: 0, w: 2, h: 1 }]));
   await frame(page);
@@ -767,9 +778,9 @@ const browser = await chromium.launch();
   await page.evaluate(() => unblock.place([{ id: "u", x: 0, y: 4, w: 2, h: 1 }, { id: "uw", x: -1, y: 4, w: 1, h: 1, wall: true }, { id: "uw2", x: 4, y: 4, w: 1, h: 1, wall: true }]));
   for (let i = 0; i < 26; i++) {
     await page.mouse.click(...at((i % 2 ? 2.5 : 0.5), 4.5));
-    await page.waitForTimeout(250);
+    await pass(page, 250);
   }
-  await page.waitForTimeout(300);
+  await pass(page, 300);
   const auto = uploads.find((u) => u.url.includes("device="));
   check(!!auto && auto.body.stored["unblock-me:log"]?.filter((e) => e.e === "move").length >= 24, `play data uploads by itself after 25 events (${uploads.length} uploads, ${auto?.url})`);
 
@@ -779,7 +790,7 @@ const browser = await chromium.launch();
   await page.evaluate(() => unblock.place([{ id: "f", x: 0, y: 4, w: 2, h: 1 }]));
   const before = await page.evaluate(() => unblock.playLog.length);
   await page.mouse.click(...at(0.5, 4.5));
-  await page.waitForTimeout(300);
+  await pass(page, 300);
   const afterLoad = await page.evaluate(() => unblock.playLog.slice(-1).map((e) => [e.e, e.id]));
   check(JSON.stringify(afterLoad) === JSON.stringify([["move", "f"]]) && (await page.evaluate(() => unblock.playLog.length)) === before + 1, `the first move after a page load is in the play log (${JSON.stringify(afterLoad)})`);
 
@@ -824,7 +835,7 @@ const browser = await chromium.launch();
 // --- The island: a fresh start opens on its first square; its goals come in turn, the
 // first unrated (no score track while it is played).
 {
-  const page = await browser.newPage({ viewport: { width: 393, height: 700 }, hasTouch: true });
+  const page = await clocked(await browser.newPage({ viewport: { width: 393, height: 700 }, hasTouch: true }));
   await page.goto(root);
   await page.evaluate(() => unblock.forget());
   await page.goto(root);
