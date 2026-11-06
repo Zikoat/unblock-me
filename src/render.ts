@@ -4,7 +4,7 @@ import { worldRect, type Rect } from "./camera";
 import { intersects, UNIT, type Block } from "./layout";
 import { drawScoreTrack, FINISH, finishTimes, starPoints, type TraceEntry } from "./score-track";
 import { bestKnown, shownUsed, type Goal } from "./goal";
-import { HUD_BAR, islandSide } from "./island";
+import { islandSide, redId, squareOf } from "./island";
 import { timed } from "./perf";
 import { cinemaOverlay, dance, glitch, glitchShift, lit, overMore, tilt } from "./finish-fx2";
 import { onBlock, over, punch, quake, screenFlash, soul as drawSoul, SOUL, squash, timeWarp, under, wave, type Fx } from "./finish-fx";
@@ -184,7 +184,8 @@ export function draw(
   // Reached targets side by side overlap by their margins: each is filled only where no
   // earlier one was, so touching ones read as one shape. The current target is drawn whole,
   // over them.
-  // (An island square's target fits its bay, so its corners are as round as the walls'.)
+  // (An island square's bay target fits its bay, so its corners are as round as the walls';
+  // a target inside a square is round as the world's.)
   const area = (c: Cells, path: Path2D, radius = 12) => path.roundRect(c.x * UNIT - TARGET_MARGIN, c.y * UNIT - TARGET_MARGIN, c.w * UNIT + 2 * TARGET_MARGIN, c.h * UNIT + 2 * TARGET_MARGIN, radius);
   const outside = (others: typeof targets) => {
     const clip = new Path2D();
@@ -195,7 +196,7 @@ export function draw(
   const drawTarget = (i: number) => {
     const { goal: g, cells } = targets[i]!;
     const own = new Path2D();
-    area(cells, own, scene.locked && g === goal ? WALL_RADIUS : 12);
+    area(cells, own, scene.locked && g === goal && g.id === redId(squareOf(g) ?? -1) ? WALL_RADIUS : 12);
     // The current target: a pale coral area with an outline. A reached one: a pale gold area
     // with an outline, faded out while its block stands on it (no ring round the block).
     const shown = g === goal ? 1 : areaShown(g, now);
@@ -421,9 +422,7 @@ export function draw(
     }
     // In the space over the square: on its top wall where that shows, else halfway up it,
     // and never bigger than it fits.
-    const view = borderOnScreen(scene), over = (view.height - islandSide(view)) / 2;
-    const size = Math.min(UNIT * 0.5 * camera.scale, 0.6 * over, 34);
-    const y = view.y + Math.max(over - (UNIT * camera.scale) / 2, over / 2);
+    const { size, y } = levelLine(borderOnScreen(scene), camera.scale);
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.font = `800 ${size}px system-ui, -apple-system, "Segoe UI", sans-serif`;
@@ -491,7 +490,7 @@ export function draw(
   }
   // All laid out in the view: the screen, or the smaller border when that is on.
   const shown = borderOnScreen(scene);
-  if (hud && !finish?.island) islandHud(ctx, hud, shown, dpr); // (the card has its level)
+  if (hud && !finish?.island) islandHud(ctx, hud, shown, camera.scale, dpr); // (the card has its level)
   if (finish?.island) {
     const g = scene.done.find((d) => d.id === finish.id);
     if (g && g.used !== undefined) islandCard(ctx, g, finishClock(scene, finish, now) ?? 0, width, height, shown, dpr, detail, hud?.level ?? 0);
@@ -512,18 +511,28 @@ export function islandCardRect(view: Rect): Rect {
  * and the gap to the next button and the button's height (its font size: button / 2.6). */
 export const CARD = { radius: 0.03, title: 0.14, gap: 0.06, button: 0.1 };
 
-/** The moves so far, over the island's surface at the top of the screen (the level is on
- * the square's top wall). */
-function islandHud(ctx: CanvasRenderingContext2D, hud: { level: number; moves: number }, view: Rect, dpr: number): void {
+/** A played square's level, in the space over it: on its top wall where that shows, else
+ * halfway up it, and never bigger than it fits (its font size, and its middle on the screen). */
+function levelLine(view: Rect, scale: number): { size: number; y: number } {
+  const over = (view.height - islandSide(view)) / 2;
+  return { size: Math.min(UNIT * 0.5 * scale, 0.6 * over, 34), y: view.y + Math.max(over - (UNIT * scale) / 2, over / 2) };
+}
+
+/** The moves so far, over the island's surface at the top right of the screen, on the same
+ * baseline as the level (on the square's top wall). */
+function islandHud(ctx: CanvasRenderingContext2D, hud: { level: number; moves: number }, view: Rect, scale: number, dpr: number): void {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const level = levelLine(view, scale);
+  ctx.font = `800 ${level.size}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+  ctx.textBaseline = "middle";
+  const m = ctx.measureText("Level");
+  const baseline = level.y + (m.fontBoundingBoxAscent - m.fontBoundingBoxDescent) / 2;
   const size = Math.max(15, Math.min(22, Math.min(view.width, view.height) * 0.05));
   ctx.font = `700 ${size}px system-ui, -apple-system, "Segoe UI", sans-serif`;
-  ctx.textBaseline = "middle";
+  ctx.textBaseline = "alphabetic";
   ctx.fillStyle = COLORS.hud;
-  // Halfway down the space over the square, but in the bar at least.
-  const y = view.y + Math.max(HUD_BAR / 2, Math.min(44, (view.height - islandSide(view)) / 4));
   ctx.textAlign = "right";
-  ctx.fillText(`${hud.moves} ${hud.moves === 1 ? "move" : "moves"}`, view.x + view.width - 16, y);
+  ctx.fillText(`${hud.moves} ${hud.moves === 1 ? "move" : "moves"}`, view.x + view.width - 16, baseline);
 }
 
 /** An island square's finish, in the middle of the screen: the board dimmed, and a card
