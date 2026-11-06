@@ -576,12 +576,12 @@ const easeOutCubic = (t: number) => 1 - (1 - t) ** 3;
 function greyOutside(ctx: CanvasRenderingContext2D, scene: Scene, rects: Rect[], alpha = 1): void {
   const c = scene.camera;
   const view = { x: -c.offsetX / c.scale, y: -c.offsetY / c.scale, width: scene.width / c.scale, height: scene.height / c.scale };
-  const [sq, bay] = rects as [Rect, Rect];
+  const [sq, bay] = rects as [Rect, Rect | undefined]; // (no bay: the last square's, its gate shut)
   const g = GAP / UNIT;
   // Clockwise round the inside, out along the exit into the bay on its right, and back.
   const l = sq.x + 1 - g, t = sq.y + 1 - g, r = sq.x + sq.width - 1 + g, b = sq.y + sq.height - 1 + g;
-  const bt = Math.max(t, bay.y + 1 - g), bb = Math.min(b, bay.y + bay.height - 1 + g), br = bay.x + bay.width - 1 + g;
-  const pts = [[l, t], [r, t], [r, bt], [br, bt], [br, bb], [r, bb], [r, b], [l, b]]
+  const bt = bay ? Math.max(t, bay.y + 1 - g) : t, bb = bay ? Math.min(b, bay.y + bay.height - 1 + g) : t, br = bay ? bay.x + bay.width - 1 + g : r;
+  const pts = (bay ? [[l, t], [r, t], [r, bt], [br, bt], [br, bb], [r, bb], [r, b], [l, b]] : [[l, t], [r, t], [r, b], [l, b]])
     .map(([x, y]) => [x! * UNIT, y! * UNIT] as const)
     .filter(([x, y], i, all) => x !== all[(i + 1) % all.length]![0] || y !== all[(i + 1) % all.length]![1]); // a bay on the top or bottom row
   ctx.save();
