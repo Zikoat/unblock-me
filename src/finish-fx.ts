@@ -653,130 +653,29 @@ export function screenFlash(ctx: CanvasRenderingContext2D, fx: Fx, width: number
 
 /** The red block's soul flying on to the next red block. */
 export const SOUL = { TRAVEL_MS: 1000, BURST_MS: 450 };
-/** How the soul looks (reports/soul.html compares them; `?soul=` picks one): the orb as it
- * was, or a red head with a trail (smallSoul): a comet (its sparks soft blobs, fine dust or
- * none in the comet-… ones), a flame, or a glint. */
-export const SOUL_STYLES = ["classic", "comet", "flame", "glint", "comet-soft", "comet-dust", "comet-plain"] as const;
+/** How the soul looks: a red head with a trail, flying off with the old block's red (see
+ * soul): a comet, a flame, or a glint (reports/soul.html). */
+export const SOUL_STYLES = ["comet", "flame", "glint"] as const;
 export type SoulStyle = (typeof SOUL_STYLES)[number];
-let soulStyle: SoulStyle = "classic";
-export const setSoulStyle = (s: string | null) => {
-  if (SOUL_STYLES.includes(s as SoulStyle)) soulStyle = s as SoulStyle;
-};
-/** Whether the soul draws the old block's red in (it stays red till then), or the classic
- * one (the block goes gold as its stars gather). */
-export const soulGathers = () => soulStyle !== "classic";
-/** The soul's parts in time, as shares of SOUL.TRAVEL_MS: the old block's red draws into a
- * ball on it, then flies off, speeding up all the way into the new block. */
-const GATHER = 0.25;
+/** The soul's parts in time, as shares of SOUL.TRAVEL_MS: the old block's red draws in to a
+ * ball over GATHER, the ball setting off at LEAVE (the red still drawing in, following it)
+ * and speeding up all the way into the new block. */
+const GATHER = 0.3, LEAVE = 0.15;
+type Rect = { x: number; y: number; width: number; height: number };
+
 /** How pale the new red block flashes as the soul hits it, `k` ms after the soul set off
  * (0 none, 1 white). */
 export function soulFlash(k: number): number {
-  if (soulStyle === "classic") return 0;
   const b = (k - SOUL.TRAVEL_MS) / SOUL.BURST_MS;
-  return b < 0 || b >= 1 ? 0 : 0.55 * (1 - b) ** 2;
-}
-/** How far the new red block is knocked by the soul's hit (px, along its flight), `k` ms
- * after the soul set off: a quick shove and back. */
-export function soulJolt(k: number, zoom: number): number {
-  if (soulStyle === "classic") return 0;
-  const t = (k - SOUL.TRAVEL_MS) / 260;
-  return t < 0 || t >= 1 ? 0 : 7 * big(zoom) * Math.sin(t * Math.PI) * (1 - t);
-}
-type Rect = { x: number; y: number; width: number; height: number };
-
-/** The soul `k` ms after it set off: it rises out of the old block as a glowing ghost of it,
- * balls up into an orb that arcs over to the new block shedding sparks, and pours into it
- * (taking its shape), which flashes and rings. */
-export function soul(ctx: CanvasRenderingContext2D, from: Rect, to: Rect, k: number, zoom: number, detail = 1): void {
-  if (soulStyle !== "classic") return smallSoul(ctx, from, to, k, zoom, soulStyle);
-  const B = big(zoom), p = clamp(k / SOUL.TRAVEL_MS);
-  const c0 = { x: from.x + from.width / 2, y: from.y + from.height / 2 }, c1 = { x: to.x + to.width / 2, y: to.y + to.height / 2 };
-  // Straight there (an arc bowing to one side looked wayward), easing in and out.
-  const along = (q: number) => {
-    const e = q < 0.5 ? 2 * q * q : 1 - (-2 * q + 2) ** 2 / 2;
-    return { x: c0.x + (c1.x - c0.x) * e, y: c0.y + (c1.y - c0.y) * e };
-  };
-  const orb = UNIT * 0.42 * B;
-  const glowBall = (x: number, y: number, r: number, a: number) => glow(ctx, "soul", x, y, r * 2.2, a);
-  ctx.save();
-  if (p < 1) {
-    // Rising out: a ghost of the old block lifting and shrinking into the orb.
-    const lift = clamp(p / 0.22);
-    if (lift < 1) {
-      const w = from.width + (orb * 2 - from.width) * lift, h = from.height + (orb * 2 - from.height) * lift;
-      const y = c0.y - UNIT * 0.4 * B * easeOut(lift);
-      ctx.globalAlpha = 0.65 * (1 - lift * 0.5);
-      ctx.shadowColor = "rgba(255, 80, 80, 0.9)";
-      ctx.shadowBlur = 20 * B * zoom;
-      ctx.fillStyle = "rgba(240, 110, 110, 0.8)";
-      ctx.beginPath();
-      ctx.roundRect(c0.x - w / 2, y - h / 2, w, h, 8 + orb * lift);
-      ctx.fill();
-      ctx.shadowColor = "transparent";
-      ctx.globalAlpha = 1;
-    }
-    // Flying: the orb, a fading tail of itself, and sparks dropping off behind.
-    const q = clamp((p - 0.12) / 0.88);
-    if (q > 0) {
-      for (let i = 30; i >= 0; i--) {
-        const born = i / 30;
-        if (born > q) continue;
-        const age = (q - born) / 0.25;
-        if (age >= 1) continue;
-        const at = along(born), h = hash(i + 900);
-        ctx.globalAlpha = 1 - age;
-        ctx.fillStyle = i % 3 ? "#ffd0d0" : "#ffcf3f";
-        starShape(ctx, at.x + (h - 0.5) * orb * 1.5, at.y + UNIT * 0.6 * B * age * age, orb * 0.3 * (1 - age));
-        ctx.fill();
-      }
-      ctx.globalAlpha = 1;
-      for (let g = detail < 1 ? 0 : 10; g >= 1; g--) {
-        const at = along(Math.max(0, q - g * 0.022));
-        glowBall(at.x, at.y, orb * (1 - g * 0.07), 0.25 * (1 - g / 11));
-      }
-      const at = along(q), beat = 1; // (a pulse while flying read as blinking)
-      // Arriving, it spreads into the new block's shape.
-      const pour = clamp((q - 0.88) / 0.12);
-      glowBall(at.x, at.y, orb * beat * (1 + pour), 1 - pour * 0.6);
-      if (pour > 0) {
-        ctx.globalAlpha = pour * 0.8;
-        ctx.fillStyle = "#ff8080";
-        const w = orb * 2 + (to.width - orb * 2) * pour, h = orb * 2 + (to.height - orb * 2) * pour;
-        ctx.beginPath();
-        ctx.roundRect(c1.x - w / 2, c1.y - h / 2, w, h, 8 + orb * (1 - pour));
-        ctx.fill();
-      }
-    }
-  } else {
-    // Arrived: the new block flashes and rings go out from it.
-    const b = (k - SOUL.TRAVEL_MS) / SOUL.BURST_MS;
-    if (b < 1) {
-      ctx.globalAlpha = (1 - b) ** 2 * 0.9;
-      ctx.fillStyle = "#ffffff";
-      ctx.beginPath();
-      ctx.roundRect(to.x, to.y, to.width, to.height, 8);
-      ctx.fill();
-      for (const lag of [0, 0.2]) {
-        const r = clamp((b - lag) / (1 - lag));
-        if (r <= 0 || r >= 1) continue;
-        const grow = UNIT * 1.3 * B * easeOut(r);
-        ctx.globalAlpha = (1 - r) ** 1.5;
-        ctx.strokeStyle = lag ? "#ffffff" : "#ff6b6b";
-        ctx.lineWidth = (5 * (1 - r) + 1) * B;
-        ctx.beginPath();
-        ctx.roundRect(to.x - grow, to.y - grow, to.width + 2 * grow, to.height + 2 * grow, 10 + grow);
-        ctx.stroke();
-      }
-    }
-  }
-  ctx.restore();
+  return b < 0 || b >= 1 ? 0 : 0.7 * (1 - b) ** 2;
 }
 
-/** A red head with a trail (see SOUL_STYLES): the old block's red draws in to a ball on its
- * middle (the block gold under it), which flies straight to the new block's middle, slow at
- * first and faster all the way, shedding sparks; it hits: the block knocked (soulJolt), a
- * pale flash on it and a ring going out. */
-function smallSoul(ctx: CanvasRenderingContext2D, from: Rect, to: Rect, k: number, zoom: number, style: SoulStyle): void {
+/** The soul `k` ms after it set off, in `style`: the old block's red draws in to a ball on
+ * its middle (the block gold under it), which sets off before it is all in, the red
+ * following; it flies straight to the new block's middle, slow at first and faster all the
+ * way, shedding sparks that drift back off its path; it hits: the block flashes (soulFlash,
+ * in render.ts) and a ring goes out. */
+export function soul(ctx: CanvasRenderingContext2D, from: Rect, to: Rect, k: number, zoom: number, style: SoulStyle): void {
   const B = big(zoom), p = clamp(k / SOUL.TRAVEL_MS), r = UNIT * 0.21 * B;
   const c0 = { x: from.x + from.width / 2, y: from.y + from.height / 2 }, c1 = { x: to.x + to.width / 2, y: to.y + to.height / 2 };
   const len = Math.hypot(c1.x - c0.x, c1.y - c0.y) || 1, dir = { x: (c1.x - c0.x) / len, y: (c1.y - c0.y) / len };
@@ -786,16 +685,8 @@ function smallSoul(ctx: CanvasRenderingContext2D, from: Rect, to: Rect, k: numbe
   };
   const RED = "#d64545";
   ctx.save();
-  if (p < GATHER) {
-    // The block's red draws in to the ball.
-    const g = p / GATHER, e = g < 0.5 ? 2 * g * g : 1 - (-2 * g + 2) ** 2 / 2;
-    const w = from.width + (2 * r - from.width) * e, h = from.height + (2 * r - from.height) * e;
-    ctx.fillStyle = RED;
-    ctx.beginPath();
-    ctx.roundRect(c0.x - w / 2, c0.y - h / 2, w, h, 8 + (r - 8) * e);
-    ctx.fill();
-  } else if (p < 1) {
-    const f = (p - GATHER) / (1 - GATHER), at = along(f);
+  if (p < 1) {
+    const f = clamp((p - LEAVE) / (1 - LEAVE)), at = along(f), g = clamp(p / GATHER);
     /** Flicker: a smooth random wave per `i`, changing ~20 times a second. */
     const flicker = (i: number) => {
       const s = (k / 1000) * 20, n = Math.floor(s), u = s - n;
@@ -817,18 +708,17 @@ function smallSoul(ctx: CanvasRenderingContext2D, from: Rect, to: Rect, k: numbe
       }
     };
     /** Bits shed along the way, `n` of them alive at once, each drawn by `bit` (at x, y, its
-     * age 0..1 and a random 0..1), drifting off as they fade. `rise`: they go up (embers)
-     * rather than falling. */
-    const shed = (n: number, life: number, bit: (x: number, y: number, age: number, h: number) => void, rise = false) => {
+     * age 0..1 and a random 0..1), drifting back the way the soul came and out to either
+     * side as they fade (and up a little: `rise`, for embers). */
+    const shed = (n: number, life: number, bit: (x: number, y: number, age: number, h: number) => void, rise = 0) => {
       const step = life / n, last = Math.floor(f / step);
       for (let i = 0; i < n; i++) {
         const id = last - i, born = id * step;
         if (born <= 0) continue;
         const age = (f - born) / life;
         if (age >= 1) continue;
-        const h1 = hash(id), h2 = hash(id + 500), sp = along(born);
-        const x = sp.x + (h1 - 0.5) * r * 6 * Math.sqrt(age), y = sp.y + (h2 - 0.5) * r * 4 * Math.sqrt(age) + (rise ? -1 : 1) * r * 4 * age * age;
-        bit(x, y, age, hash(id + 900));
+        const back = r * (1 + 3 * hash(id)) * Math.sqrt(age), side = (hash(id + 500) - 0.5) * r * 6 * Math.sqrt(age), sp = along(born);
+        bit(sp.x - dir.x * back - dir.y * side, sp.y - dir.y * back + dir.x * side - rise * r * 3 * age, age, hash(id + 900));
       }
       ctx.globalAlpha = 1;
     };
@@ -846,9 +736,9 @@ function smallSoul(ctx: CanvasRenderingContext2D, from: Rect, to: Rect, k: numbe
       ctx.fill();
     };
     const shaded = (stops: [number, string][], radius = r) => {
-      const g = ctx.createRadialGradient(at.x, at.y, 0, at.x, at.y, radius);
-      for (const [o, c] of stops) g.addColorStop(o, c);
-      return g;
+      const gr = ctx.createRadialGradient(at.x, at.y, 0, at.x, at.y, radius);
+      for (const [o, c] of stops) gr.addColorStop(o, c);
+      return gr;
     };
     /** A four-pointed glint at (x, y), `long` to its tips, `thin` at its waist. */
     const glint = (x: number, y: number, long: number, thin: number, turn: number, fill: string) => {
@@ -865,49 +755,70 @@ function smallSoul(ctx: CanvasRenderingContext2D, from: Rect, to: Rect, k: numbe
       ctx.fill();
       ctx.restore();
     };
-    const REDS = ["#d64545", "#c43535", "#e86a5a"];
-    if (style.startsWith("comet")) {
-      ribbon(40, 0.012, r * 1.5, (t) => `rgba(214, 69, 69, ${0.75 * t})`);
-      if (style === "comet") shed(14, 0.4, (x, y, age, h) => dot(x, y, r * (0.3 - 0.16 * age), REDS[Math.floor(h * 3)]!, 1 - age));
-      else if (style === "comet-soft") shed(10, 0.45, (x, y, age) => glow(ctx, "soul", x, y, r * (1.1 - 0.5 * age), 0.8 * (1 - age)));
-      else if (style === "comet-dust") shed(36, 0.5, (x, y, age, h) => dot(x, y, r * (0.14 - 0.06 * age), h < 0.5 ? "#b83232" : "#d64545", 0.9 * (1 - age)));
-      glow(ctx, "soul", at.x, at.y, r * 2.8, 0.5);
-      ball(shaded([[0, "#ef6a6a"], [1, RED]]));
-    } else if (style === "flame") {
-      // Tongues of fire: a wide red one, an orange one in it and a yellow core, each licking
-      // sideways on its own; embers rising off it.
-      ribbon(26, 0.013, r * 2.6, (t) => `rgba(206, 52, 40, ${0.55 * t})`, r * 1.6, 1);
-      ribbon(24, 0.012, r * 1.9, (t) => `rgba(245, 120, 40, ${0.7 * t})`, r * 1.2, 2);
-      ribbon(18, 0.011, r * 1.1, (t) => `rgba(255, 196, 70, ${0.85 * t})`, r * 0.7, 3);
-      shed(16, 0.45, (x, y, age, h) => dot(x + Math.sin(age * 9 + h * 6) * r * 0.6, y, r * (0.22 - 0.14 * age), h < 0.4 ? "#ffb02e" : h < 0.8 ? "#f0702a" : "#d64545", 1 - age), true);
-      glow(ctx, "gold", at.x, at.y, r * (2.4 + 0.4 * flicker(7)), 0.55);
-      ball(shaded([[0, "#ffe08a"], [0.45, "#ff9a3a"], [1, "#d8452e"]], r * (1 + 0.08 * flicker(8))));
-    } else {
-      // glint: the comet's streak, twinkling glints left along it, and at its head a red
-      // four-pointed glint with a white one in it, a thin one turning across it, flaring.
-      ribbon(40, 0.012, r * 1.4, (t) => `rgba(214, 69, 69, ${0.7 * t})`);
-      shed(9, 0.5, (x, y, age, h) => {
-        const tw = Math.sin(age * Math.PI) * (0.7 + 0.3 * Math.sin(age * 20 + h * 9));
-        if (tw <= 0) return;
-        ctx.globalAlpha = tw;
-        glint(x, y, r * 0.9 * tw, r * 0.18 * tw, h * 2, RED);
-        glint(x, y, r * 0.45 * tw, r * 0.1 * tw, h * 2, "#ffffff");
-      });
-      glow(ctx, "soul", at.x, at.y, r * 3, 0.55);
-      // Flares: the long glint's arms flash out twice on the way.
-      const flare = Math.max(0, Math.sin(f * Math.PI * 4)) ** 4;
-      glint(at.x, at.y, r * (1.6 + 1.6 * flare), r * 0.4, 0, RED);
-      glint(at.x, at.y, r * 1.1, r * 0.12, Math.PI / 4 + f * Math.PI, "rgba(239, 106, 106, 0.85)");
-      glint(at.x, at.y, r * (0.9 + 0.8 * flare), r * 0.2, 0, "#ffffff");
-      ball(shaded([[0, "#ffffff"], [1, "rgba(255, 255, 255, 0)"]], r * 0.55));
+    // The head shows as the red has drawn in (before, the red is the head).
+    const head = clamp((g - 0.75) / 0.25);
+    if (f > 0) {
+      if (style === "comet") {
+        ribbon(40, 0.012, r * 1.5, (t) => `rgba(214, 69, 69, ${0.75 * t})`);
+        shed(10, 0.45, (x, y, age) => glow(ctx, "soul", x, y, r * (1.1 - 0.5 * age), 0.8 * (1 - age)));
+      } else if (style === "flame") {
+        // Tongues of fire: a wide red one, an orange one in it and a yellow core, each licking
+        // sideways on its own; embers going off it.
+        ribbon(26, 0.013, r * 2.6, (t) => `rgba(206, 52, 40, ${0.55 * t})`, r * 1.6, 1);
+        ribbon(24, 0.012, r * 1.9, (t) => `rgba(245, 120, 40, ${0.7 * t})`, r * 1.2, 2);
+        ribbon(18, 0.011, r * 1.1, (t) => `rgba(255, 196, 70, ${0.85 * t})`, r * 0.7, 3);
+        shed(16, 0.45, (x, y, age, h) => dot(x, y, r * (0.22 - 0.14 * age), h < 0.4 ? "#ffb02e" : h < 0.8 ? "#f0702a" : "#d64545", 1 - age), 1);
+      } else {
+        // Glints twinkle and turn along the streak.
+        ribbon(40, 0.012, r * 1.4, (t) => `rgba(214, 69, 69, ${0.7 * t})`);
+        shed(9, 0.5, (x, y, age, h) => {
+          const tw = Math.sin(age * Math.PI) * (0.7 + 0.3 * Math.sin(age * 20 + h * 9));
+          if (tw <= 0) return;
+          const turn = h * 2 + age * (h < 0.5 ? -3 : 3);
+          ctx.globalAlpha = tw;
+          glint(x, y, r * 0.9 * tw, r * 0.18 * tw, turn, RED);
+          glint(x, y, r * 0.45 * tw, r * 0.1 * tw, turn, "#ffffff");
+        });
+      }
+    }
+    if (g < 1) {
+      // The block's red drawing in, following the ball as it sets off, drawn out a little
+      // the way it goes.
+      const e = g < 0.5 ? 2 * g * g : 1 - (-2 * g + 2) ** 2 / 2;
+      const w = from.width + (2 * r - from.width) * e, h = from.height + (2 * r - from.height) * e;
+      // (Upright, as the block was: it spans from the block's middle to the ball's.)
+      const x0 = Math.min(c0.x, at.x) - w / 2, x1 = Math.max(c0.x, at.x) + w / 2, y0 = Math.min(c0.y, at.y) - h / 2, y1 = Math.max(c0.y, at.y) + h / 2;
+      ctx.globalAlpha = 1 - head;
+      ctx.fillStyle = RED;
+      ctx.beginPath();
+      ctx.roundRect(x0, y0, x1 - x0, y1 - y0, Math.min(w, h) / 2 > r * 0.99 ? r : 8 + (r - 8) * e);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+    if (head > 0) {
+      ctx.globalAlpha = head;
+      if (style === "comet") {
+        glow(ctx, "soul", at.x, at.y, r * 2.8, 0.5);
+        ball(shaded([[0, "#ef6a6a"], [1, RED]]));
+      } else if (style === "flame") {
+        glow(ctx, "gold", at.x, at.y, r * (2.4 + 0.4 * flicker(7)), 0.55);
+        ball(shaded([[0, "#ffe08a"], [0.45, "#ff9a3a"], [1, "#d8452e"]], r * (1 + 0.08 * flicker(8))));
+      } else {
+        // A red four-pointed glint turning, a white one in it, a thin pale one turning the
+        // other way across it, its arms flashing out twice on the way.
+        glow(ctx, "soul", at.x, at.y, r * 3, 0.55);
+        const flare = Math.max(0, Math.sin(f * Math.PI * 4)) ** 4, turn = f * Math.PI * 1.5;
+        glint(at.x, at.y, r * (1.6 + 1.6 * flare), r * 0.4, turn, RED);
+        glint(at.x, at.y, r * 1.1, r * 0.12, Math.PI / 4 - f * Math.PI, "rgba(239, 106, 106, 0.85)");
+        glint(at.x, at.y, r * (0.9 + 0.8 * flare), r * 0.2, turn, "#ffffff");
+        ball(shaded([[0, "#ffffff"], [1, "rgba(255, 255, 255, 0)"]], r * 0.55));
+      }
+      ctx.globalAlpha = 1;
     }
   } else {
-    // The hit: the block knocked and flashing (drawn in render.ts: soulJolt, soulFlash), and a
-    // ring going out, moving with it.
+    // The hit: the block flashes (render.ts) and a ring goes out from it.
     const b = (k - SOUL.TRAVEL_MS) / SOUL.BURST_MS;
     if (b < 1) {
-      const j = soulJolt(k, zoom);
-      ctx.translate(dir.x * j, dir.y * j);
       const grow = UNIT * 0.7 * B * easeOut(b);
       ctx.globalAlpha = (1 - b) ** 1.5;
       ctx.strokeStyle = style === "flame" ? "#f0702a" : RED;

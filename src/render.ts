@@ -7,7 +7,7 @@ import { bestKnown, shownUsed, type Goal } from "./goal";
 import { islandSide, redId, squareOf } from "./island";
 import { timed } from "./perf";
 import { cinemaOverlay, dance, glitch, glitchShift, lit, overMore, tilt } from "./finish-fx2";
-import { onBlock, over, punch, quake, screenFlash, soul as drawSoul, SOUL, soulFlash, soulGathers, soulJolt, squash, timeWarp, under, wave, type Fx } from "./finish-fx";
+import { onBlock, over, punch, quake, screenFlash, soul as drawSoul, SOUL, soulFlash, squash, type SoulStyle, timeWarp, under, wave, type Fx } from "./finish-fx";
 import { borderOnScreen, latticeRect, quickPush, uiToolbar, visibleBlocks, whereIs, type Scene } from "./scene";
 
 export const COLORS = {
@@ -111,7 +111,7 @@ export function draw(
     /** A reached red block still red: its finish plays, or its soul is yet to set off. */
     stillRed?: string | null;
     /** The last red block's soul flying to the new one (world px), and when it set off. */
-    soul?: { from: { x: number; y: number; width: number; height: number }; toId: string; born: number } | null;
+    soul?: { from: { x: number; y: number; width: number; height: number }; toId: string; born: number; style: SoulStyle } | null;
     /** How much of the finish's detail to draw (less when frames come late: main.ts). */
     detail?: number;
     now?: number;
@@ -246,7 +246,7 @@ export function draw(
    * as they gather. */
   const doneColor = (id: string) => {
     if (finish?.island && finish.id === id) return COLORS.goal; // an island square's stays red (its card goes gold)
-    if (soulGathers() && id === stillRed) return COLORS.goal; // red till its soul draws it in
+    if (id === stillRed) return COLORS.goal; // red till its soul draws it in
     const g = finish?.id === id ? scene.done.find((d) => d.id === id) : null;
     if (!g || g.used === undefined || g.step) return COLORS.done;
     const k = Math.max(0, Math.min(1, (finishClock(scene, finish, now)! - finishTimes(fewestOf(g), shownUsed(g)!).gather) / FINISH.GATHER_MS));
@@ -303,7 +303,7 @@ export function draw(
         : block.wall ? COLORS.wall
         : block.id === scene.dragging?.id ? COLORS.dragging
         : block.id === scene.stuckId ? COLORS.stuck
-        : isGoal ? (waiting ? COLORS.goalWaiting : soulK < SOUL.TRAVEL_MS && block.id === soul?.toId ? (soulGathers() ? COLORS.goalWaiting : mix(COLORS.goalWaiting, COLORS.goal, Math.max(0, (soulK / SOUL.TRAVEL_MS - 0.85) / 0.15))) : block.id === soul?.toId && soulFlash(soulK) > 0 ? mix(COLORS.goal, "#ffffff", soulFlash(soulK)) : COLORS.goal)
+        : isGoal ? (waiting ? COLORS.goalWaiting : soulK < SOUL.TRAVEL_MS && block.id === soul?.toId ? COLORS.goalWaiting : block.id === soul?.toId && soulFlash(soulK) > 0 ? mix(COLORS.goal, "#ffffff", soulFlash(soulK)) : COLORS.goal)
         : wasGoal ? doneColor(block.id)
         : block.moved ? COLORS.moved
         : COLORS.block;
@@ -328,16 +328,9 @@ export function draw(
         ctx.scale(squashed.sx, squashed.sy);
         ctx.translate(-squashed.about.x, -squashed.about.y);
       }
-      // The new red block knocked as the soul hits it, the way it flew.
-      const hit = soul && block.id === soul.toId ? soulJolt(soulK, camera.scale) : 0;
-      if (beat !== 1 || jolt || hit) {
+      if (beat !== 1 || jolt) {
         ctx.save();
         if (jolt) ctx.translate(block.w > block.h ? jolt : 0, block.w > block.h ? 0 : jolt);
-        if (hit) {
-          const fx0 = soul!.from.x + soul!.from.width / 2, fy0 = soul!.from.y + soul!.from.height / 2;
-          const dx = (block.x + block.w / 2) * UNIT - fx0, dy = (block.y + block.h / 2) * UNIT - fy0, d = Math.hypot(dx, dy) || 1;
-          ctx.translate((dx / d) * hit, (dy / d) * hit);
-        }
         const cx = (block.x + block.w / 2) * UNIT, cy = (block.y + block.h / 2) * UNIT;
         ctx.translate(cx, cy);
         ctx.scale(beat, beat);
@@ -439,7 +432,7 @@ export function draw(
   }
   if (soul && soulK >= 0) {
     const to = scene.layout.byId(soul.toId), at = whereIs(scene, soul.toId);
-    if (to && at) drawSoul(ctx, soul.from, { x: at.x * UNIT + GAP, y: at.y * UNIT + GAP, width: to.w * UNIT - 2 * GAP, height: to.h * UNIT - 2 * GAP }, soulK, camera.scale, detail);
+    if (to && at) drawSoul(ctx, soul.from, { x: at.x * UNIT + GAP, y: at.y * UNIT + GAP, width: to.w * UNIT - 2 * GAP, height: to.h * UNIT - 2 * GAP }, soulK, camera.scale, soul.style);
   }
 
   // A tap on the background: one small yellow ring spreading out and fading, like a drop

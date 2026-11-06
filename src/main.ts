@@ -4,7 +4,7 @@ import type { Difficulty } from "./difficulty";
 import { MAX_STARS, medalWon, scoreTrack, starsEarned } from "./stars";
 import { finishTimes, type TraceEntry } from "./score-track";
 import { Inspector } from "./inspector";
-import { finishCues, finishParts, setSoulStyle, SOUL, timeWarp } from "./finish-fx";
+import { finishCues, finishParts, SOUL, SOUL_STYLES, timeWarp, type SoulStyle } from "./finish-fx";
 import { moreCues, moreParts, warmUp } from "./finish-fx2";
 import * as sfx from "./sfx";
 import { timedFrame } from "./perf";
@@ -66,7 +66,11 @@ const TESTBED = {
 // ?island=0 leaves the island out: the generated world from the start, as before it (for
 // tests of the world itself).
 const withIsland = new URLSearchParams(location.search).get("island") !== "0";
-setSoulStyle(new URLSearchParams(location.search).get("soul")); // (reports/soul.html)
+/** A soul style to always use (`?soul=`, reports/soul.html), or each picked as it goes. */
+const forcedSoul = SOUL_STYLES.find((st) => st === new URLSearchParams(location.search).get("soul")) ?? null;
+/** How many world goals have to be reached before souls may be flames or glints, not only
+ * comets (they may later be unlocked by special goals instead). */
+const SOUL_UNLOCK = 7;
 // ?testbed=N starts at goal N (0 first).
 let testbedNext = Number(new URLSearchParams(location.search).get("testbed")) || 0;
 // ?board=<JSON list of placed blocks> opens exactly that board (for sharing a board, and
@@ -461,13 +465,14 @@ const STEP_MS = 700;
 // next red block, the view gliding along; the new block throbs once it arrives.
 type WorldRect = { x: number; y: number; width: number; height: number };
 let soulFrom: (WorldRect & { id: string }) | null = null;
-let soul: { from: WorldRect & { id: string }; toId: string; born: number } | null = null;
+let soul: { from: WorldRect & { id: string }; toId: string; born: number; style: SoulStyle } | null = null;
 /** The last red block's soul flies to the new one (shown already, muted, while the finish
  * played), the view following it there; on the island to the square's middle, at its zoom. */
 function sendSoul(): void {
   const goal = scene.goal, red = goal && scene.layout.byId(goal.id), at = goal && whereIs(scene, goal.id);
   if (soulFrom && goal && red && at) {
-    soul = { from: soulFrom, toId: goal.id, born: -1 };
+    const style = forcedSoul ?? (worldGoals() >= SOUL_UNLOCK ? SOUL_STYLES[Math.floor(Math.random() * SOUL_STYLES.length)]! : "comet");
+    soul = { from: soulFrom, toId: goal.id, born: -1, style };
     const k = squareOf(goal);
     if (k === null) flyTo({ x: at.x + red.w / 2, y: at.y + red.h / 2 }, 0, SOUL.TRAVEL_MS);
     else flyTo(squareMiddle(k), 0, SOUL.TRAVEL_MS, islandCamera(k, borderOnScreen(scene)).scale);
