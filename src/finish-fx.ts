@@ -660,7 +660,7 @@ export type SoulStyle = (typeof SOUL_STYLES)[number];
 /** The soul's parts in time, as shares of SOUL.TRAVEL_MS: the old block's red draws in to a
  * ball over GATHER, the ball setting off at LEAVE (the red still drawing in, following it)
  * and speeding up all the way into the new block. */
-const GATHER = 0.3, LEAVE = 0.15;
+const GATHER = 0.4, LEAVE = 0.05;
 type Rect = { x: number; y: number; width: number; height: number };
 
 /** How pale the new red block flashes as the soul hits it, `k` ms after the soul set off
@@ -793,8 +793,10 @@ export function soul(ctx: CanvasRenderingContext2D, from: Rect, to: Rect, k: num
       // the way it goes.
       const e = g < 0.5 ? 2 * g * g : 1 - (-2 * g + 2) ** 2 / 2;
       const w = from.width + (2 * r - from.width) * e, h = from.height + (2 * r - from.height) * e;
-      // (Upright, as the block was: it spans from the block's middle to the ball's.)
-      const x0 = Math.min(c0.x, at.x) - w / 2, x1 = Math.max(c0.x, at.x) + w / 2, y0 = Math.min(c0.y, at.y) - h / 2, y1 = Math.max(c0.y, at.y) + h / 2;
+      // (Upright, as the block was: it spans from the ball back to where its tail has got,
+      // the tail following the ball a third of the way behind.)
+      const tail = along(f / 3);
+      const x0 = Math.min(tail.x, at.x) - w / 2, x1 = Math.max(tail.x, at.x) + w / 2, y0 = Math.min(tail.y, at.y) - h / 2, y1 = Math.max(tail.y, at.y) + h / 2;
       ctx.globalAlpha = 1 - head;
       ctx.fillStyle = RED;
       ctx.beginPath();
