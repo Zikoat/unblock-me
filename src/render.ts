@@ -258,19 +258,12 @@ export function draw(
   const hovered = scene.hover && !sliding && !scene.dragging ? blocks.find((b) => b.id === scene.hover) : null;
   const to = hovered && quickPush(scene, hovered);
   if (hovered && to) {
-    const horizontal = hovered.w > hovered.h;
-    const forward = horizontal ? to.x > hovered.x : to.y > hovered.y;
-    const near = horizontal ? (forward ? hovered.x + hovered.w : hovered.x) : forward ? hovered.y + hovered.h : hovered.y;
-    const far = horizontal ? (forward ? to.x + hovered.w : to.x) : forward ? to.y + hovered.h : to.y;
-    const [a, b] = [Math.min(near, far) * UNIT, Math.max(near, far) * UNIT];
-    const g = horizontal ? ctx.createLinearGradient(near * UNIT, 0, far * UNIT, 0) : ctx.createLinearGradient(0, near * UNIT, 0, far * UNIT);
+    const { horizontal, near, far } = lane(hovered, hovered.w > hovered.h ? to.x : to.y);
+    const g = horizontal ? ctx.createLinearGradient(near, 0, far, 0) : ctx.createLinearGradient(0, near, 0, far);
     g.addColorStop(0, hovered.id === goal?.id ? "rgba(214, 69, 69, 0.22)" : "rgba(79, 109, 143, 0.22)");
     g.addColorStop(1, "rgba(79, 109, 143, 0)");
     ctx.fillStyle = g;
-    ctx.beginPath();
-    if (horizontal) ctx.roundRect(a, hovered.y * UNIT + GAP, b - a, hovered.h * UNIT - 2 * GAP, 8);
-    else ctx.roundRect(hovered.x * UNIT + GAP, a, hovered.w * UNIT - 2 * GAP, b - a, 8);
-    ctx.fill();
+    laneFill(ctx, hovered, near, far);
   }
 
   // A throbbing block grows over its neighbours, so it goes on top.
@@ -359,22 +352,13 @@ export function draw(
       const fade = 1 - Math.max(0, Math.min(1, (t - CUE_GROW - CUE_HOLD) / CUE_FADE));
       const horizontal = cueing.w > cueing.h;
       const at = horizontal ? cueing.x : cueing.y, aim = horizontal ? goal.target.x : goal.target.y;
-      const size = horizontal ? cueing.w : cueing.h;
       if (aim !== at && fade > 0) {
-        const forward = aim > at;
-        // (From the next cell's edge in, where a block there starts, as far as its target's.)
-        const inset = forward ? GAP : -GAP;
-        const near = (forward ? at + size : at) * UNIT + inset;
-        const far = near + ((forward ? aim + size : aim) * UNIT - inset - near) * grow;
+        const { near, far: end } = lane(cueing, aim), far = near + (end - near) * grow;
         const g = horizontal ? ctx.createLinearGradient(near, 0, far, 0) : ctx.createLinearGradient(0, near, 0, far);
         g.addColorStop(0, `rgba(214, 69, 69, ${0.4 * fade})`);
         g.addColorStop(1, "rgba(214, 69, 69, 0)");
         ctx.fillStyle = g;
-        const [a, b] = [Math.min(near, far), Math.max(near, far)];
-        ctx.beginPath();
-        if (horizontal) ctx.roundRect(a, cueing.y * UNIT + GAP, b - a, cueing.h * UNIT - 2 * GAP, 8);
-        else ctx.roundRect(cueing.x * UNIT + GAP, a, cueing.w * UNIT - 2 * GAP, b - a, 8);
-        ctx.fill();
+        laneFill(ctx, cueing, near, far);
       }
     }
   }
@@ -605,6 +589,23 @@ function greyOutside(ctx: CanvasRenderingContext2D, scene: Scene, rects: Rect[],
  * strip across the gap to each wall beside it, the corner where four walls meet, and a
  * fillet in each inner (concave) corner; outer corners are round. Walls never hop or shake,
  * so they are drawn as one, under the other blocks. */
+/** Block `b`'s way along its lane to `aim` (its x or y there), in world px: from where a
+ * block in the next cell would start (a gap in from its edge) to where `b` would end there. */
+function lane(b: Block, aim: number): { horizontal: boolean; near: number; far: number } {
+  const horizontal = b.w > b.h, at = horizontal ? b.x : b.y, size = horizontal ? b.w : b.h;
+  const forward = aim > at, inset = forward ? GAP : -GAP;
+  return { horizontal, near: (forward ? at + size : at) * UNIT + inset, far: (forward ? aim + size : aim) * UNIT - inset };
+}
+
+/** Fill `b`'s lane from `near` to `far` (world px along it), as wide as a block. */
+function laneFill(ctx: CanvasRenderingContext2D, b: Block, near: number, far: number): void {
+  const [lo, hi] = [Math.min(near, far), Math.max(near, far)];
+  ctx.beginPath();
+  if (b.w > b.h) ctx.roundRect(lo, b.y * UNIT + GAP, hi - lo, b.h * UNIT - 2 * GAP, 8);
+  else ctx.roundRect(b.x * UNIT + GAP, lo, b.w * UNIT - 2 * GAP, hi - lo, 8);
+  ctx.fill();
+}
+
 const WALL_RADIUS = 3;
 function drawWalls(ctx: CanvasRenderingContext2D, walls: Block[], color: string): void {
   if (!walls.length) return;
