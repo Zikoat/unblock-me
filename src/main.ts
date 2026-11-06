@@ -722,6 +722,7 @@ Object.assign(window, {
       // (And a finish still playing, its soul and the view's flight with it, are the old board's.)
       finish = null;
       soul = soulFrom = flight = null;
+      goalShownAt = -Infinity; // (a placed goal shows at once)
       ahead.wanted = "";
       placed = blocks;
       restart(scene, fixedLayout(blocks));
