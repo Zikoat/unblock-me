@@ -52,6 +52,43 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.send_header("Cache-Control", "no-cache")
         super().end_headers()
 
+    def send_head(self):  # type: ignore[override]
+        # Byte ranges, which Safari needs to play a video (reports' films): one range, of a
+        # file; everything else as the base class does.
+        self.range_left = None
+        match = re.fullmatch(r"bytes=(\d*)-(\d*)", self.headers.get("Range", ""))
+        path = pathlib.Path(self.translate_path(self.path))
+        if not match or not path.is_file() or match.group(0) == "bytes=-":
+            return super().send_head()
+        size = path.stat().st_size
+        first, last = match.groups()
+        start = int(first) if first else max(0, size - int(last))
+        end = min(size - 1, int(last)) if first and last else size - 1
+        if start >= size or start > end:
+            self.send_error(416)
+            return None
+        f = open(path, "rb")
+        f.seek(start)
+        self.send_response(206)
+        self.send_header("Content-Type", self.guess_type(str(path)))
+        self.send_header("Accept-Ranges", "bytes")
+        self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+        self.send_header("Content-Length", str(end - start + 1))
+        self.end_headers()
+        self.range_left = end - start + 1
+        return f
+
+    def copyfile(self, source, outputfile) -> None:  # type: ignore[override]
+        left = self.range_left
+        if left is None:
+            return super().copyfile(source, outputfile)
+        while left > 0:
+            chunk = source.read(min(64 * 1024, left))
+            if not chunk:
+                break
+            outputfile.write(chunk)
+            left -= len(chunk)
+
 
 handler = functools.partial(Handler, directory=str(ROOT / "public"))
 http.server.ThreadingHTTPServer(("0.0.0.0", 8080), handler).serve_forever()
