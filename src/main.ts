@@ -743,6 +743,16 @@ function surface(now: number): { rects: Rect[]; alpha: number } | null {
 /** Each island square's level, on its top wall. */
 const LABELS = ISLAND_LEVELS.map((_, k) => ({ x: squareMiddle(k).x, y: squareAt(k).y - 0.5, text: `Level ${k + 1}` }));
 
+/** A press while a finish plays skips to its end (its stars shown, its sounds left out):
+ * whether there was one to skip. */
+function skipFinish(now: number): boolean {
+  if (!finish || finish.quiet || finish.heard === Infinity || now - finish.born >= finish.end) return false;
+  finish.born = now - finish.end;
+  finish.heard = Infinity;
+  redraw();
+  return true;
+}
+
 // The island's next button: once a square's finish has shown its stars, it cuts straight to
 // the next square (no soul, no glide), or past the last one to the world.
 const nextButton = document.querySelector<HTMLButtonElement>("#next")!;
@@ -1169,6 +1179,7 @@ for (const type of ["touchstart", "touchend", "pointerup", "click", "keydown"]) 
 addEventListener("pagehide", () => sfx.release());
 canvas.addEventListener("pointerdown", (e) => {
   if (inspector?.open) return; // the board is a replay while it is open
+  if (skipFinish(performance.now())) return;
   if (finish?.island) return; // under an island square's finish card
   if (e.pointerType === "mouse" && e.button !== 0) return;
   canvas.setPointerCapture(e.pointerId);
