@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Soul styles</title>
+<meta name="date" content="2026-11-06">
+<style>
+  :root { color-scheme: light dark; --bg: #f9f9f7; --card: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --line: #e1e0d9; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0d0d0d; --card: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --line: #2c2c2a; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 system-ui, sans-serif; }
+  main { max-width: 960px; margin: 0 auto; padding: 24px 16px 56px; }
+  .back { color: var(--ink-2); text-decoration: none; font-size: 14px; }
+  h1 { font-size: 24px; margin: 10px 0 4px; } h2 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: var(--ink-2); margin: 0 0 8px; max-width: 72ch; }
+  .note { margin: 0 0 12px; max-width: 72ch; font-size: 15px; }
+  .style { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-top: 16px; }
+  .films { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+  figure { margin: 0; } figcaption { font-size: 13px; color: var(--ink-2); margin-top: 4px; }
+  video, img { display: block; width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--line); }
+  .strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; margin-top: 12px; }
+  nav a { margin-right: 12px; color: var(--ink); }
+  ul { padding-left: 20px; } li { max-width: 72ch; margin: 4px 0; }
+</style></head><body><main>
+<a class="back" href="./">← All reports</a>
+<h1>Soul styles</h1>
+<p class="sub">The red block's soul flying from a reached goal to the next red block, in the game: a goal reached on a small board, its finish skipped with a tap, then filmed frame by frame (test/experiments/soul-look.mjs). Each style is in the game behind <code>?soul=&lt;name&gt;</code>; the game still uses Classic. The new red block shows muted while the soul is on its way; the red band at the right edge points to its target, off screen.</p>
+<nav><a href="#classic">Classic (now)</a><a href="#ember">Ember</a><a href="#comet">Comet</a><a href="#sparks">Gold star</a><a href="#ghost">Ghost block</a></nav>
+<h2 style="margin-top:20px">Suggestions</h2>
+<ul>
+<li><b>Smaller:</b> every new style's head is about a third of a cell; Classic's glow is nearly two cells across.</li>
+<li><b>A trail</b> shows where it came from and makes the motion readable: Ember (short ribbon) or Comet (long streak) do this most clearly.</li>
+<li><b>One thin ring</b> on landing instead of two wide ones, and a lighter flash.</li>
+<li>My pick: <b>Ember</b>, maybe with Comet's longer streak: it stays red and flat like the blocks, and is easy to follow.</li>
+</ul>
+<section class="style" id="classic">
+<h2>Classic (now)</h2>
+<p class="sub">The orb as it is: a large red glow (about 1.8 cells across with its halo) that lifts out of the block as a ghost, flies with a glow tail and falling stars, and pours into the new block; two wide rings go out.</p>
+<p class="note">Big and soft: it covers the blocks it passes and reads as a blur rather than a thing. The halo is most of what you see.</p>
+<div class="films">
+<figure><video src="soul/classic.mp4" autoplay loop muted playsinline controls></video><figcaption>Full speed (the flight is 1 s, then the landing)</figcaption></figure>
+<figure><video src="soul/classic-slow.mp4" autoplay loop muted playsinline controls></video><figcaption>Quarter speed</figcaption></figure>
+</div>
+<div class="strip"><figure><img src="soul/classic-0.jpg" alt="Classic (now) at 0 ms" loading="lazy"><figcaption>0 ms</figcaption></figure><figure><img src="soul/classic-150.jpg" alt="Classic (now) at 150 ms" loading="lazy"><figcaption>150 ms</figcaption></figure><figure><img src="soul/classic-300.jpg" alt="Classic (now) at 300 ms" loading="lazy"><figcaption>300 ms</figcaption></figure><figure><img src="soul/classic-450.jpg" alt="Classic (now) at 450 ms" loading="lazy"><figcaption>450 ms</figcaption></figure><figure><img src="soul/classic-600.jpg" alt="Classic (now) at 600 ms" loading="lazy"><figcaption>600 ms</figcaption></figure><figure><img src="soul/classic-750.jpg" alt="Classic (now) at 750 ms" loading="lazy"><figcaption>750 ms</figcaption></figure><figure><img src="soul/classic-900.jpg" alt="Classic (now) at 900 ms" loading="lazy"><figcaption>900 ms</figcaption></figure><figure><img src="soul/classic-1050.jpg" alt="Classic (now) at 1050 ms" loading="lazy"><figcaption>1050 ms</figcaption></figure><figure><img src="soul/classic-1250.jpg" alt="Classic (now) at 1250 ms" loading="lazy"><figcaption>1250 ms</figcaption></figure></div>
+</section><section class="style" id="ember">
+<h2>Ember</h2>
+<p class="sub">A small solid red ball (a third of a cell) with a light spot, a soft red glow, and a red ribbon behind it that thins and fades. One thin ring as it lands.</p>
+<p class="note">Small and clear; the ribbon shows where it came from. Plain, close to the game's flat style.</p>
+<div class="films">
+<figure><video src="soul/ember.mp4" autoplay loop muted playsinline controls></video><figcaption>Full speed (the flight is 1 s, then the landing)</figcaption></figure>
+<figure><video src="soul/ember-slow.mp4" autoplay loop muted playsinline controls></video><figcaption>Quarter speed</figcaption></figure>
+</div>
+<div class="strip"><figure><img src="soul/ember-0.jpg" alt="Ember at 0 ms" loading="lazy"><figcaption>0 ms</figcaption></figure><figure><img src="soul/ember-150.jpg" alt="Ember at 150 ms" loading="lazy"><figcaption>150 ms</figcaption></figure><figure><img src="soul/ember-300.jpg" alt="Ember at 300 ms" loading="lazy"><figcaption>300 ms</figcaption></figure><figure><img src="soul/ember-450.jpg" alt="Ember at 450 ms" loading="lazy"><figcaption>450 ms</figcaption></figure><figure><img src="soul/ember-600.jpg" alt="Ember at 600 ms" loading="lazy"><figcaption>600 ms</figcaption></figure><figure><img src="soul/ember-750.jpg" alt="Ember at 750 ms" loading="lazy"><figcaption>750 ms</figcaption></figure><figure><img src="soul/ember-900.jpg" alt="Ember at 900 ms" loading="lazy"><figcaption>900 ms</figcaption></figure><figure><img src="soul/ember-1050.jpg" alt="Ember at 1050 ms" loading="lazy"><figcaption>1050 ms</figcaption></figure><figure><img src="soul/ember-1250.jpg" alt="Ember at 1250 ms" loading="lazy"><figcaption>1250 ms</figcaption></figure></div>
+</section><section class="style" id="comet">
+<h2>Comet</h2>
+<p class="sub">A white-hot point in a red halo, with a long streak behind it going from pale pink to red, and a few sparks drifting off.</p>
+<p class="note">The most motion: the long streak reads well even at a glance or zoomed out. The white core is less 'red block'.</p>
+<div class="films">
+<figure><video src="soul/comet.mp4" autoplay loop muted playsinline controls></video><figcaption>Full speed (the flight is 1 s, then the landing)</figcaption></figure>
+<figure><video src="soul/comet-slow.mp4" autoplay loop muted playsinline controls></video><figcaption>Quarter speed</figcaption></figure>
+</div>
+<div class="strip"><figure><img src="soul/comet-0.jpg" alt="Comet at 0 ms" loading="lazy"><figcaption>0 ms</figcaption></figure><figure><img src="soul/comet-150.jpg" alt="Comet at 150 ms" loading="lazy"><figcaption>150 ms</figcaption></figure><figure><img src="soul/comet-300.jpg" alt="Comet at 300 ms" loading="lazy"><figcaption>300 ms</figcaption></figure><figure><img src="soul/comet-450.jpg" alt="Comet at 450 ms" loading="lazy"><figcaption>450 ms</figcaption></figure><figure><img src="soul/comet-600.jpg" alt="Comet at 600 ms" loading="lazy"><figcaption>600 ms</figcaption></figure><figure><img src="soul/comet-750.jpg" alt="Comet at 750 ms" loading="lazy"><figcaption>750 ms</figcaption></figure><figure><img src="soul/comet-900.jpg" alt="Comet at 900 ms" loading="lazy"><figcaption>900 ms</figcaption></figure><figure><img src="soul/comet-1050.jpg" alt="Comet at 1050 ms" loading="lazy"><figcaption>1050 ms</figcaption></figure><figure><img src="soul/comet-1250.jpg" alt="Comet at 1250 ms" loading="lazy"><figcaption>1250 ms</figcaption></figure></div>
+</section><section class="style" id="sparks">
+<h2>Gold star</h2>
+<p class="sub">A spinning gold star (the score's star), shedding small gold and pink stars that drop behind it. A gold ring as it lands.</p>
+<p class="note">Ties the soul to the stars just won; busier, and gold rather than red.</p>
+<div class="films">
+<figure><video src="soul/sparks.mp4" autoplay loop muted playsinline controls></video><figcaption>Full speed (the flight is 1 s, then the landing)</figcaption></figure>
+<figure><video src="soul/sparks-slow.mp4" autoplay loop muted playsinline controls></video><figcaption>Quarter speed</figcaption></figure>
+</div>
+<div class="strip"><figure><img src="soul/sparks-0.jpg" alt="Gold star at 0 ms" loading="lazy"><figcaption>0 ms</figcaption></figure><figure><img src="soul/sparks-150.jpg" alt="Gold star at 150 ms" loading="lazy"><figcaption>150 ms</figcaption></figure><figure><img src="soul/sparks-300.jpg" alt="Gold star at 300 ms" loading="lazy"><figcaption>300 ms</figcaption></figure><figure><img src="soul/sparks-450.jpg" alt="Gold star at 450 ms" loading="lazy"><figcaption>450 ms</figcaption></figure><figure><img src="soul/sparks-600.jpg" alt="Gold star at 600 ms" loading="lazy"><figcaption>600 ms</figcaption></figure><figure><img src="soul/sparks-750.jpg" alt="Gold star at 750 ms" loading="lazy"><figcaption>750 ms</figcaption></figure><figure><img src="soul/sparks-900.jpg" alt="Gold star at 900 ms" loading="lazy"><figcaption>900 ms</figcaption></figure><figure><img src="soul/sparks-1050.jpg" alt="Gold star at 1050 ms" loading="lazy"><figcaption>1050 ms</figcaption></figure><figure><img src="soul/sparks-1250.jpg" alt="Gold star at 1250 ms" loading="lazy"><figcaption>1250 ms</figcaption></figure></div>
+</section><section class="style" id="ghost">
+<h2>Ghost block</h2>
+<p class="sub">The red block itself in small (its shape kept), with fading copies of itself behind it like motion blur.</p>
+<p class="note">The most literal: the block moves on. The stepped copies look a little mechanical.</p>
+<div class="films">
+<figure><video src="soul/ghost.mp4" autoplay loop muted playsinline controls></video><figcaption>Full speed (the flight is 1 s, then the landing)</figcaption></figure>
+<figure><video src="soul/ghost-slow.mp4" autoplay loop muted playsinline controls></video><figcaption>Quarter speed</figcaption></figure>
+</div>
+<div class="strip"><figure><img src="soul/ghost-0.jpg" alt="Ghost block at 0 ms" loading="lazy"><figcaption>0 ms</figcaption></figure><figure><img src="soul/ghost-150.jpg" alt="Ghost block at 150 ms" loading="lazy"><figcaption>150 ms</figcaption></figure><figure><img src="soul/ghost-300.jpg" alt="Ghost block at 300 ms" loading="lazy"><figcaption>300 ms</figcaption></figure><figure><img src="soul/ghost-450.jpg" alt="Ghost block at 450 ms" loading="lazy"><figcaption>450 ms</figcaption></figure><figure><img src="soul/ghost-600.jpg" alt="Ghost block at 600 ms" loading="lazy"><figcaption>600 ms</figcaption></figure><figure><img src="soul/ghost-750.jpg" alt="Ghost block at 750 ms" loading="lazy"><figcaption>750 ms</figcaption></figure><figure><img src="soul/ghost-900.jpg" alt="Ghost block at 900 ms" loading="lazy"><figcaption>900 ms</figcaption></figure><figure><img src="soul/ghost-1050.jpg" alt="Ghost block at 1050 ms" loading="lazy"><figcaption>1050 ms</figcaption></figure><figure><img src="soul/ghost-1250.jpg" alt="Ghost block at 1250 ms" loading="lazy"><figcaption>1250 ms</figcaption></figure></div>
+</section>
+</main></body></html>
