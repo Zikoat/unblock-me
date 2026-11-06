@@ -189,36 +189,3 @@ function astar(win: Window, r: number, want: number, limit: number, w: number, u
   // Nothing left to search: no solution within the window (shorter than `upper`).
   return { g: null, f: upper, expanded, choices };
 }
-
-/** The usual difficulty at each density (tries): the 5th and 95th percentile over 20 boards
- * each of goals made ahead (makeGoalHard level 2), from test/experiments/difficulty-range.ts.
- * Re-measure when the measure or the goal search changes. */
-const RANGE: [tries: number, low: number, high: number][] = [
-  [1, 2.3, 21.8],
-  [4, 10.5, 52.4],
-  [7, 17.7, 65.0],
-  [10, 30.8, 99.7],
-  [15, 26.1, 110.9],
-  [20, 24.8, 109.4],
-  [25, 22.7, 108.4],
-  [30, 21.0, 114.6],
-];
-
-/** How many stars (0..10) a goal is worth: its difficulty within the usual range for its
- * density, the 5th percentile at 0 and the 95th at 10. */
-export function starsFor(score: number, tries: number): number {
-  const i = Math.max(0, RANGE.findIndex(([t]) => t >= tries) - 1);
-  const [t0, lo0, hi0] = RANGE[i]!;
-  const [t1, lo1, hi1] = RANGE[Math.min(i + 1, RANGE.length - 1)]!;
-  const k = t1 === t0 ? 0 : Math.min(1, Math.max(0, (tries - t0) / (t1 - t0)));
-  const lo = lo0 + (lo1 - lo0) * k, hi = hi0 + (hi1 - hi0) * k;
-  return Math.min(10, Math.max(0, Math.round((10 * (score - lo)) / (hi - lo))));
-}
-
-/** The stars earned: all of them in the fewest moves, fewer the more moves it took, but
- * never more than one star lost per extra move (the kinder of "one star per extra move" and
- * "worth x fewest / used"). */
-export function starsEarned(worth: number, fewest: number, used: number): number {
-  const extra = Math.max(0, used - fewest);
-  return Math.max(worth - extra, Math.round(worth * Math.min(1, fewest / Math.max(used, 1))), 0);
-}
