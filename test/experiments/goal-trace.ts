@@ -3,8 +3,9 @@
 // push search's moves cell by cell, every candidate's rough measure, and the boards the exact
 // measure's A* expanded for each finalist (src/difficulty.ts, through its trace). Checks it
 // made the same goal as makeGoalHard.
-//   scripts/capped.sh 2000 300 bun test/experiments/goal-trace.ts [seed near.x near.y] > out.json
-// (the report's `const DATA = ...;` line is that JSON).
+//   scripts/capped.sh 2000 300 bun test/experiments/goal-trace.ts [seed near.x near.y [none]] > out.json
+// The report's `const DATA = { a, b };` line holds two runs on the same board: a (seed 11, 20 6)
+// and b (the same with none).
 import { Board } from "../../src/board";
 import { measure, type Difficulty } from "../../src/difficulty";
 import { rampTarget } from "../../src/goal";
@@ -15,7 +16,8 @@ import type { Move } from "../../src/rules";
 import type { Window } from "../../src/window";
 
 const SEED = Number(process.argv[2] ?? 7), TRIES = 12, LEVEL = 2, NEAR = { x: Number(process.argv[3] ?? 20), y: Number(process.argv[4] ?? 6) };
-const TARGET = rampTarget(15)!;
+/** The ramp's aim (for the 16th world goal), or none (past the ramp): "none" as the 5th argument. */
+const TARGET = process.argv[5] === "none" ? undefined : rampTarget(15)!;
 /** Boards kept of each finalist's search, for the film: the first ones, then evenly spaced. */
 const FRAMES = 160, FIRST = 40;
 
@@ -57,7 +59,7 @@ all.forEach((p, pi) => {
     candidates.push({ ...goal, difficulty: measure(board, goal, { limit: rough }), distance: k + 1, train: onTrack(board, p.id, step.at), push: pi, k, proof: solution.length });
   }
 });
-const off = (c: Ranked) => Math.abs((c.difficulty.moves ?? c.difficulty.atLeast) - TARGET);
+const off = (c: Ranked) => (TARGET === undefined ? 0 : Math.abs((c.difficulty.moves ?? c.difficulty.atLeast) - TARGET));
 const rank = (a: Ranked, b: Ranked) => off(a) - off(b) || balance(b) - balance(a) || a.solution.length - b.solution.length || a.distance - b.distance;
 const order = [...candidates].sort(rank);
 const roughOf = new Map(candidates.map((c) => [c, diff(c.difficulty)]));
