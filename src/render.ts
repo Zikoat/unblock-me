@@ -7,7 +7,7 @@ import { bestKnown, shownUsed, type Goal } from "./goal";
 import { islandSide, redId, squareOf } from "./island";
 import { timed } from "./perf";
 import { cinemaOverlay, dance, glitch, glitchShift, lit, overMore, tilt } from "./finish-fx2";
-import { onBlock, over, punch, quake, screenFlash, soul as drawSoul, SOUL, soulGathers, soulJolt, squash, timeWarp, under, wave, type Fx } from "./finish-fx";
+import { onBlock, over, punch, quake, screenFlash, soul as drawSoul, SOUL, soulFlash, soulGathers, soulJolt, squash, timeWarp, under, wave, type Fx } from "./finish-fx";
 import { borderOnScreen, latticeRect, quickPush, uiToolbar, visibleBlocks, whereIs, type Scene } from "./scene";
 
 export const COLORS = {
@@ -303,7 +303,7 @@ export function draw(
         : block.wall ? COLORS.wall
         : block.id === scene.dragging?.id ? COLORS.dragging
         : block.id === scene.stuckId ? COLORS.stuck
-        : isGoal ? (waiting ? COLORS.goalWaiting : soulK < SOUL.TRAVEL_MS && block.id === soul?.toId ? (soulGathers() ? COLORS.goalWaiting : mix(COLORS.goalWaiting, COLORS.goal, Math.max(0, (soulK / SOUL.TRAVEL_MS - 0.85) / 0.15))) : COLORS.goal)
+        : isGoal ? (waiting ? COLORS.goalWaiting : soulK < SOUL.TRAVEL_MS && block.id === soul?.toId ? (soulGathers() ? COLORS.goalWaiting : mix(COLORS.goalWaiting, COLORS.goal, Math.max(0, (soulK / SOUL.TRAVEL_MS - 0.85) / 0.15))) : block.id === soul?.toId && soulFlash(soulK) > 0 ? mix(COLORS.goal, "#ffffff", soulFlash(soulK)) : COLORS.goal)
         : wasGoal ? doneColor(block.id)
         : block.moved ? COLORS.moved
         : COLORS.block;
@@ -361,7 +361,8 @@ export function draw(
 
   // The new red block's way to its target: a red trail growing from it along its lane,
   // over the blocks in the way.
-  const cueing = cue && goal && cue.id === goal.id ? blocks.find((b) => b.id === goal.id) : null;
+  // (Not before its clock starts: once the soul gets there.)
+  const cueing = cue && cue.born >= 0 && goal && cue.id === goal.id ? blocks.find((b) => b.id === goal.id) : null;
   if (cue && goal && cueing) {
     const t = now - cue.born - CUE_DELAY;
     if (t > 0) {

@@ -654,8 +654,9 @@ export function screenFlash(ctx: CanvasRenderingContext2D, fx: Fx, width: number
 /** The red block's soul flying on to the next red block. */
 export const SOUL = { TRAVEL_MS: 1000, BURST_MS: 450 };
 /** How the soul looks (reports/soul.html compares them; `?soul=` picks one): the orb as it
- * was, or a red head with a trail (smallSoul): the head's look and the trail's vary. */
-export const SOUL_STYLES = ["classic", "comet", "ember", "rim", "drop", "flame", "beads", "ring", "sparkle", "gold"] as const;
+ * was, or a red head with a trail (smallSoul): a comet (its sparks soft blobs, fine dust or
+ * none in the comet-… ones), a flame, or a glint. */
+export const SOUL_STYLES = ["classic", "comet", "flame", "glint", "comet-soft", "comet-dust", "comet-plain"] as const;
 export type SoulStyle = (typeof SOUL_STYLES)[number];
 let soulStyle: SoulStyle = "classic";
 export const setSoulStyle = (s: string | null) => {
@@ -667,6 +668,13 @@ export const soulGathers = () => soulStyle !== "classic";
 /** The soul's parts in time, as shares of SOUL.TRAVEL_MS: the old block's red draws into a
  * ball on it, then flies off, speeding up all the way into the new block. */
 const GATHER = 0.25;
+/** How pale the new red block flashes as the soul hits it, `k` ms after the soul set off
+ * (0 none, 1 white). */
+export function soulFlash(k: number): number {
+  if (soulStyle === "classic") return 0;
+  const b = (k - SOUL.TRAVEL_MS) / SOUL.BURST_MS;
+  return b < 0 || b >= 1 ? 0 : 0.55 * (1 - b) ** 2;
+}
 /** How far the new red block is knocked by the soul's hit (px, along its flight), `k` ms
  * after the soul set off: a quick shove and back. */
 export function soulJolt(k: number, zoom: number): number {
@@ -766,8 +774,8 @@ export function soul(ctx: CanvasRenderingContext2D, from: Rect, to: Rect, k: num
 
 /** A red head with a trail (see SOUL_STYLES): the old block's red draws in to a ball on its
  * middle (the block gold under it), which flies straight to the new block's middle, slow at
- * first and faster all the way, dropping red sparks; it hits: a splash of red the way it
- * was going, a ring, and the block knocked (soulJolt). */
+ * first and faster all the way, shedding sparks; it hits: the block knocked (soulJolt), a
+ * pale flash on it and a ring going out. */
 function smallSoul(ctx: CanvasRenderingContext2D, from: Rect, to: Rect, k: number, zoom: number, style: SoulStyle): void {
   const B = big(zoom), p = clamp(k / SOUL.TRAVEL_MS), r = UNIT * 0.21 * B;
   const c0 = { x: from.x + from.width / 2, y: from.y + from.height / 2 }, c1 = { x: to.x + to.width / 2, y: to.y + to.height / 2 };
@@ -788,40 +796,48 @@ function smallSoul(ctx: CanvasRenderingContext2D, from: Rect, to: Rect, k: numbe
     ctx.fill();
   } else if (p < 1) {
     const f = (p - GATHER) / (1 - GATHER), at = along(f);
-    const ribbon = (n: number, df: number, width: number, color: (t: number) => string) => {
+    /** Flicker: a smooth random wave per `i`, changing ~20 times a second. */
+    const flicker = (i: number) => {
+      const s = (k / 1000) * 20, n = Math.floor(s), u = s - n;
+      return hash(i * 31 + n) * (1 - u) + hash(i * 31 + n + 1) * u;
+    };
+    const ribbon = (n: number, df: number, width: number, color: (t: number) => string, wobble = 0, seed = 0) => {
       ctx.lineCap = "round";
       for (let j = n; j >= 1; j--) {
         if (f - (j - 1) * df <= 0) continue;
         const a = along(f - j * df), b = along(f - (j - 1) * df), t = 1 - j / n;
+        // Flames lick sideways, more towards the tail.
+        const side = wobble * (1 - t) * (flicker(j + seed) - 0.5), ox = -dir.y * side, oy = dir.x * side;
         ctx.strokeStyle = color(t);
-        ctx.lineWidth = Math.max(0.5, width * t);
+        ctx.lineWidth = Math.max(0.5, width * t * (wobble ? 0.75 + 0.5 * flicker(j + seed + 99) : 1));
         ctx.beginPath();
-        ctx.moveTo(a.x, a.y);
-        ctx.lineTo(b.x, b.y);
+        ctx.moveTo(a.x + ox, a.y + oy);
+        ctx.lineTo(b.x + ox, b.y + oy);
         ctx.stroke();
       }
     };
-    // Sparks dropped along the way: deep red and gold with a dark edge, so they show on the
-    // pale board, drifting off and down as they fade.
-    const sparks = (n: number) => {
-      const step = 1 / 60, last = Math.floor(f / step);
+    /** Bits shed along the way, `n` of them alive at once, each drawn by `bit` (at x, y, its
+     * age 0..1 and a random 0..1), drifting off as they fade. `rise`: they go up (embers)
+     * rather than falling. */
+    const shed = (n: number, life: number, bit: (x: number, y: number, age: number, h: number) => void, rise = false) => {
+      const step = life / n, last = Math.floor(f / step);
       for (let i = 0; i < n; i++) {
-        const born = (last - i) * step;
+        const id = last - i, born = id * step;
         if (born <= 0) continue;
-        const age = (f - born) / 0.4;
+        const age = (f - born) / life;
         if (age >= 1) continue;
-        const h1 = hash(last - i), h2 = hash(last - i + 500), sp = along(born);
-        const x = sp.x + (h1 - 0.5) * r * 7 * Math.sqrt(age), y = sp.y + (h2 - 0.5) * r * 5 * Math.sqrt(age) + r * 4 * age * age;
-        ctx.globalAlpha = 1 - age;
-        ctx.fillStyle = (last - i) % 3 ? "#c93838" : "#f2a81d";
-        ctx.strokeStyle = "rgba(90, 20, 20, 0.5)";
-        ctx.lineWidth = 0.8 * B;
-        ctx.beginPath();
-        ctx.arc(x, y, r * (0.34 - 0.18 * age), 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
+        const h1 = hash(id), h2 = hash(id + 500), sp = along(born);
+        const x = sp.x + (h1 - 0.5) * r * 6 * Math.sqrt(age), y = sp.y + (h2 - 0.5) * r * 4 * Math.sqrt(age) + (rise ? -1 : 1) * r * 4 * age * age;
+        bit(x, y, age, hash(id + 900));
       }
       ctx.globalAlpha = 1;
+    };
+    const dot = (x: number, y: number, radius: number, fill: string, alpha: number) => {
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = fill;
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fill();
     };
     const ball = (fill: string | CanvasGradient, radius = r) => {
       ctx.fillStyle = fill;
@@ -829,118 +845,72 @@ function smallSoul(ctx: CanvasRenderingContext2D, from: Rect, to: Rect, k: numbe
       ctx.arc(at.x, at.y, radius, 0, Math.PI * 2);
       ctx.fill();
     };
-    const shaded = (inner: string, outer: string) => {
-      const g = ctx.createRadialGradient(at.x, at.y, 0, at.x, at.y, r);
-      g.addColorStop(0, inner);
-      g.addColorStop(1, outer);
+    const shaded = (stops: [number, string][], radius = r) => {
+      const g = ctx.createRadialGradient(at.x, at.y, 0, at.x, at.y, radius);
+      for (const [o, c] of stops) g.addColorStop(o, c);
       return g;
     };
-    const streak = (rgb: string) => ribbon(40, 0.012, r * 1.5, (t) => `rgba(${rgb}, ${0.75 * t})`);
-    if (style === "comet") {
-      streak("214, 69, 69");
-      sparks(14);
-      glow(ctx, "soul", at.x, at.y, r * 2.8, 0.5);
-      ball(shaded("#ef6a6a", RED));
-    } else if (style === "ember") {
-      ribbon(22, 0.016, r * 1.8, (t) => `rgba(214, 69, 69, ${0.6 * t})`);
-      sparks(10);
-      glow(ctx, "soul", at.x, at.y, r * 2.6, 0.5);
-      ball(RED);
-    } else if (style === "rim") {
-      streak("214, 69, 69");
-      sparks(14);
-      ball(RED);
-      ctx.strokeStyle = "#ffb0b0";
-      ctx.lineWidth = 2 * B;
-      ctx.stroke();
-    } else if (style === "drop") {
-      // A teardrop: the ball drawn out to a point behind it, the trail part of it.
-      const tail = r * (2.5 + 3 * f), back = { x: at.x - dir.x * tail, y: at.y - dir.y * tail };
-      const g = ctx.createLinearGradient(back.x, back.y, at.x, at.y);
-      g.addColorStop(0, "rgba(214, 69, 69, 0)");
-      g.addColorStop(0.6, "rgba(214, 69, 69, 0.8)");
-      g.addColorStop(1, RED);
-      sparks(12);
-      ctx.fillStyle = g;
-      const a = Math.atan2(dir.y, dir.x);
-      ctx.beginPath();
-      ctx.moveTo(back.x, back.y);
-      ctx.arc(at.x, at.y, r, a - Math.PI / 2, a + Math.PI / 2);
-      ctx.closePath();
-      ctx.fill();
-      ball(RED);
-    } else if (style === "flame") {
-      ribbon(30, 0.012, r * 2.2, (t) => `rgba(245, 140, 50, ${0.5 * t})`);
-      ribbon(30, 0.01, r * 1.2, (t) => `rgba(214, 69, 69, ${0.8 * t})`);
-      sparks(16);
-      glow(ctx, "gold", at.x, at.y, r * 2.4, 0.5);
-      ball(shaded("#f58a3c", RED));
-    } else if (style === "beads") {
-      for (let j = 10; j >= 1; j--) {
-        const b = along(f - j * 0.035);
-        if (f - j * 0.035 <= 0) continue;
-        ctx.globalAlpha = 1 - j / 11;
-        ctx.fillStyle = RED;
-        ctx.beginPath();
-        ctx.arc(b.x, b.y, r * (1 - j / 12), 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.globalAlpha = 1;
-      ball(RED);
-    } else if (style === "ring") {
-      streak("214, 69, 69");
-      sparks(14);
-      glow(ctx, "soul", at.x, at.y, r * 2.6, 0.45);
-      ctx.strokeStyle = RED;
-      ctx.lineWidth = r * 0.55;
-      ctx.beginPath();
-      ctx.arc(at.x, at.y, r * 0.75, 0, Math.PI * 2);
-      ctx.stroke();
-    } else if (style === "sparkle") {
-      streak("214, 69, 69");
-      sparks(14);
-      glow(ctx, "soul", at.x, at.y, r * 2.6, 0.5);
-      // A four-pointed glint, turning slowly.
-      ctx.translate(at.x, at.y);
-      ctx.rotate(f * Math.PI);
-      ctx.fillStyle = RED;
+    /** A four-pointed glint at (x, y), `long` to its tips, `thin` at its waist. */
+    const glint = (x: number, y: number, long: number, thin: number, turn: number, fill: string) => {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(turn);
+      ctx.fillStyle = fill;
       ctx.beginPath();
       for (let i = 0; i < 8; i++) {
-        const a = (i / 8) * Math.PI * 2, rr = i % 2 ? r * 0.45 : r * 1.5;
+        const a = (i / 8) * Math.PI * 2, rr = i % 2 ? thin : long;
         ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
       }
       ctx.closePath();
       ctx.fill();
+      ctx.restore();
+    };
+    const REDS = ["#d64545", "#c43535", "#e86a5a"];
+    if (style.startsWith("comet")) {
+      ribbon(40, 0.012, r * 1.5, (t) => `rgba(214, 69, 69, ${0.75 * t})`);
+      if (style === "comet") shed(14, 0.4, (x, y, age, h) => dot(x, y, r * (0.3 - 0.16 * age), REDS[Math.floor(h * 3)]!, 1 - age));
+      else if (style === "comet-soft") shed(10, 0.45, (x, y, age) => glow(ctx, "soul", x, y, r * (1.1 - 0.5 * age), 0.8 * (1 - age)));
+      else if (style === "comet-dust") shed(36, 0.5, (x, y, age, h) => dot(x, y, r * (0.14 - 0.06 * age), h < 0.5 ? "#b83232" : "#d64545", 0.9 * (1 - age)));
+      glow(ctx, "soul", at.x, at.y, r * 2.8, 0.5);
+      ball(shaded([[0, "#ef6a6a"], [1, RED]]));
+    } else if (style === "flame") {
+      // Tongues of fire: a wide red one, an orange one in it and a yellow core, each licking
+      // sideways on its own; embers rising off it.
+      ribbon(26, 0.013, r * 2.6, (t) => `rgba(206, 52, 40, ${0.55 * t})`, r * 1.6, 1);
+      ribbon(24, 0.012, r * 1.9, (t) => `rgba(245, 120, 40, ${0.7 * t})`, r * 1.2, 2);
+      ribbon(18, 0.011, r * 1.1, (t) => `rgba(255, 196, 70, ${0.85 * t})`, r * 0.7, 3);
+      shed(16, 0.45, (x, y, age, h) => dot(x + Math.sin(age * 9 + h * 6) * r * 0.6, y, r * (0.22 - 0.14 * age), h < 0.4 ? "#ffb02e" : h < 0.8 ? "#f0702a" : "#d64545", 1 - age), true);
+      glow(ctx, "gold", at.x, at.y, r * (2.4 + 0.4 * flicker(7)), 0.55);
+      ball(shaded([[0, "#ffe08a"], [0.45, "#ff9a3a"], [1, "#d8452e"]], r * (1 + 0.08 * flicker(8))));
     } else {
-      // gold: a red ball ringed in the stars' gold.
-      ribbon(26, 0.014, r * 1.6, (t) => `rgba(214, 69, 69, ${0.65 * t})`);
-      sparks(14);
-      ball(RED);
-      ctx.strokeStyle = "#f2b632";
-      ctx.lineWidth = 2.5 * B;
-      ctx.stroke();
+      // glint: the comet's streak, twinkling glints left along it, and at its head a red
+      // four-pointed glint with a white one in it, a thin one turning across it, flaring.
+      ribbon(40, 0.012, r * 1.4, (t) => `rgba(214, 69, 69, ${0.7 * t})`);
+      shed(9, 0.5, (x, y, age, h) => {
+        const tw = Math.sin(age * Math.PI) * (0.7 + 0.3 * Math.sin(age * 20 + h * 9));
+        if (tw <= 0) return;
+        ctx.globalAlpha = tw;
+        glint(x, y, r * 0.9 * tw, r * 0.18 * tw, h * 2, RED);
+        glint(x, y, r * 0.45 * tw, r * 0.1 * tw, h * 2, "#ffffff");
+      });
+      glow(ctx, "soul", at.x, at.y, r * 3, 0.55);
+      // Flares: the long glint's arms flash out twice on the way.
+      const flare = Math.max(0, Math.sin(f * Math.PI * 4)) ** 4;
+      glint(at.x, at.y, r * (1.6 + 1.6 * flare), r * 0.4, 0, RED);
+      glint(at.x, at.y, r * 1.1, r * 0.12, Math.PI / 4 + f * Math.PI, "rgba(239, 106, 106, 0.85)");
+      glint(at.x, at.y, r * (0.9 + 0.8 * flare), r * 0.2, 0, "#ffffff");
+      ball(shaded([[0, "#ffffff"], [1, "rgba(255, 255, 255, 0)"]], r * 0.55));
     }
   } else {
-    // The hit: a splash of red drops thrown on the way it was going, a ring, a pale flash.
+    // The hit: the block knocked and flashing (drawn in render.ts: soulJolt, soulFlash), and a
+    // ring going out, moving with it.
     const b = (k - SOUL.TRAVEL_MS) / SOUL.BURST_MS;
     if (b < 1) {
-      ctx.globalAlpha = (1 - b) ** 2 * 0.5;
-      ctx.fillStyle = "#ffd0d0";
-      ctx.beginPath();
-      ctx.roundRect(to.x, to.y, to.width, to.height, 8);
-      ctx.fill();
-      const a0 = Math.atan2(dir.y, dir.x), out = easeOut(b);
-      for (let i = 0; i < 12; i++) {
-        const a = a0 + (hash(i + 70) - 0.5) * Math.PI * 1.3, d = UNIT * (0.5 + hash(i + 90) * 0.7) * B * out;
-        ctx.globalAlpha = 1 - b;
-        ctx.fillStyle = i % 3 ? "#c93838" : "#f2a81d";
-        ctx.beginPath();
-        ctx.arc(c1.x + Math.cos(a) * d, c1.y + Math.sin(a) * d + UNIT * 0.3 * B * b * b, r * 0.28 * (1 - b * 0.6), 0, Math.PI * 2);
-        ctx.fill();
-      }
-      const grow = UNIT * 0.7 * B * out;
+      const j = soulJolt(k, zoom);
+      ctx.translate(dir.x * j, dir.y * j);
+      const grow = UNIT * 0.7 * B * easeOut(b);
       ctx.globalAlpha = (1 - b) ** 1.5;
-      ctx.strokeStyle = RED;
+      ctx.strokeStyle = style === "flame" ? "#f0702a" : RED;
       ctx.lineWidth = (5 * (1 - b) + 1) * B;
       ctx.beginPath();
       ctx.roundRect(to.x - grow, to.y - grow, to.width + 2 * grow, to.height + 2 * grow, 8 + grow);
