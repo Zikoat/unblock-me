@@ -362,13 +362,15 @@ export function draw(
       const size = horizontal ? cueing.w : cueing.h;
       if (aim !== at && fade > 0) {
         const forward = aim > at;
-        const near = forward ? at + size : at;
-        const far = near + ((forward ? aim + size : aim) - near) * grow;
-        const g = horizontal ? ctx.createLinearGradient(near * UNIT, 0, far * UNIT, 0) : ctx.createLinearGradient(0, near * UNIT, 0, far * UNIT);
+        // (From the next cell's edge in, where a block there starts, as far as its target's.)
+        const inset = forward ? GAP : -GAP;
+        const near = (forward ? at + size : at) * UNIT + inset;
+        const far = near + ((forward ? aim + size : aim) * UNIT - inset - near) * grow;
+        const g = horizontal ? ctx.createLinearGradient(near, 0, far, 0) : ctx.createLinearGradient(0, near, 0, far);
         g.addColorStop(0, `rgba(214, 69, 69, ${0.4 * fade})`);
         g.addColorStop(1, "rgba(214, 69, 69, 0)");
         ctx.fillStyle = g;
-        const [a, b] = [Math.min(near, far) * UNIT, Math.max(near, far) * UNIT];
+        const [a, b] = [Math.min(near, far), Math.max(near, far)];
         ctx.beginPath();
         if (horizontal) ctx.roundRect(a, cueing.y * UNIT + GAP, b - a, cueing.h * UNIT - 2 * GAP, 8);
         else ctx.roundRect(cueing.x * UNIT + GAP, a, cueing.w * UNIT - 2 * GAP, b - a, 8);
