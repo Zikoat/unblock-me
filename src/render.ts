@@ -19,6 +19,7 @@ export const COLORS = {
   dragging: "#e0823d",
   stuck: "#8d97a3",
   goal: "#d64545",
+  goalWaiting: "#c99390", // the next red block, shown while the last one's finish plays
   // The goal in play is a lighter shade of the red block's red (its target's area; the
   // score track's fill is in score-track.ts); reached goals are gold: the block, and its target's area and outline,
   // which show where it was once the block has moved away.
@@ -72,7 +73,7 @@ const throbScale = (t: number) => (t <= 0 || t >= 1 ? 1 : 1 + 0.15 * Math.sin(Ma
 export function draw(
   canvas: HTMLCanvasElement,
   scene: Scene,
-  { fullscreen, density, fps = true, sliding, sparkles = [], throb = null, cue = null, ripples = [], shake = null, pinThrob = null, used = 0, trace, finish = null, soul = null, detail = 1, now = 0, hud = null, surface = null, labels = [] }: {
+  { fullscreen, density, fps = true, sliding, sparkles = [], throb = null, cue = null, ripples = [], shake = null, pinThrob = null, used = 0, trace, finish = null, soul = null, waiting = false, detail = 1, now = 0, hud = null, surface = null, labels = [] }: {
     fullscreen: boolean;
     density: number;
     /** Whether the fps counter is showing. */
@@ -105,6 +106,8 @@ export function draw(
     surface?: { rects: Rect[]; alpha: number } | null;
     /** The island squares' levels, on their top walls (lattice units). */
     labels?: { x: number; y: number; text: string }[];
+    /** The next red block is shown, its soul not yet set off (the last one's finish plays). */
+    waiting?: boolean;
     /** The last red block's soul flying to the new one (world px), and when it set off. */
     soul?: { from: { x: number; y: number; width: number; height: number }; toId: string; born: number } | null;
     /** How much of the finish's detail to draw (less when frames come late: main.ts). */
@@ -293,7 +296,7 @@ export function draw(
         : block.wall ? COLORS.wall
         : block.id === scene.dragging?.id ? COLORS.dragging
         : block.id === scene.stuckId ? COLORS.stuck
-        : isGoal ? (soulK < SOUL.TRAVEL_MS && block.id === soul?.toId ? mix(block.moved ? COLORS.moved : COLORS.block, COLORS.goal, Math.max(0, (soulK / SOUL.TRAVEL_MS - 0.85) / 0.15)) : COLORS.goal)
+        : isGoal ? (waiting ? COLORS.goalWaiting : soulK < SOUL.TRAVEL_MS && block.id === soul?.toId ? mix(COLORS.goalWaiting, COLORS.goal, Math.max(0, (soulK / SOUL.TRAVEL_MS - 0.85) / 0.15)) : COLORS.goal)
         : wasGoal ? doneColor(block.id)
         : block.moved ? COLORS.moved
         : COLORS.block;

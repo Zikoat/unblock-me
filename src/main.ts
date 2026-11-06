@@ -243,7 +243,7 @@ let placed: Placed[] | null = null;
 let goalWaiters: (() => void)[] = [];
 /** Ask for a goal near `near` (the middle of the view by default), never with an earlier
  * red block. */
-function requestGoal(near: Point = viewCentre(scene.camera, scene.width, scene.height)): void {
+function requestGoal(near: Point = viewCentre(scene.camera, scene.width, scene.height), patient = false): void {
   if (testbed) return showGoal(TESTBED.goals[testbedNext++] ? { ...TESTBED.goals[testbedNext - 1]! } : null);
   if (shared) return;
   // The island's squares come first, in turn.
@@ -260,6 +260,12 @@ function requestGoal(near: Point = viewCentre(scene.camera, scene.width, scene.h
   if (ahead.ready && (ahead.ready.key === key || ahead.ready.key === first)) {
     if (ahead.ready.key === first) log({ e: "prefetched" });
     showGoal(ahead.ready.goal);
+    return;
+  }
+  // Still being made ahead, and a finish to play meanwhile: it shows as soon as it is made,
+  // or the finish's end asks the quick way.
+  if (patient && (ahead.asked === key || ahead.asked === first)) {
+    ahead.wanted = ahead.asked;
     return;
   }
   const request: GoalRequest = { job: ++job, seed, tries, ui: shownUi, placed, near, moved: [...scene.moved], level: 0, exclude, avoid: targetsOf(scene.done), target: rampTarget(worldGoals()) };
@@ -286,6 +292,7 @@ function measured({ of, difficulty, choices }: Measured): void {
 }
 function showGoal(goal: Goal | null): void {
   job++; // anything still on its way is stale
+  ahead.wanted = "";
   // Past the island's last square, the view cuts to the world's first red block.
   if (cutToGoal && goal) {
     const red = scene.layout.byId(goal.id), at = whereIs(scene, goal.id), s = scene.camera.scale;
@@ -302,16 +309,8 @@ function showGoal(goal: Goal | null): void {
     // A snapshot of the board, so the goal can be measured again later.
     log({ e: "goal", commit: __COMMIT__, id: goal.id, target: goal.target, start: goal.start, tries, seed, solution: goal.solution.length, moved: [...scene.moved].map(([id, p]) => [id, p.x, p.y]) });
   }
-  // The last red block's soul flies to the new one, the view following it there.
-  const red = goal && scene.layout.byId(goal.id), at = goal && whereIs(scene, goal.id);
-  // On the island the view goes to the square's middle, at the square's own zoom.
-  if (soulFrom && goal && red && at) {
-    soul = { from: soulFrom, toId: goal.id, born: -1 };
-    const k = squareOf(goal);
-    if (k === null) flyTo({ x: at.x + red.w / 2, y: at.y + red.h / 2 }, 0, SOUL.TRAVEL_MS);
-    else flyTo(squareMiddle(k), 0, SOUL.TRAVEL_MS, islandCamera(k, borderOnScreen(scene)).scale);
-  }
-  soulFrom = null;
+  // The last red block's soul flies to the new one, once its finish is over.
+  if (!finish) sendSoul();
   // The new red block throbs once; its clock starts at the first frame drawn (after the soul
   // gets there).
   if (scene.goal) throb = { id: scene.goal.id, born: -1 };
@@ -329,6 +328,8 @@ const ahead = {
   worker: new Worker("goal-worker.js"),
   job: 0,
   asked: "",
+  /** The goal being waited for (its board's key), made ahead. */
+  wanted: "",
   ready: null as { key: string; goal: Goal | null } | null,
 };
 /** The cells of these goals' targets. */
@@ -382,7 +383,9 @@ function lookAhead(): void {
 }
 ahead.worker.onmessage = (event: MessageEvent<Reply>) => {
   if ("difficulty" in event.data) return measured(event.data);
-  if (event.data.job === ahead.job) ahead.ready = { key: ahead.asked, goal: event.data.goal };
+  if (event.data.job !== ahead.job) return;
+  ahead.ready = { key: ahead.asked, goal: event.data.goal };
+  if (ahead.wanted && ahead.wanted === ahead.asked) requestGoal(finish?.next);
 };
 if (testbed) {
   // The testbed shows its first goal once its board is in place (below).
@@ -458,6 +461,20 @@ const STEP_MS = 700;
 type WorldRect = { x: number; y: number; width: number; height: number };
 let soulFrom: WorldRect | null = null;
 let soul: { from: WorldRect; toId: string; born: number } | null = null;
+/** The last red block's soul flies to the new one (shown already, muted, while the finish
+ * played), the view following it there; on the island to the square's middle, at its zoom. */
+function sendSoul(): void {
+  const goal = scene.goal, red = goal && scene.layout.byId(goal.id), at = goal && whereIs(scene, goal.id);
+  if (soulFrom && goal && red && at) {
+    soul = { from: soulFrom, toId: goal.id, born: -1 };
+    const k = squareOf(goal);
+    if (k === null) flyTo({ x: at.x + red.w / 2, y: at.y + red.h / 2 }, 0, SOUL.TRAVEL_MS);
+    else flyTo(squareMiddle(k), 0, SOUL.TRAVEL_MS, islandCamera(k, borderOnScreen(scene)).scale);
+  }
+  soulFrom = null;
+}
+/** The next red block shows while the last one's finish plays: its soul is yet to come. */
+const soulWaits = () => !!scene.goal && !!finish && !finish.island;
 function reachGoal(now: number): void {
   const goal = scene.goal;
   if (!goal || !goalSolved(scene) || animation?.move.id === goal.id) return;
@@ -496,6 +513,9 @@ function reachGoal(now: number): void {
       born: now + random() * 80, life: 650 + random() * 250, size: UNIT * (0.09 + random() * 0.08), spin: (random() - 0.5) * 6,
     };
   });
+  // The next goal shows at once (its red block muted until the soul gets there).
+  soulFrom = { x: at.x * UNIT + 3, y: at.y * UNIT + 3, width: red.w * UNIT - 6, height: red.h * UNIT - 6 };
+  requestGoal(goal.target, true);
   save();
 }
 
@@ -931,7 +951,7 @@ function advance(now: number): ReturnType<typeof sliding> {
       sfx.play("soul", now);
     }
     if (soul && now > soul.born + SOUL.TRAVEL_MS + SOUL.BURST_MS) soul = null;
-    const arrived = !soul || now >= soul.born + SOUL.TRAVEL_MS;
+    const arrived = !soulWaits() && (!soul || now >= soul.born + SOUL.TRAVEL_MS);
     if (throb && throb.born < 0 && arrived) throb.born = now;
     if (throb && throb.born >= 0 && now > throb.born + THROB_MS) throb = null;
     if (cue && cue.born < 0 && arrived) cue.born = now;
@@ -959,10 +979,12 @@ function advance(now: number): ReturnType<typeof sliding> {
       showNext(!!landed);
     } else if (finish && now > finish.born + finish.end) {
       const next = finish.next;
-      const red = scene.layout.byId(finish.id), at = whereIs(scene, finish.id);
-      soulFrom = red && at ? { x: at.x * UNIT + 3, y: at.y * UNIT + 3, width: red.w * UNIT - 6, height: red.h * UNIT - 6 } : null;
       finish = null;
-      requestGoal(next);
+      if (ahead.wanted) {
+        ahead.wanted = "";
+        requestGoal(next); // not made ahead in time: the quick way
+      }
+      sendSoul(); // (or once the next goal comes, if it is still being made)
     }
     sparkles = sparkles.filter((s) => now < s.born + s.life);
     return moving;
@@ -985,6 +1007,7 @@ function paint(now: number, moving: ReturnType<typeof sliding>, to: HTMLCanvasEl
         used: scene.goal ? movesSince(scene.goal.begun ?? 0) : 0,
         finish,
         soul,
+        waiting: soulWaits(),
         trace,
         hud: scene.locked ? islandHud() : null,
         surface: surface(now),
