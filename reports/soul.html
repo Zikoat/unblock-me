@@ -23,20 +23,21 @@
 </style></head><body><main>
 <a class="back" href="./">← All reports</a>
 <h1>Soul styles</h1>
-<p class="sub">The red block's soul flying from a reached goal to the next red block, filmed in the game (test/experiments/soul-look.mjs): a goal reached on a small board, its finish skipped with a tap, then frame by frame. Each style is in the game behind <code>?soul=&lt;name&gt;</code>; the game still uses the classic soul. The red band at the right edge points to the new goal's target, off screen.</p>
+<p class="sub">The red block's soul flying from a reached goal to the next red block, filmed in the game (test/experiments/soul-look.mjs): a goal reached on a small board, its finish skipped with a tap, then frame by frame. Each style can be forced with <code>?soul=&lt;name&gt;</code>. The red band at the right edge points to the new goal's target, off screen.</p>
 
 <div class="card">
-<h2>Round three</h2>
+<h2>Round four: in the game now</h2>
 <ul>
-<li>Comet, Flame and Glint, all three drawing in, flying and hitting the same way. The plan: the game picks one of them at random for each soul.</li>
-<li>The hit: the flash is now the block's own colour going pale, so it moves (and throbs) with the block; no drops splash out any more, just the knock and the ring.</li>
-<li>No gold sparks but Flame's embers; sparks have no edge. Comet's sparks in four kinds below.</li>
-<li>Fixed: the new red block's guide trail showed while the finish played; it now waits for the soul to land.</li>
+<li><b>In the game:</b> souls are comets until the 7th goal in the world; after that each soul is a comet, a flame or a glint at random. <code>?soul=comet|flame|glint</code> still forces one.</li>
+<li><b>Setting off:</b> the ball sets off while the block's red is still drawing in, the red stretching after it.</li>
+<li><b>Sparks drift back</b> along the path the soul came, and out to either side, instead of falling (the flame's embers also rise a little). The comet's sparks are the soft ones.</li>
+<li><b>Glint</b> turns as it flies (its thin glint turning the other way), and its little glints turn as they twinkle.</li>
+<li><b>The hit:</b> the new block no longer moves; it flashes nearly white in its own shape, and a ring goes out.</li>
 </ul>
 </div>
 <div class="card" id="comet">
 <h2>Comet <code>?soul=comet</code></h2>
-<p class="sub">A shaded red ball in a soft red glow, a long red streak, red sparks (three reds, no edge) scattering off it and falling.</p>
+<p class="sub">A shaded red ball in a soft red glow, a long red streak, soft red sparks drifting back off it.</p>
 <div class="films">
 <figure><video src="soul/comet.mp4" autoplay loop muted playsinline controls></video><figcaption>Full speed (draw in 250 ms, flight 750 ms, then the hit)</figcaption></figure>
 <figure><video src="soul/comet-slow.mp4" autoplay loop muted playsinline controls></video><figcaption>Quarter speed</figcaption></figure>
@@ -44,7 +45,7 @@
 <div class="strip"><figure><img src="soul/comet-0.jpg" alt="comet at 0 ms" loading="lazy"><figcaption>0 ms</figcaption></figure><figure><img src="soul/comet-100.jpg" alt="comet at 100 ms" loading="lazy"><figcaption>100 ms</figcaption></figure><figure><img src="soul/comet-200.jpg" alt="comet at 200 ms" loading="lazy"><figcaption>200 ms</figcaption></figure><figure><img src="soul/comet-300.jpg" alt="comet at 300 ms" loading="lazy"><figcaption>300 ms</figcaption></figure><figure><img src="soul/comet-450.jpg" alt="comet at 450 ms" loading="lazy"><figcaption>450 ms</figcaption></figure><figure><img src="soul/comet-600.jpg" alt="comet at 600 ms" loading="lazy"><figcaption>600 ms</figcaption></figure><figure><img src="soul/comet-750.jpg" alt="comet at 750 ms" loading="lazy"><figcaption>750 ms</figcaption></figure><figure><img src="soul/comet-900.jpg" alt="comet at 900 ms" loading="lazy"><figcaption>900 ms</figcaption></figure><figure><img src="soul/comet-1000.jpg" alt="comet at 1000 ms" loading="lazy"><figcaption>1000 ms</figcaption></figure><figure><img src="soul/comet-1100.jpg" alt="comet at 1100 ms" loading="lazy"><figcaption>1100 ms</figcaption></figure><figure><img src="soul/comet-1250.jpg" alt="comet at 1250 ms" loading="lazy"><figcaption>1250 ms</figcaption></figure></div>
 </div><div class="card" id="flame">
 <h2>Flame <code>?soul=flame</code></h2>
-<p class="sub">A fireball (yellow middle, orange, red edge) whose glow flickers; three tongues of fire behind it, red round orange round yellow, each licking sideways on its own, wider towards the tail; embers in orange, yellow and red rising off it. Its ring is orange.</p>
+<p class="sub">A fireball (yellow middle, orange, red edge) whose glow flickers; three tongues of fire behind it, red round orange round yellow, each licking sideways on its own, wider towards the tail; embers in orange, yellow and red drifting back and up off it. Its ring is orange.</p>
 <div class="films">
 <figure><video src="soul/flame.mp4" autoplay loop muted playsinline controls></video><figcaption>Full speed</figcaption></figure>
 <figure><video src="soul/flame-slow.mp4" autoplay loop muted playsinline controls></video><figcaption>Quarter speed</figcaption></figure>
@@ -52,18 +53,14 @@
 <div class="strip"><figure><img src="soul/flame-0.jpg" alt="flame at 0 ms" loading="lazy"><figcaption>0 ms</figcaption></figure><figure><img src="soul/flame-100.jpg" alt="flame at 100 ms" loading="lazy"><figcaption>100 ms</figcaption></figure><figure><img src="soul/flame-200.jpg" alt="flame at 200 ms" loading="lazy"><figcaption>200 ms</figcaption></figure><figure><img src="soul/flame-300.jpg" alt="flame at 300 ms" loading="lazy"><figcaption>300 ms</figcaption></figure><figure><img src="soul/flame-450.jpg" alt="flame at 450 ms" loading="lazy"><figcaption>450 ms</figcaption></figure><figure><img src="soul/flame-600.jpg" alt="flame at 600 ms" loading="lazy"><figcaption>600 ms</figcaption></figure><figure><img src="soul/flame-750.jpg" alt="flame at 750 ms" loading="lazy"><figcaption>750 ms</figcaption></figure><figure><img src="soul/flame-900.jpg" alt="flame at 900 ms" loading="lazy"><figcaption>900 ms</figcaption></figure><figure><img src="soul/flame-1000.jpg" alt="flame at 1000 ms" loading="lazy"><figcaption>1000 ms</figcaption></figure><figure><img src="soul/flame-1100.jpg" alt="flame at 1100 ms" loading="lazy"><figcaption>1100 ms</figcaption></figure><figure><img src="soul/flame-1250.jpg" alt="flame at 1250 ms" loading="lazy"><figcaption>1250 ms</figcaption></figure></div>
 </div><div class="card" id="glint">
 <h2>Glint <code>?soul=glint</code></h2>
-<p class="sub">A red four-pointed glint with a white one inside it and a white core, a thin pale glint turning across it, and its arms flashing out twice on the way; small red-and-white glints twinkle along the streak behind it.</p>
+<p class="sub">A turning red four-pointed glint with a white one inside it and a white core, a thin pale glint turning the other way across it, its arms flashing out twice on the way; small red-and-white glints twinkle and turn along the streak behind it.</p>
 <div class="films">
 <figure><video src="soul/glint.mp4" autoplay loop muted playsinline controls></video><figcaption>Full speed</figcaption></figure>
 <figure><video src="soul/glint-slow.mp4" autoplay loop muted playsinline controls></video><figcaption>Quarter speed</figcaption></figure>
 </div>
 <div class="strip"><figure><img src="soul/glint-0.jpg" alt="glint at 0 ms" loading="lazy"><figcaption>0 ms</figcaption></figure><figure><img src="soul/glint-100.jpg" alt="glint at 100 ms" loading="lazy"><figcaption>100 ms</figcaption></figure><figure><img src="soul/glint-200.jpg" alt="glint at 200 ms" loading="lazy"><figcaption>200 ms</figcaption></figure><figure><img src="soul/glint-300.jpg" alt="glint at 300 ms" loading="lazy"><figcaption>300 ms</figcaption></figure><figure><img src="soul/glint-450.jpg" alt="glint at 450 ms" loading="lazy"><figcaption>450 ms</figcaption></figure><figure><img src="soul/glint-600.jpg" alt="glint at 600 ms" loading="lazy"><figcaption>600 ms</figcaption></figure><figure><img src="soul/glint-750.jpg" alt="glint at 750 ms" loading="lazy"><figcaption>750 ms</figcaption></figure><figure><img src="soul/glint-900.jpg" alt="glint at 900 ms" loading="lazy"><figcaption>900 ms</figcaption></figure><figure><img src="soul/glint-1000.jpg" alt="glint at 1000 ms" loading="lazy"><figcaption>1000 ms</figcaption></figure><figure><img src="soul/glint-1100.jpg" alt="glint at 1100 ms" loading="lazy"><figcaption>1100 ms</figcaption></figure><figure><img src="soul/glint-1250.jpg" alt="glint at 1250 ms" loading="lazy"><figcaption>1250 ms</figcaption></figure></div>
 </div>
-<div class="card">
-<h2>Comet's sparks</h2>
-<p class="sub">The same moment of each (800 ms after setting off).</p>
-<div class="grid"><figure><img src="soul/comet-flight.jpg" alt="Dots sparks" loading="lazy"><figcaption><b>Dots</b> <code>?soul=comet</code><br>Small solid dots in three reds, no edge.</figcaption></figure><figure><img src="soul/comet-soft-flight.jpg" alt="Soft sparks" loading="lazy"><figcaption><b>Soft</b> <code>?soul=comet-soft</code><br>Soft blurred red blobs, bigger, fading.</figcaption></figure><figure><img src="soul/comet-dust-flight.jpg" alt="Dust sparks" loading="lazy"><figcaption><b>Dust</b> <code>?soul=comet-dust</code><br>Many fine dark-red specks.</figcaption></figure><figure><img src="soul/comet-plain-flight.jpg" alt="None sparks" loading="lazy"><figcaption><b>None</b> <code>?soul=comet-plain</code><br>Just the streak.</figcaption></figure></div>
-</div>
+
 
 <details><summary>Classic, as it is now (for comparison)</summary>
 <div class="card"><div class="films">
