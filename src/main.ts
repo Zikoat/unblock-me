@@ -743,14 +743,17 @@ function surface(now: number): { rects: Rect[]; alpha: number } | null {
 /** Each island square's level, on its top wall. */
 const LABELS = ISLAND_LEVELS.map((_, k) => ({ x: squareMiddle(k).x, y: squareAt(k).y - 0.5, text: `Level ${k + 1}` }));
 
-/** A tap while a finish plays skips to its end (its stars shown, its sounds left out):
- * whether there was one to skip. */
-function skipFinish(now: number): boolean {
-  if (!finish || finish.quiet || finish.heard === Infinity || now - finish.born >= finish.end) return false;
-  finish.born = now - finish.end;
-  finish.heard = Infinity;
+/** A tap while a finish plays skips to its end (its stars shown, its sounds left out); while
+ * the soul flies, it (and the view following it) gets there. */
+function skipAnimation(now: number): void {
+  if (finish && !finish.quiet && finish.heard !== Infinity && now - finish.born < finish.end) {
+    finish.born = now - finish.end;
+    finish.heard = Infinity;
+  } else if (soul && soul.born >= 0 && now < soul.born + SOUL.TRAVEL_MS) {
+    soul.born = now - SOUL.TRAVEL_MS;
+    if (flight) flight.start = now - flight.duration;
+  }
   redraw();
-  return true;
 }
 
 // The island's next button: once a square's finish has shown its stars, it cuts straight to
@@ -1178,12 +1181,12 @@ let pinThrob: { pin: "red" | "ui"; born: number } | null = null;
 // page goes away.
 for (const type of ["touchstart", "touchend", "pointerup", "click", "keydown"]) addEventListener(type, () => sfx.unlock(type), { capture: true, passive: true });
 addEventListener("pagehide", () => sfx.release());
-/** Presses begun while a finish played (where): one that ends as a tap skips it (a drag
- * doesn't), see skipFinish. */
+/** Presses begun while a finish played or the soul flew (where): one that ends as a tap
+ * skips it (a drag doesn't), see skipAnimation. */
 const pressedInFinish = new Map<number, { x: number; y: number }>();
 canvas.addEventListener("pointerdown", (e) => {
   if (inspector?.open) return; // the board is a replay while it is open
-  if (finish) pressedInFinish.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (finish || soul) pressedInFinish.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (finish?.island) return; // under an island square's finish card
   if (e.pointerType === "mouse" && e.button !== 0) return;
   canvas.setPointerCapture(e.pointerId);
@@ -1221,7 +1224,7 @@ canvas.addEventListener("pointerup", (e) => {
   }
   const pressed = pressedInFinish.get(e.pointerId);
   pressedInFinish.delete(e.pointerId);
-  if (pressed && Math.hypot(e.clientX - pressed.x, e.clientY - pressed.y) < TAP_SLOP) skipFinish(performance.now());
+  if (pressed && Math.hypot(e.clientX - pressed.x, e.clientY - pressed.y) < TAP_SLOP) skipAnimation(performance.now());
   const tapped = scene.circle;
   gestures.up(e.pointerId, point(e));
   if (scene.circle && scene.circle !== tapped) {
