@@ -26,7 +26,7 @@ export const COLORS = {
   target: "rgba(232, 115, 115, 0.18)",
   targetLine: "#e06666",
   done: "#d49a2a",
-  doneTarget: "rgba(240, 176, 40, 0.2)",
+  doneTarget: "rgb(242, 229, 198)", // gold at 0.2 over the background, opaque: overlapping areas cover outlines inside them
   doneLine: "#dcaa45",
   star: "#f2b632",
   ui: "#1d1d1f",
@@ -184,40 +184,44 @@ export function draw(
       ctx.fill();
     }
   });
-  // Reached targets side by side overlap by their margins: each is filled only where no
-  // earlier one was, so touching ones read as one shape. The current target is drawn whole,
-  // over them.
+  // Reached targets that overlap read as one shape: every outline first, then every area
+  // over them, an area a pixel in from its outline's outer edge, so only the union's outline
+  // shows (each at its own fade: one fading under its block fades its part of the shape).
+  // The current target is drawn whole, over them.
   // (An island square's bay target fits its bay, so its corners are as round as the walls';
   // a target inside a square is round as the world's.)
-  const area = (c: Cells, path: Path2D, radius = 12) => path.roundRect(c.x * UNIT - TARGET_MARGIN, c.y * UNIT - TARGET_MARGIN, c.w * UNIT + 2 * TARGET_MARGIN, c.h * UNIT + 2 * TARGET_MARGIN, radius);
-  const outside = (others: typeof targets) => {
-    const clip = new Path2D();
-    clip.rect(view.x - UNIT, view.y - UNIT, view.width + 2 * UNIT, view.height + 2 * UNIT);
-    for (const o of others) area(o.cells, clip);
-    ctx.clip(clip, "evenodd");
-  };
+  const area = (c: Cells, path: Path2D, radius = 12, inset = 0) => path.roundRect(c.x * UNIT - TARGET_MARGIN + inset, c.y * UNIT - TARGET_MARGIN + inset, c.w * UNIT + 2 * (TARGET_MARGIN - inset), c.h * UNIT + 2 * (TARGET_MARGIN - inset), radius - inset);
   const drawTarget = (i: number) => {
     const { goal: g, cells } = targets[i]!;
     const own = new Path2D();
-    area(cells, own, scene.locked && g === goal && g.id === redId(squareOf(g) ?? -1) ? WALL_RADIUS : 12);
-    // The current target: a pale coral area with an outline. A reached one: a pale gold area
-    // with an outline, faded out while its block stands on it (no ring round the block).
-    const shown = g === goal ? 1 : areaShown(g, now);
-    if (shown <= 0) return;
-    // Only other reached targets that show (not faded under their blocks) join this one.
-    const reached = (j: number) => targets[j]!.goal !== goal && areaShown(targets[j]!.goal, now) > 0;
-    ctx.save();
-    ctx.globalAlpha = shown;
-    if (g !== goal) outside(targets.slice(0, i).filter((_, j) => reached(j)));
-    ctx.fillStyle = g === goal ? COLORS.target : COLORS.doneTarget;
+    area(cells, own, scene.locked && g.id === redId(squareOf(g) ?? -1) ? WALL_RADIUS : 12);
+    // The current target: a pale coral area with an outline.
+    ctx.fillStyle = COLORS.target;
     ctx.fill(own);
-    ctx.restore();
-    ctx.save();
-    ctx.globalAlpha = shown;
-    if (g !== goal) outside(targets.filter((_, j) => j !== i && reached(j)));
-    ctx.strokeStyle = g === goal ? COLORS.targetLine : COLORS.doneLine;
+    ctx.strokeStyle = COLORS.targetLine;
     ctx.lineWidth = 2;
     ctx.stroke(own);
+  };
+  // A reached one: a pale gold area with an outline, faded out while its block stands on it
+  // (no ring round the block).
+  const drawReached = () => {
+    const shown = targets.filter((t) => t.goal !== goal).map((t) => ({ cells: t.cells, a: areaShown(t.goal, now) })).filter((t) => t.a > 0);
+    ctx.save();
+    ctx.strokeStyle = COLORS.doneLine;
+    ctx.lineWidth = 2;
+    for (const t of shown) {
+      const p = new Path2D();
+      area(t.cells, p);
+      ctx.globalAlpha = t.a;
+      ctx.stroke(p);
+    }
+    ctx.fillStyle = COLORS.doneTarget;
+    for (const t of shown) {
+      const p = new Path2D();
+      area(t.cells, p, 12, 1);
+      ctx.globalAlpha = t.a;
+      ctx.fill(p);
+    }
     ctx.restore();
   };
   /** How much of a reached target's area shows: none with its block on it, all without. It
@@ -247,7 +251,7 @@ export function draw(
   };
   // Reached targets go under the blocks (their red blocks sit on them); the current one goes
   // over them, so it shows even where blocks stand on it.
-  targets.forEach((t, i) => t.goal !== goal && drawTarget(i));
+  drawReached();
   if (fx) timed(ctx, "under", () => under(ctx, fx));
 
   // The sliding block is drawn until its slide ends, even when it ends outside the view and
