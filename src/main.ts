@@ -94,23 +94,46 @@ function placeView(): void {
 // in the middle; `delay` ms later, so the arrow's throb shows first.
 // `scale`: the zoom to end at (the same by default). `gentle`: eased in as well as out, for a
 // view that was still (to the next goal, after a finish), so it doesn't lurch off.
-let flight: { from: { scale: number; offsetX: number; offsetY: number }; to: Point; start: number | null; delay: number; duration: number; scale?: number; gentle?: boolean } | null = null;
+// A hop (an edge arrow's): it zooms out by `hop` at the middle, overshoots a little and
+// settles, and the block it went to (`arrive`) throbs as it gets there.
+let flight: { from: { scale: number; offsetX: number; offsetY: number }; to: Point; start: number | null; delay: number; duration: number; scale?: number; gentle?: boolean; hop?: number; arrive?: string } | null = null;
 function flyTo(to: Point, delay = 0, duration = 350, scale?: number, gentle = false): void {
   flight = { from: { ...scene.camera }, to, start: null, delay, duration, scale, gentle };
 }
 const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+const overshoot = (t: number) => 1 + 2.2 * Math.pow(t - 1, 3) + 1.2 * Math.pow(t - 1, 2);
+/** An edge arrow's hop to `to`: quicker the nearer, zoomed out further the farther. */
+function hopTo(to: Point, arrive: string): void {
+  const c = scene.camera, screens = Math.hypot(scene.width / 2 - c.offsetX - to.x * UNIT * c.scale, scene.height / 2 - c.offsetY - to.y * UNIT * c.scale) / Math.max(scene.width, scene.height);
+  const far = Math.min(1, Math.log2(1 + screens) / 2);
+  flyTo(to, 0, 280 + 220 * far);
+  flight!.hop = 0.06 + 0.16 * far;
+  flight!.arrive = arrive;
+}
 function flying(now: number): void {
   if (!flight) return;
   flight.start ??= now + flight.delay;
   const t = Math.max(0, Math.min(1, (now - flight.start) / flight.duration));
   const { scale: from } = flight.from, scale = flight.scale ?? from;
   const to = { offsetX: scene.width / 2 - flight.to.x * UNIT * scale, offsetY: scene.height / 2 - flight.to.y * UNIT * scale };
-  const e = flight.gentle ? easeInOut(t) : ease(t);
-  scene.camera = {
-    scale: from + (scale - from) * e,
-    offsetX: flight.from.offsetX + (to.offsetX - flight.from.offsetX) * e,
-    offsetY: flight.from.offsetY + (to.offsetY - flight.from.offsetY) * e,
-  };
+  if (flight.hop) {
+    // The view's middle (lattice units) goes the way, the zoom dipping under it.
+    const e = overshoot(t), s = scale * (1 - flight.hop * Math.sin(Math.PI * Math.min(1, t * 1.15)));
+    const mx = (scene.width / 2 - flight.from.offsetX) / (UNIT * from), my = (scene.height / 2 - flight.from.offsetY) / (UNIT * from);
+    const x = mx + (flight.to.x - mx) * e, y = my + (flight.to.y - my) * e;
+    scene.camera = { scale: s, offsetX: scene.width / 2 - x * UNIT * s, offsetY: scene.height / 2 - y * UNIT * s };
+  } else {
+    const e = flight.gentle ? easeInOut(t) : ease(t);
+    scene.camera = {
+      scale: from + (scale - from) * e,
+      offsetX: flight.from.offsetX + (to.offsetX - flight.from.offsetX) * e,
+      offsetY: flight.from.offsetY + (to.offsetY - flight.from.offsetY) * e,
+    };
+  }
+  if (t >= 0.8 && flight.arrive) {
+    throb = { id: flight.arrive, born: now };
+    flight.arrive = undefined;
+  }
   if (t >= 1) flight = null;
 }
 
@@ -704,6 +727,8 @@ Object.assign(window, {
     redraw: () => redraw(),
     /** The soul in flight, if one is (when it set off: -1 until its first frame). */
     soul: () => soul,
+    /** The edge arrows, where drawn (screen px), or null. */
+    pins: () => ({ red: redArrow(scene), ui: uiArrow(scene) }),
     /** The adaptive detail step (0 full; see pace). */
     detailStep: () => detailStep,
     undo: () => takeBack(),
@@ -1027,6 +1052,7 @@ function paint(now: number, moving: ReturnType<typeof sliding>, to: HTMLCanvasEl
         ripples,
         shake,
         pinThrob,
+        pinHeld,
         used: scene.goal ? movesSince(scene.goal.begun ?? 0) : 0,
         finish,
         soul,
@@ -1221,8 +1247,9 @@ function markerAt(e: PointerEvent): (Point & { pin: "red" | "ui" }) | null {
   return null;
 }
 const hitsArrow = (e: PointerEvent) => markerAt(e) !== null;
-// A tapped arrow throbs, then the view glides, so it is clear the arrow did it.
+// A pressed arrow sinks; let go, it pops and the view hops there at once.
 let pinThrob: { pin: "red" | "ui"; born: number } | null = null;
+let pinHeld: "red" | "ui" | null = null;
 
 // Sound can start only from a touch (some iPhones: only one that ends), a click or a key, and
 // starts again after the page was in the background: every one tries. It is let go when the
@@ -1240,6 +1267,8 @@ canvas.addEventListener("pointerdown", (e) => {
   canvas.setPointerCapture(e.pointerId);
   if (onArrow === null && hitsArrow(e)) {
     onArrow = e.pointerId;
+    pinHeld = markerAt(e)?.pin ?? null;
+    redraw();
     return;
   }
   tip.style.display = "none";
@@ -1262,10 +1291,11 @@ canvas.addEventListener("pointermove", (e) => {
 canvas.addEventListener("pointerup", (e) => {
   if (e.pointerId === onArrow) {
     onArrow = null;
+    pinHeld = null;
     const to = markerAt(e);
     if (to) {
       pinThrob = { pin: to.pin, born: -1 };
-      flyTo(to, 160);
+      hopTo(to, to.pin === "red" ? scene.goal!.id : "fullscreen");
     }
     redraw();
     return;
@@ -1283,7 +1313,7 @@ canvas.addEventListener("pointerup", (e) => {
 });
 canvas.addEventListener("pointercancel", (e) => {
   pressedInFinish.delete(e.pointerId);
-  if (e.pointerId === onArrow) onArrow = null;
+  if (e.pointerId === onArrow) onArrow = pinHeld = null;
   gestures.cancel(e.pointerId);
   redraw();
 });
