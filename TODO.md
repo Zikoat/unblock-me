@@ -7,7 +7,7 @@
 - Density × walls report graph; waits on walls in generated boards.
 - Faster `Window.lower` (half the measure's time: array scans, allocations per call); waits on tournament levels 2-3 being too slow in play.
 - Difficulty's branching counts slides, not blocks (choices a move now counts chain blocks, but the score doesn't); waits on playtesting whether the score tracks felt hardness.
-- A* cap per density (95% finds the fewest moves): a background agent is tuning it; when it reports, review, test, push and update the report's "Being tuned" line.
+- A* cap per density (a larger cap finds a shorter solution in under 5% of goals, the rest medal chances): the 30 Oct tuning agent stopped before its full run (scripts in test/experiments/cap-*.ts, uncommitted); matters for later, harder world goals (the ramp keeps early ones short); waits on late-game medals feeling wrong.
 - Log each goal's proof and measured difficulty, and page hides; widen the measure window (goal #37: 8 in the window, player did 6); waits on you picking it.
 - Undo a reached goal: rewind to where its moves started counting and replay it for a better score; waits on you picking it.
 - Undo during a goal (or undoing the goal) loses the medal (shown faded) and is stored with the goal; waits on you picking it.
