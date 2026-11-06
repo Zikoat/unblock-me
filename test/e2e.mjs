@@ -723,7 +723,7 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
   await tap(back);
   await pass(page, 90);
   const pinMid = await page.evaluate(() => ({ ...unblock.scene.camera }));
-  check(pinMid.offsetX !== pinBefore.offsetX && pinMid.scale < pinBefore.scale, `a tapped arrow's view sets off at once, zooming out on the way (scale ${pinMid.scale.toFixed(2)})`);
+  check(pinMid.offsetX !== pinBefore.offsetX, "a tapped arrow's view sets off at once");
   await pass(page, 700);
   const atRed = await page.evaluate(() => unblock.scene.camera);
   check(Math.abs(atRed.offsetX - (200 + 6 * 60)) < 1, `tapping the red arrow brings the red block to the middle (${atRed.offsetX.toFixed(0)})`);

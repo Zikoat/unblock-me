@@ -94,18 +94,19 @@ function placeView(): void {
 // in the middle; `delay` ms later, so the arrow's throb shows first.
 // `scale`: the zoom to end at (the same by default). `gentle`: eased in as well as out, for a
 // view that was still (to the next goal, after a finish), so it doesn't lurch off.
-// A hop (an edge arrow's): eased softly in and out, it zooms out by `hop` at the middle and settles, and the block it went to (`arrive`) throbs as it gets there.
-let flight: { from: { scale: number; offsetX: number; offsetY: number }; to: Point; start: number | null; delay: number; duration: number; scale?: number; gentle?: boolean; hop?: number; arrive?: string } | null = null;
+// `soft`: eased softly in and out (an edge arrow's); `arrive`: the block it goes to, which
+// throbs as it gets there.
+let flight: { from: { scale: number; offsetX: number; offsetY: number }; to: Point; start: number | null; delay: number; duration: number; scale?: number; gentle?: boolean; soft?: boolean; arrive?: string } | null = null;
 function flyTo(to: Point, delay = 0, duration = 350, scale?: number, gentle = false): void {
   flight = { from: { ...scene.camera }, to, start: null, delay, duration, scale, gentle };
 }
 const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
-/** An edge arrow's hop to `to`: quicker the nearer, zoomed out further the farther. */
+/** An edge arrow's glide to `to`: quicker the nearer. */
 function hopTo(to: Point, arrive: string): void {
   const c = scene.camera, screens = Math.hypot(scene.width / 2 - c.offsetX - to.x * UNIT * c.scale, scene.height / 2 - c.offsetY - to.y * UNIT * c.scale) / Math.max(scene.width, scene.height);
   const far = Math.min(1, Math.log2(1 + screens) / 2);
   flyTo(to, 0, 140 + 420 * far);
-  flight!.hop = 0.03 + 0.07 * far;
+  flight!.soft = true;
   flight!.arrive = arrive;
 }
 function flying(now: number): void {
@@ -114,20 +115,12 @@ function flying(now: number): void {
   const t = Math.max(0, Math.min(1, (now - flight.start) / flight.duration));
   const { scale: from } = flight.from, scale = flight.scale ?? from;
   const to = { offsetX: scene.width / 2 - flight.to.x * UNIT * scale, offsetY: scene.height / 2 - flight.to.y * UNIT * scale };
-  if (flight.hop) {
-    // The view's middle (lattice units) goes the way, the zoom dipping under it.
-    const e = (1 - Math.cos(Math.PI * t)) / 2, s = scale * (1 - flight.hop * Math.sin(Math.PI * Math.min(1, t * 1.15)));
-    const mx = (scene.width / 2 - flight.from.offsetX) / (UNIT * from), my = (scene.height / 2 - flight.from.offsetY) / (UNIT * from);
-    const x = mx + (flight.to.x - mx) * e, y = my + (flight.to.y - my) * e;
-    scene.camera = { scale: s, offsetX: scene.width / 2 - x * UNIT * s, offsetY: scene.height / 2 - y * UNIT * s };
-  } else {
-    const e = flight.gentle ? easeInOut(t) : ease(t);
-    scene.camera = {
-      scale: from + (scale - from) * e,
-      offsetX: flight.from.offsetX + (to.offsetX - flight.from.offsetX) * e,
-      offsetY: flight.from.offsetY + (to.offsetY - flight.from.offsetY) * e,
-    };
-  }
+  const e = flight.soft ? (1 - Math.cos(Math.PI * t)) / 2 : flight.gentle ? easeInOut(t) : ease(t);
+  scene.camera = {
+    scale: from + (scale - from) * e,
+    offsetX: flight.from.offsetX + (to.offsetX - flight.from.offsetX) * e,
+    offsetY: flight.from.offsetY + (to.offsetY - flight.from.offsetY) * e,
+  };
   if (t >= 0.8 && flight.arrive) {
     throb = { id: flight.arrive, born: now };
     flight.arrive = undefined;
