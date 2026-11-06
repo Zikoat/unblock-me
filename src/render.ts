@@ -92,7 +92,7 @@ export function draw(
     /** Collects the finishing goal's icons as drawn (the animation inspector). */
     trace?: TraceEntry[];
     /** A tapped edge arrow, throbbing since `born`. */
-    pinThrob?: { pin: "red" | "ui"; born: number } | null;
+    pinThrob?: { pin: "red" | "ui"; born: number; at?: { x: number; y: number } | null } | null;
     /** An edge arrow held down. */
     pinHeld?: "red" | "ui" | null;
     /** Moves made on the current goal so far, for its score track. */
@@ -493,6 +493,21 @@ export function draw(
   if (toUi) drawPin(ctx, toUi, COLORS.ui, 16 * pinBeat("ui"), dpr, true);
   const toRed = redArrow(scene);
   if (toRed) drawPin(ctx, toRed, COLORS.goal, 13 * pinBeat("red"), dpr);
+  // A tapped arrow's ripple, where it was tapped (it stays as the view goes).
+  if (pinThrob?.at && pinThrob.born >= 0) {
+    const k = (now - pinThrob.born) / THROB_MS;
+    if (k < 1) {
+      const out = 1 - Math.pow(1 - k, 3);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.strokeStyle = pinThrob.pin === "red" ? COLORS.goal : COLORS.ui;
+      ctx.globalAlpha = 0.6 * (1 - k);
+      ctx.lineWidth = 3 * (1 - k) + 1;
+      ctx.beginPath();
+      ctx.arc(pinThrob.at.x, pinThrob.at.y, 16 + 26 * out, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+  }
   // A slide entirely out of view (an undo, say): a small green arrow points to it while it runs.
   if (sliding) {
     const block = scene.layout.byId(sliding.id);

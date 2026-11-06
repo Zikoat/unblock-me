@@ -94,20 +94,18 @@ function placeView(): void {
 // in the middle; `delay` ms later, so the arrow's throb shows first.
 // `scale`: the zoom to end at (the same by default). `gentle`: eased in as well as out, for a
 // view that was still (to the next goal, after a finish), so it doesn't lurch off.
-// A hop (an edge arrow's): it zooms out by `hop` at the middle, overshoots a little and
-// settles, and the block it went to (`arrive`) throbs as it gets there.
+// A hop (an edge arrow's): eased softly in and out, it zooms out by `hop` at the middle and settles, and the block it went to (`arrive`) throbs as it gets there.
 let flight: { from: { scale: number; offsetX: number; offsetY: number }; to: Point; start: number | null; delay: number; duration: number; scale?: number; gentle?: boolean; hop?: number; arrive?: string } | null = null;
 function flyTo(to: Point, delay = 0, duration = 350, scale?: number, gentle = false): void {
   flight = { from: { ...scene.camera }, to, start: null, delay, duration, scale, gentle };
 }
 const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
-const overshoot = (t: number) => 1 + 2.2 * Math.pow(t - 1, 3) + 1.2 * Math.pow(t - 1, 2);
 /** An edge arrow's hop to `to`: quicker the nearer, zoomed out further the farther. */
 function hopTo(to: Point, arrive: string): void {
   const c = scene.camera, screens = Math.hypot(scene.width / 2 - c.offsetX - to.x * UNIT * c.scale, scene.height / 2 - c.offsetY - to.y * UNIT * c.scale) / Math.max(scene.width, scene.height);
   const far = Math.min(1, Math.log2(1 + screens) / 2);
-  flyTo(to, 0, 280 + 220 * far);
-  flight!.hop = 0.06 + 0.16 * far;
+  flyTo(to, 0, 320 + 240 * far);
+  flight!.hop = 0.03 + 0.07 * far;
   flight!.arrive = arrive;
 }
 function flying(now: number): void {
@@ -118,7 +116,7 @@ function flying(now: number): void {
   const to = { offsetX: scene.width / 2 - flight.to.x * UNIT * scale, offsetY: scene.height / 2 - flight.to.y * UNIT * scale };
   if (flight.hop) {
     // The view's middle (lattice units) goes the way, the zoom dipping under it.
-    const e = overshoot(t), s = scale * (1 - flight.hop * Math.sin(Math.PI * Math.min(1, t * 1.15)));
+    const e = (1 - Math.cos(Math.PI * t)) / 2, s = scale * (1 - flight.hop * Math.sin(Math.PI * Math.min(1, t * 1.15)));
     const mx = (scene.width / 2 - flight.from.offsetX) / (UNIT * from), my = (scene.height / 2 - flight.from.offsetY) / (UNIT * from);
     const x = mx + (flight.to.x - mx) * e, y = my + (flight.to.y - my) * e;
     scene.camera = { scale: s, offsetX: scene.width / 2 - x * UNIT * s, offsetY: scene.height / 2 - y * UNIT * s };
@@ -1248,7 +1246,7 @@ function markerAt(e: PointerEvent): (Point & { pin: "red" | "ui" }) | null {
 }
 const hitsArrow = (e: PointerEvent) => markerAt(e) !== null;
 // A pressed arrow sinks; let go, it pops and the view hops there at once.
-let pinThrob: { pin: "red" | "ui"; born: number } | null = null;
+let pinThrob: { pin: "red" | "ui"; born: number; at?: { x: number; y: number } | null } | null = null;
 let pinHeld: "red" | "ui" | null = null;
 
 // Sound can start only from a touch (some iPhones: only one that ends), a click or a key, and
@@ -1294,7 +1292,8 @@ canvas.addEventListener("pointerup", (e) => {
     pinHeld = null;
     const to = markerAt(e);
     if (to) {
-      pinThrob = { pin: to.pin, born: -1 };
+      const at = (to.pin === "red" ? redArrow : uiArrow)(scene);
+      pinThrob = { pin: to.pin, born: -1, at: at && { x: at.x, y: at.y } };
       hopTo(to, to.pin === "red" ? scene.goal!.id : "fullscreen");
     }
     redraw();
