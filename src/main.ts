@@ -92,18 +92,20 @@ function placeView(): void {
 
 // Tapping an edge arrow glides the view there, at the same zoom, putting `to` (lattice units)
 // in the middle; `delay` ms later, so the arrow's throb shows first.
-// `scale`: the zoom to end at (the same by default).
-let flight: { from: { scale: number; offsetX: number; offsetY: number }; to: Point; start: number | null; delay: number; duration: number; scale?: number } | null = null;
-function flyTo(to: Point, delay = 0, duration = 350, scale?: number): void {
-  flight = { from: { ...scene.camera }, to, start: null, delay, duration, scale };
+// `scale`: the zoom to end at (the same by default). `gentle`: eased in as well as out, for a
+// view that was still (to the next goal, after a finish), so it doesn't lurch off.
+let flight: { from: { scale: number; offsetX: number; offsetY: number }; to: Point; start: number | null; delay: number; duration: number; scale?: number; gentle?: boolean } | null = null;
+function flyTo(to: Point, delay = 0, duration = 350, scale?: number, gentle = false): void {
+  flight = { from: { ...scene.camera }, to, start: null, delay, duration, scale, gentle };
 }
+const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 function flying(now: number): void {
   if (!flight) return;
   flight.start ??= now + flight.delay;
   const t = Math.max(0, Math.min(1, (now - flight.start) / flight.duration));
   const { scale: from } = flight.from, scale = flight.scale ?? from;
   const to = { offsetX: scene.width / 2 - flight.to.x * UNIT * scale, offsetY: scene.height / 2 - flight.to.y * UNIT * scale };
-  const e = ease(t);
+  const e = flight.gentle ? easeInOut(t) : ease(t);
   scene.camera = {
     scale: from + (scale - from) * e,
     offsetX: flight.from.offsetX + (to.offsetX - flight.from.offsetX) * e,
@@ -478,8 +480,8 @@ function sendSoul(): void {
     const style = forcedSoul ?? (worldGoals() >= SOUL_UNLOCK ? SOUL_STYLES[Math.floor(Math.random() * SOUL_STYLES.length)]! : "comet");
     soul = { from: soulFrom, toId: goal.id, born: -1, style };
     const k = squareOf(goal);
-    if (k === null) flyTo({ x: at.x + red.w / 2, y: at.y + red.h / 2 }, 0, SOUL.TRAVEL_MS);
-    else flyTo(squareMiddle(k), 0, SOUL.TRAVEL_MS, islandCamera(k, borderOnScreen(scene)).scale);
+    if (k === null) flyTo({ x: at.x + red.w / 2, y: at.y + red.h / 2 }, 0, SOUL.TRAVEL_MS, undefined, true);
+    else flyTo(squareMiddle(k), 0, SOUL.TRAVEL_MS, islandCamera(k, borderOnScreen(scene)).scale, true);
   }
   soulFrom = null;
 }
