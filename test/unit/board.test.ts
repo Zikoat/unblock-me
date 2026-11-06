@@ -251,17 +251,19 @@ describe("quick push: tapping a block", () => {
     expect(at("d").x).toBe(1);
   });
 
-  test("pushed onto its target, the next tap carries it on the way it was going", () => {
+  test("a reached goal's block goes round by taps: on, off, past its target to the far end, back on", () => {
     const { scene, g, at } = row(H(6, 0, "d"), V(2, 1, "v"));
     scene.done = [{ id: "d", target: { x: 3, y: 0 }, solution: [] }];
     tap(g, cell(7, 0.5)); // onto its target from the right
     expect(at("d").x).toBe(3);
-    tap(g, cell(4, 0.5)); // just pushed there: on to the left (blocks go right first otherwise)
+    tap(g, cell(2.5, 2)); // another block moves in between: it doesn't matter
+    tap(g, cell(4, 0.5)); // pushed there: on to the left (blocks go right first otherwise)
     expect(at("d").x).toBe(0);
-    tap(g, cell(1, 0.5)); // back onto it from the left
-    tap(g, cell(2.5, 2)); // another block moves in between
-    tap(g, cell(4, 0.5)); // so the usual way again: right
+    tap(g, cell(2.5, 2));
+    tap(g, cell(1, 0.5)); // just moved off it: back over it, to the far end
     expect(at("d").x).toBe(6);
+    tap(g, cell(7, 0.5)); // then back onto it
+    expect(at("d").x).toBe(3);
   });
 
   test("each move reports how it was made: tap or drag, press time, time since the last pan; a pan soon after a tap's push is reported", () => {

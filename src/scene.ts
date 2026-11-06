@@ -115,13 +115,18 @@ export function quickPush(scene: Scene, block: Block): Point | null {
   // it. Others go up or right first (up is towards lower y, right towards higher x).
   const goal = scene.goal?.id === block.id ? scene.goal : (scene.done.find((g) => g.id === block.id) ?? null);
   const target = goal && (isHorizontal(block) ? (goal.target.y === block.y ? goal.target.x : null) : goal.target.x === block.x ? goal.target.y : null);
-  // Just pushed onto its target (the last move), it goes on the way it was going, not back.
-  const last = scene.history.at(-1);
-  const arrived = target !== null && target === pos && last?.id === block.id ? (isHorizontal(block) ? last.from.x : last.from.y) : null;
+  // Its own last move (other blocks' moves since don't matter): pushed onto its target, it
+  // goes on the way it was going, not back; a reached goal's block just moved off its target
+  // goes back over it to the far end (so taps take it round: off, past, back on).
+  let own: Move | undefined;
+  for (let i = scene.history.length - 1; i >= 0 && !own; i--) if (scene.history[i]!.id === block.id) own = scene.history[i];
+  const from = own && (isHorizontal(block) ? own.from.x : own.from.y);
+  const arrived = target !== null && target === pos && from !== undefined ? from : null;
+  const past = target !== null && target !== pos && from === target && goal !== scene.goal;
   const preferLow = target !== null && target !== pos ? target < pos : arrived !== null && arrived !== pos ? arrived > pos : !isHorizontal(block);
   const toLow = preferLow ? lo !== pos : hi === pos;
   let to = toLow ? lo : hi;
-  if (target !== null && (toLow ? target < pos && target >= to : target > pos && target <= to)) to = target;
+  if (target !== null && !past && (toLow ? target < pos && target >= to : target > pos && target <= to)) to = target;
   return isHorizontal(block) ? { x: to, y: block.y } : { x: block.x, y: to };
 }
 
