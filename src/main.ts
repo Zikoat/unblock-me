@@ -104,7 +104,7 @@ const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t 
 function hopTo(to: Point, arrive: string): void {
   const c = scene.camera, screens = Math.hypot(scene.width / 2 - c.offsetX - to.x * UNIT * c.scale, scene.height / 2 - c.offsetY - to.y * UNIT * c.scale) / Math.max(scene.width, scene.height);
   const far = Math.min(1, Math.log2(1 + screens) / 2);
-  flyTo(to, 0, 320 + 240 * far);
+  flyTo(to, 0, 140 + 420 * far);
   flight!.hop = 0.03 + 0.07 * far;
   flight!.arrive = arrive;
 }
