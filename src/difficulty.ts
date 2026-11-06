@@ -43,14 +43,18 @@ export const MARGIN = 2;
  * missed.) */
 export const LEVELS = 1;
 
-export type MeasureOptions = { limit?: number; margin?: number; levels?: number };
+/** Watches a measure's search (for reports: test/experiments/goal-trace.ts): its window,
+ * then each board it expands, greedy phase first, with the moves made to it and its bucket. */
+export type Trace = { window?(win: Window, r: number, want: number): void; expand?(greedy: boolean, g: number, f: number, state: Uint8Array): void };
+
+export type MeasureOptions = { limit?: number; margin?: number; levels?: number; trace?: Trace };
 
 export function difficulty(layout: Layout, moved: ReadonlyMap<string, Point>, goal: Goal, options: MeasureOptions = {}): Difficulty {
   return measure(new Board(layout, moved), goal, options);
 }
 
 /** difficulty() on a board as it is now (which it leaves as it was). */
-export function measure(board: Board, goal: Goal, { limit = 50_000, margin = MARGIN, levels = LEVELS }: MeasureOptions = {}): Difficulty {
+export function measure(board: Board, goal: Goal, { limit = 50_000, margin = MARGIN, levels = LEVELS, trace }: MeasureOptions = {}): Difficulty {
   const red = board.block(goal.id);
   const horizontal = red.w > red.h;
   const rect = runWindow(red, { from: horizontal ? red.x : red.y, to: horizontal ? goal.target.x : goal.target.y }, margin, margin);
@@ -70,17 +74,18 @@ export function measure(board: Board, goal: Goal, { limit = 50_000, margin = MAR
   const win = new Window(board, { x: x0, y: y0, width: x1 - x0, height: y1 - y0 }).closure(board, [goal.id, ...goal.solution.map((m) => m.id)], levels);
   const r = win.index(goal.id);
   const want = (horizontal ? goal.target.x : goal.target.y) - (horizontal ? win.x0 : win.y0);
-  return shortest(win, r, want, limit);
+  trace?.window?.(win, r, want);
+  return shortest(win, r, want, limit, trace);
 }
 
 /** The fewest moves that get slider `r` to `want`: A* (astar below, weight 1) up to
  * `limit` boards, after a greedy phase (weight GREEDY) on a share of them that finds some
  * solution fast. The greedy solution is the answer when it is as short as A*'s lower
  * bound, and the best known solution when A* stops at the cap. */
-export function shortest(win: Window, r: number, want: number, limit: number): Difficulty {
-  const quick = tuning.greedyShare > 0 ? astar(win, r, want, Math.ceil(limit * tuning.greedyShare), tuning.greedy) : null;
+export function shortest(win: Window, r: number, want: number, limit: number, trace?: Trace): Difficulty {
+  const quick = tuning.greedyShare > 0 ? astar(win, r, want, Math.ceil(limit * tuning.greedyShare), tuning.greedy, Infinity, trace) : null;
   const upper = quick?.g ?? Infinity;
-  const exact = astar(win, r, want, limit, 1, upper);
+  const exact = astar(win, r, want, limit, 1, upper, trace);
   const expanded = exact.expanded + (quick?.expanded ?? 0);
   const branching = expanded ? (exact.choices + (quick?.choices ?? 0)) / expanded : 1;
   const result = (g: number | null, atLeast: number, solution: Move[] | undefined): Difficulty => ({ moves: g, atLeast, searched: expanded, branching, score: (g ?? atLeast) * Math.log2(Math.max(branching, 1)), solution });
@@ -102,7 +107,7 @@ type Search = { g: number | null; f: number; solution?: Move[]; expanded: number
  * sooner. Stops at `limit` boards (a count, so the same whatever the machine); `f` is then
  * the bucket in hand, a lower bound on any solution when w = 1. Boards that cannot beat
  * `upper` moves are not searched. */
-function astar(win: Window, r: number, want: number, limit: number, w: number, upper = Infinity): Search {
+function astar(win: Window, r: number, want: number, limit: number, w: number, upper = Infinity, trace?: Trace): Search {
   const pool = new Pool(win.sliders.length);
   // Buckets by f, of (state, moves made when pushed) pairs packed as state * 256 + moves;
   // an entry whose moves are no longer the state's best is stale.
@@ -150,6 +155,7 @@ function astar(win: Window, r: number, want: number, limit: number, w: number, u
         }
       }
       expanded++;
+      trace?.expand?.(w !== 1, g, f, pool.data.subarray(at, at + pool.n));
       const slides: number[] = [];
       choices += win.moves(pool.data, at, (k, to) => slides.push(k, to));
       for (let m = 0; m < slides.length; m += 2) {
