@@ -481,8 +481,10 @@ export function draw(
     ctx.strokeRect(border.x + 0.5, border.y + 0.5, border.width - 1, border.height - 1);
   }
   // The goal's glow, over the blocks.
+  // (Not before the cue's trail starts growing, fading in with it.)
   const band = goalBand(scene);
-  if (band) drawBand(ctx, band, dpr);
+  const bandIn = !cue || !goal || cue.id !== goal.id ? 1 : cue.born < 0 ? 0 : Math.max(0, Math.min(1, (now - cue.born - CUE_DELAY) / CUE_GROW));
+  if (band && bandIn > 0) drawBand(ctx, { ...band, alpha: band.alpha * bandIn }, dpr);
   const toUi = uiArrow(scene);
   const pinBeat = (pin: "red" | "ui") => (pinThrob?.pin === pin ? 1 + 2 * (throbScale((now - pinThrob.born) / THROB_MS) - 1) : 1);
   if (toUi) drawPin(ctx, toUi, COLORS.ui, 16 * pinBeat("ui"), dpr, true);
