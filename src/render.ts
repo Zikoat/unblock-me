@@ -138,7 +138,8 @@ export function draw(
   // The finish's effects round the block (finish-fx.ts); its hits jolt the whole board.
   const fx = finish?.island || finish?.quiet ? null : finishFx(scene, finish, now, worldRect(camera, { x: 0, y: 0, width, height }), camera.scale, detail);
   // The soul still on its way: the new red block shows as it was until it arrives.
-  const soulK = soul ? now - soul.born : Infinity;
+  // (-1 while the soul waits to set off: the next red block stays muted till it lands.)
+  const soulK = soul ? (soul.born < 0 ? -1 : now - soul.born) : Infinity;
   if (fx) {
     const q = quake(fx), f = punch(fx), jump = glitchShift(fx), cx = fx.rect.x + fx.rect.width / 2, cy = fx.rect.y + fx.rect.height / 2;
     ctx.translate(q.x + jump + cx, q.y + cy);
