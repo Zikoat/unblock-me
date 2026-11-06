@@ -4,7 +4,7 @@ import type { Difficulty } from "./difficulty";
 import { MAX_STARS, medalWon, scoreTrack, starsEarned } from "./stars";
 import { finishTimes, type TraceEntry } from "./score-track";
 import { Inspector } from "./inspector";
-import { finishCues, finishParts, SOUL, timeWarp } from "./finish-fx";
+import { finishCues, finishParts, setSoulStyle, SOUL, timeWarp } from "./finish-fx";
 import { moreCues, moreParts, warmUp } from "./finish-fx2";
 import * as sfx from "./sfx";
 import { timedFrame } from "./perf";
@@ -66,6 +66,7 @@ const TESTBED = {
 // ?island=0 leaves the island out: the generated world from the start, as before it (for
 // tests of the world itself).
 const withIsland = new URLSearchParams(location.search).get("island") !== "0";
+setSoulStyle(new URLSearchParams(location.search).get("soul")); // (reports/soul.html)
 // ?testbed=N starts at goal N (0 first).
 let testbedNext = Number(new URLSearchParams(location.search).get("testbed")) || 0;
 // ?board=<JSON list of placed blocks> opens exactly that board (for sharing a board, and
@@ -690,6 +691,8 @@ Object.assign(window, {
     onScreen: () => blocksIn(scene.layout, latticeRect(scene, { x: 0, y: 0, width: scene.width, height: scene.height }), scene),
     slideRange: (id: string) => slideRange(scene.layout, visibleBlocks(scene).find((b) => b.id === id)!, scene),
     redraw: () => redraw(),
+    /** The soul in flight, if one is (when it set off: -1 until its first frame). */
+    soul: () => soul,
     /** The adaptive detail step (0 full; see pace). */
     detailStep: () => detailStep,
     undo: () => takeBack(),

@@ -653,12 +653,22 @@ export function screenFlash(ctx: CanvasRenderingContext2D, fx: Fx, width: number
 
 /** The red block's soul flying on to the next red block. */
 export const SOUL = { TRAVEL_MS: 1000, BURST_MS: 450 };
+/** How the soul looks (reports/soul.html compares them; `?soul=` picks one): the orb as it
+ * was, or a smaller head with a trail: a ribbon (ember), a long streak (comet), a gold star
+ * shedding sparks (sparks), or a small red block with ghosts of itself (ghost). */
+export const SOUL_STYLES = ["classic", "ember", "comet", "sparks", "ghost"] as const;
+export type SoulStyle = (typeof SOUL_STYLES)[number];
+let soulStyle: SoulStyle = "classic";
+export const setSoulStyle = (s: string | null) => {
+  if (SOUL_STYLES.includes(s as SoulStyle)) soulStyle = s as SoulStyle;
+};
 type Rect = { x: number; y: number; width: number; height: number };
 
 /** The soul `k` ms after it set off: it rises out of the old block as a glowing ghost of it,
  * balls up into an orb that arcs over to the new block shedding sparks, and pours into it
  * (taking its shape), which flashes and rings. */
 export function soul(ctx: CanvasRenderingContext2D, from: Rect, to: Rect, k: number, zoom: number, detail = 1): void {
+  if (soulStyle !== "classic") return smallSoul(ctx, from, to, k, zoom, soulStyle);
   const B = big(zoom), p = clamp(k / SOUL.TRAVEL_MS);
   const c0 = { x: from.x + from.width / 2, y: from.y + from.height / 2 }, c1 = { x: to.x + to.width / 2, y: to.y + to.height / 2 };
   // Straight there (an arc bowing to one side looked wayward), easing in and out.
@@ -737,6 +747,130 @@ export function soul(ctx: CanvasRenderingContext2D, from: Rect, to: Rect, k: num
         ctx.roundRect(to.x - grow, to.y - grow, to.width + 2 * grow, to.height + 2 * grow, 10 + grow);
         ctx.stroke();
       }
+    }
+  }
+  ctx.restore();
+}
+
+/** A smaller soul with a trail (see SOUL_STYLES): it leaves the old block's middle, flies
+ * straight to the new one's, easing in and out, pours into it, and one thin ring goes out. */
+function smallSoul(ctx: CanvasRenderingContext2D, from: Rect, to: Rect, k: number, zoom: number, style: SoulStyle): void {
+  const B = big(zoom), p = clamp(k / SOUL.TRAVEL_MS), r = UNIT * 0.15 * B;
+  const c0 = { x: from.x + from.width / 2, y: from.y + from.height / 2 }, c1 = { x: to.x + to.width / 2, y: to.y + to.height / 2 };
+  const along = (q: number) => {
+    const t = clamp(q), e = t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2;
+    return { x: c0.x + (c1.x - c0.x) * e, y: c0.y + (c1.y - c0.y) * e };
+  };
+  ctx.save();
+  if (p < 1) {
+    const q = clamp(p / 0.9), pour = clamp((p - 0.9) / 0.1), at = along(q);
+    // The trail: where it was a moment ago, thinning and fading out behind it.
+    const ribbon = (n: number, dq: number, width: number, color: (f: number) => string) => {
+      ctx.lineCap = "round";
+      for (let j = n; j >= 1; j--) {
+        if (q - (j - 1) * dq <= 0) continue;
+        const a = along(q - j * dq), b = along(q - (j - 1) * dq), f = 1 - j / n;
+        ctx.strokeStyle = color(f);
+        ctx.lineWidth = Math.max(0.5, width * f);
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+      }
+    };
+    const fade = 1 - pour;
+    if (style === "ember") {
+      ribbon(22, 0.012, r * 1.6, (f) => `rgba(226, 72, 72, ${0.55 * f * fade})`);
+      glow(ctx, "soul", at.x, at.y, r * 2.6, 0.55 * fade);
+      ctx.globalAlpha = fade;
+      ctx.fillStyle = "#e04848";
+      ctx.beginPath();
+      ctx.arc(at.x, at.y, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#ffe2e2";
+      ctx.beginPath();
+      ctx.arc(at.x - r * 0.25, at.y - r * 0.25, r * 0.4, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (style === "comet") {
+      ribbon(40, 0.008, r * 1.4, (f) => `rgba(${Math.round(214 + 41 * f)}, ${Math.round(69 + 150 * f * f)}, ${Math.round(69 + 150 * f * f)}, ${0.7 * f * fade})`);
+      for (let i = 0; i < 8; i++) {
+        const born = (Math.floor(q * 40) - i) / 40;
+        if (born <= 0) continue;
+        const age = (q - born) / 0.2, h = hash(i + Math.floor(q * 40) * 7);
+        if (age >= 1) continue;
+        const sp = along(born);
+        ctx.globalAlpha = (1 - age) * fade;
+        ctx.fillStyle = "#ffd6d6";
+        ctx.beginPath();
+        ctx.arc(sp.x + (h - 0.5) * r * 3 * age, sp.y + (hash(i + 31) - 0.5) * r * 3 * age, r * 0.18, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      glow(ctx, "soul", at.x, at.y, r * 3, 0.5 * fade);
+      ctx.globalAlpha = fade;
+      ctx.fillStyle = "#fff3f3";
+      ctx.beginPath();
+      ctx.arc(at.x, at.y, r * 0.6, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (style === "sparks") {
+      for (let j = 14; j >= 1; j--) {
+        const born = q - j * 0.035;
+        if (born <= 0) continue;
+        const sp = along(born), age = j / 14, h = hash(j + Math.floor((q - j * 0.035) / 0.035) * 13);
+        ctx.globalAlpha = (1 - age) * fade;
+        ctx.fillStyle = j % 2 ? "#ffcf3f" : "#f08080";
+        starShape(ctx, sp.x + (h - 0.5) * r * 2, sp.y + r * 2.5 * age * age, r * 0.55 * (1 - age * 0.6));
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      glow(ctx, "gold", at.x, at.y, r * 2.4, 0.5 * fade);
+      ctx.globalAlpha = fade;
+      ctx.save();
+      ctx.translate(at.x, at.y);
+      ctx.rotate(q * Math.PI * 2);
+      ctx.fillStyle = "#ffcf3f";
+      ctx.strokeStyle = "#e07b00";
+      ctx.lineWidth = 1.5 * B;
+      starShape(ctx, 0, 0, r * 1.3);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    } else {
+      // ghost: the old block in small, its shape kept, ghosts of itself behind.
+      const s = (r * 2.6) / Math.max(from.width, from.height), w = from.width * s, h = from.height * s;
+      for (let j = 5; j >= 0; j--) {
+        const g = along(q - j * 0.03);
+        ctx.globalAlpha = (j ? 0.35 * (1 - j / 6) : 1) * fade;
+        ctx.fillStyle = "#d64545";
+        ctx.beginPath();
+        ctx.roundRect(g.x - w / 2, g.y - h / 2, w, h, 4 * B);
+        ctx.fill();
+      }
+    }
+    if (pour > 0) {
+      // Pouring in: a pale copy of the new block fills it from its middle.
+      ctx.globalAlpha = 0.7 * pour;
+      ctx.fillStyle = "#ff8f8f";
+      const w = r * 2 + (to.width - r * 2) * pour, h = r * 2 + (to.height - r * 2) * pour;
+      ctx.beginPath();
+      ctx.roundRect(c1.x - w / 2, c1.y - h / 2, w, h, 8);
+      ctx.fill();
+    }
+  } else {
+    const b = (k - SOUL.TRAVEL_MS) / SOUL.BURST_MS;
+    if (b < 1) {
+      ctx.globalAlpha = (1 - b) ** 2 * 0.6;
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath();
+      ctx.roundRect(to.x, to.y, to.width, to.height, 8);
+      ctx.fill();
+      const grow = UNIT * 0.5 * B * easeOut(b);
+      ctx.globalAlpha = (1 - b) ** 1.5;
+      ctx.strokeStyle = style === "sparks" ? "#ffcf3f" : "#ff6b6b";
+      ctx.lineWidth = (3 * (1 - b) + 1) * B;
+      ctx.beginPath();
+      ctx.roundRect(to.x - grow, to.y - grow, to.width + 2 * grow, to.height + 2 * grow, 8 + grow);
+      ctx.stroke();
     }
   }
   ctx.restore();
