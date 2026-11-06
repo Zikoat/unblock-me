@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Goal spec, drawn</title>
+<meta name="date" content="2026-11-06">
+<style>
+  :root { color-scheme: light dark; --bg: #f9f9f7; --card: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --line: #e1e0d9;
+    --block: #c9c7bf; --wall: #5d5c58; --red: #d64545; --hi: #2a78d6; --dev: #b97c0c; --ok: #2f8a4c; --bad: #c43d3d; --shared: #6b6a65;
+    --hi-soft: rgba(42,120,214,.10); --dev-soft: rgba(185,124,12,.10); --shared-soft: rgba(107,106,101,.10); }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0d0d0d; --card: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --line: #2c2c2a;
+    --block: #4a4945; --wall: #8c8b85; --red: #e86a6a; --hi: #5b9cf0; --dev: #e3a93a; --ok: #5fc27f; --bad: #e86a6a; --shared: #a3a29b;
+    --hi-soft: rgba(91,156,240,.12); --dev-soft: rgba(227,169,58,.12); --shared-soft: rgba(163,162,155,.10); } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 system-ui, sans-serif; }
+  main { max-width: 960px; margin: 0 auto; padding: 24px 16px 56px; }
+  .back { color: var(--ink-2); text-decoration: none; font-size: 14px; }
+  h1 { font-size: 24px; margin: 10px 0 4px; } h2 { font-size: 19px; margin: 32px 0 8px; } h3 { font-size: 15px; margin: 18px 0 6px; color: var(--ink-2); }
+  .sub { color: var(--ink-2); margin: 0 0 12px; max-width: 72ch; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; overflow-x: auto; }
+  svg { display: block; width: 100%; height: auto; font-family: system-ui, sans-serif; }
+  .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+  .fields { display: grid; gap: 6px; font-size: 14px; }
+  .fields div { display: grid; grid-template-columns: 110px 1fr; gap: 10px; border-bottom: 1px solid var(--line); padding: 4px 0; }
+  .fields b { font-weight: 650; } .fields span { color: var(--ink-2); } .fields code { font-size: 13px; color: var(--ink); }
+  .tag { display: inline-block; font-size: 12px; font-weight: 650; padding: 1px 8px; border-radius: 999px; margin-bottom: 8px; }
+  .strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+  .strip figure { margin: 0; } .strip figcaption { font-size: 13px; color: var(--ink-2); margin-top: 4px; }
+  .checks { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 4px; font-size: 14px; }
+  .checks li::before { content: "✓ "; color: var(--ok); font-weight: 700; }
+  .rules { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+  .rules figure { margin: 0; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px; }
+  .rules figcaption { font-size: 13px; margin-top: 6px; } .rules figcaption b { color: var(--bad); }
+  .big-math { font-size: 20px; margin: 8px 0; overflow-x: auto; }
+  table { border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+  th, td { padding: 5px 12px; border-bottom: 1px solid var(--line); text-align: left; }
+  th { color: var(--ink-2); font-weight: 600; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--ink-2); margin-top: 8px; }
+  .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+</style></head><body><main>
+<a class="back" href="./">← All reports</a>
+<h1>Goal spec, drawn</h1>
+<p class="sub">The <a href="goal-spec.html">goal spec</a> as pictures, with one real goal (seed 11, density 12) worked through. A draft for discussion.</p>
+
+<h2>The map</h2>
+<p class="sub">Grey runs everywhere; blue is what runs while people play; amber only while we develop.</p>
+<div class="card"><svg id="map" role="img" aria-label="The subsystems and how they connect"></svg></div>
+<div class="legend"><span><i style="background:var(--shared)"></i>Everywhere</span><span><i style="background:var(--hi)"></i>In play</span><span><i style="background:var(--dev)"></i>In development</span></div>
+
+<h2>The contract</h2>
+<p class="sub">A Request in, a Goal out: nothing else crosses the line. Values from the example below.</p>
+<div class="two">
+  <div class="card"><span class="tag" style="background:var(--shared-soft)">Request</span><div class="fields" id="request"></div></div>
+  <div class="card"><span class="tag" style="background:var(--shared-soft)">Goal</span><div class="fields" id="goal"></div></div>
+</div>
+
+<h2>The example</h2>
+<div class="two">
+  <figure class="card" style="margin:0"><svg id="exRequest"></svg><figcaption class="sub" style="margin:8px 0 0">The Request: the board as data, the last target (cross). Which block, and to where, is up to the maker.</figcaption></figure>
+  <figure class="card" style="margin:0"><svg id="exGoal"></svg><figcaption class="sub" style="margin:8px 0 0">The Goal: red, its target (dashed) and the moves, numbered. The arrows: each block makes way for the next.</figcaption></figure>
+</div>
+<h3>The Referee replays it</h3>
+<div class="card"><div class="strip" id="replay"></div><ul class="checks" id="checks"></ul></div>
+<h3>The Judge scores it</h3>
+<div class="card">
+  <math display="block" class="big-math" id="named"></math>
+  <math display="block" class="big-math" id="filled"></math>
+  <div style="overflow-x:auto"><table id="terms"></table></div>
+</div>
+
+<h2>The Referee's rules</h2>
+<p class="sub">Each broken on a tiny board. Any one makes the Goal illegal.</p>
+<div class="rules" id="rules"></div>
+
+<h2>Bench, Records, Gate</h2>
+<p class="sub">Every maker plays the same cases. The Auditor re-counts moves, the Records keep the best ever, and the Gate decides what ships.</p>
+<div class="card"><svg id="bench" role="img" aria-label="Bench flow"></svg></div>
+<div class="two" style="margin-top:12px">
+  <div class="card"><b style="font-size:14px">The Gate</b><table style="margin-top:6px"><tr><th>Score</th><th>To ship</th></tr>
+    <tr><td>legal</td><td>100%</td></tr><tr><td>deterministic</td><td>100%</td></tr>
+    <tr><td>quality (fitness / record)</td><td>median ≥ 0.95, worst 5% ≥ 0.8</td></tr>
+    <tr><td>time, slowest 5%</td><td>≤ 300 ms waiting, ≤ 1 s ahead</td></tr>
+    <tr><td>against the shipping one</td><td>no worse at the same time</td></tr></table></div>
+  <div class="card"><b style="font-size:14px">Performance profile (a sketch)</b><svg id="profile" role="img" aria-label="Quality against time, sketched"></svg></div>
+</div>
+
+<h2>The Tuner</h2>
+<div class="card"><svg id="tuner" role="img" aria-label="The tuning loop"></svg></div>
+</main>
+<script>
+const EX = {"region":{"x":13,"y":0,"w":15,"h":11},"blocks":[["3,0,0",14,1,1,2,0],["3,0,2",15,0,1,2,0],["3,0,10",13,0,2,1,0],["3,0,11",13,2,1,2,0],["3,1,1",13,5,2,1,0],["3,1,2",14,4,2,1,0],["3,1,3",14,6,1,2,0],["3,2,0",15,8,1,2,0],["3,2,1",13,9,2,1,0],["3,2,3",13,10,2,1,0],["3,2,4",13,8,2,1,0],["4,0,0",18,2,1,2,0],["4,0,3",18,0,1,2,0],["4,0,4",16,0,1,2,0],["4,0,6",19,0,1,2,0],["4,0,7",16,2,1,2,0],["4,1,0",18,6,2,1,0],["4,1,1",18,4,2,1,0],["4,1,2",16,4,1,2,0],["4,1,3",18,5,2,1,0],["4,1,7",17,7,2,1,0],["4,2,0",17,9,2,1,0],["4,2,5",18,10,2,1,0],["4,2,9",19,8,1,2,0],["5,0,0",20,3,2,1,0],["5,0,1",22,1,1,2,0],["5,0,2",22,3,2,1,0],["5,0,3",20,1,2,1,0],["5,0,11",20,2,2,1,0],["5,1,0",21,5,1,2,0],["5,1,1",22,4,1,2,0],["5,1,2",23,5,1,2,0],["5,1,5",22,7,2,1,0],["5,1,6",20,4,1,2,0],["5,1,8",20,7,2,1,0],["5,2,1",21,8,1,2,0],["5,2,2",22,9,2,1,0],["5,2,4",20,8,1,2,0],["5,2,7",22,10,2,1,0],["5,2,8",22,8,2,1,0],["6,0,0",27,1,1,2,0],["6,0,1",24,1,1,2,0],["6,0,2",26,1,1,2,0],["6,0,3",25,1,1,2,0],["6,0,4",26,0,2,1,0],["6,0,5",24,0,2,1,0],["6,0,10",25,3,2,1,0],["6,1,0",26,6,1,2,0],["6,1,1",25,5,1,2,0],["6,1,3",24,5,1,2,0],["6,1,7",27,5,1,2,0],["6,1,9",25,4,2,1,0],["6,2,0",24,10,2,1,0],["6,2,1",24,9,2,1,0],["6,2,9",26,8,1,2,0]],"last":[20,6],"red":"4,1,3","target":[21,5],"moves":[["5,0,2",[22,3],[23,3]],["5,1,1",[22,4],[22,3]],["4,1,7",[17,7],[16,7]],["5,1,8",[20,7],[18,7]],["5,1,0",[21,5],[21,6]],["5,1,6",[20,4],[20,6]],["4,1,3",[18,5],[21,5]]],"seed":11,"tries":12,"aim":7};
+const $ = (id) => document.getElementById(id);
+
+// ---- A tiny engine for the example: blocks, cells, slides ----
+const blocks = new Map(EX.blocks.map(([id, x, y, w, h, fixed]) => [id, { id, x, y, w, h, fixed: !!fixed }]));
+const R = EX.region;
+function occupancy(pos) {
+  const at = new Map();
+  for (const b of blocks.values()) { const p = pos.get(b.id) ?? [b.x, b.y]; for (let i = 0; i < b.w; i++) for (let j = 0; j < b.h; j++) at.set(`${p[0] + i},${p[1] + j}`, b.id); }
+  return at;
+}
+const inRegion = (x, y) => x >= R.x && y >= R.y && x < R.x + R.w && y < R.y + R.h;
+/** Can block `id` slide from where it is to `to`? (Rule 2.) */
+function slides(pos, id, to) {
+  const b = blocks.get(id), p = pos.get(id) ?? [b.x, b.y], h = b.w > b.h, at = occupancy(pos);
+  if (b.fixed || (h ? to[1] !== p[1] : to[0] !== p[0]) || (to[0] === p[0] && to[1] === p[1])) return false;
+  const from = h ? p[0] : p[1], dest = h ? to[0] : to[1], size = h ? b.w : b.h;
+  for (let q = Math.min(from, dest); q < Math.max(from, dest) + size; q++) {
+    const [x, y] = h ? [q, p[1]] : [p[0], q];
+    if (!inRegion(x, y)) return false;
+    const o = at.get(`${x},${y}`);
+    if (o && o !== id) return false;
+  }
+  return true;
+}
+function replay(moves) {
+  const pos = new Map();
+  for (const [id, from, to] of moves) {
+    const b = blocks.get(id), p = pos.get(id) ?? [b.x, b.y];
+    if (p[0] !== from[0] || p[1] !== from[1] || !slides(pos, id, to)) return null;
+    pos.set(id, to);
+  }
+  return pos;
+}
+const solves = (moves) => { const p = replay(moves); return !!p && (p.get(EX.red) ?? [0, 0]).join() === EX.target.join(); };
+const states = [new Map()];
+for (const [id, , to] of EX.moves) { const m = new Map(states.at(-1)); m.set(id, to); states.push(m); }
+const red = blocks.get(EX.red), start = [red.x, red.y];
+
+// ---- The Judge's terms ----
+const swept = [];
+for (const [id, from, to] of EX.moves) { const b = blocks.get(id); swept.push([Math.min(from[0], to[0]), Math.min(from[1], to[1]), Math.max(from[0], to[0]) + b.w, Math.max(from[1], to[1]) + b.h]); }
+const area = { x0: Math.min(...swept.map((s) => s[0])) - 2, y0: Math.min(...swept.map((s) => s[1])) - 2, x1: Math.max(...swept.map((s) => s[2])) + 2, y1: Math.max(...swept.map((s) => s[3])) + 2 };
+function legalMoves(pos) {
+  let n = 0;
+  for (const b of blocks.values()) {
+    const p = pos.get(b.id) ?? [b.x, b.y];
+    if (b.fixed || p[0] < area.x0 || p[1] < area.y0 || p[0] + b.w > area.x1 || p[1] + b.h > area.y1) continue;
+    const h = b.w > b.h;
+    for (const dir of [1, -1]) for (let d = 1; ; d++) {
+      const to = h ? [p[0] + dir * d, p[1]] : [p[0], p[1] + dir * d];
+      if (to[0] < area.x0 || to[1] < area.y0 || to[0] + b.w > area.x1 || to[1] + b.h > area.y1 || !slides(pos, b.id, to)) break;
+      n++;
+    }
+  }
+  return n;
+}
+const M = EX.moves.length;
+const choices = states.slice(0, M).reduce((s, p) => s + legalMoves(p), 0) / M;
+const horizontal = red.w > red.h, distance = Math.abs(horizontal ? EX.target[0] - start[0] : EX.target[1] - start[1]);
+const occ0 = occupancy(new Map()), track = new Set();
+for (let q = Math.min(start[0], EX.target[0]); q < Math.max(start[0], EX.target[0]) + red.w; q++) {
+  const o = occ0.get(`${q},${start[1]}`);
+  if (o && o !== red.id && blocks.get(o).w > blocks.get(o).h && blocks.get(o).y === start[1]) track.add(o);
+}
+let reach = Infinity;
+for (let i = 0; i < red.w; i++) for (let j = 0; j < red.h; j++) reach = Math.min(reach, Math.abs(start[0] + i - EX.last[0]) + Math.abs(start[1] + j - EX.last[1]));
+const difficulty = M * Math.log2(choices), balance = (difficulty / Math.pow(distance, 0.6)) * Math.pow(0.5, track.size);
+const aimF = Math.pow(0.5, Math.abs(M - EX.aim)), reachF = Math.pow(0.8, Math.max(0, reach - 4)), clashF = 1;
+const fitness = balance * aimF * reachF * clashF;
+
+// ---- Contract cards ----
+const field = (k, v, note) => `<div><b>${k}</b><span><code>${v}</code>${note ? ` · ${note}` : ""}</span></div>`;
+const sliding = EX.blocks.filter((b) => !b[5]).length;
+$("request").innerHTML = [
+  field("board", `${R.w}×${R.h} cells, ${EX.blocks.length} blocks`, "as data; outside is wall"),
+  field("last target", EX.last.join(", "), "where the player is"),
+  field("history", "[]", "earlier reds and targets"),
+  field("aim", EX.aim, "the ramp, or none"),
+  field("wishes", "{ distance: 0.6, track: ½, aim: ½, reach: 0.8 after 4, clash: ½ }", "the Judge's weights"),
+  field("effort", 2, "0 to 3; never the clock"),
+  field("seed", 1, "for random choices"),
+].join("");
+$("goal").innerHTML = [
+  field("red", `"${EX.red}"`),
+  field("start", start.join(", ")),
+  field("target", EX.target.join(", ")),
+  field("moves", `${M} × { block, from, to }`, `e.g. { "${EX.moves[0][0]}", ${EX.moves[0][1].join(",")} → ${EX.moves[0][2].join(",")} }`),
+  field("notes", "{ steps: … }", "optional; the Judge ignores it"),
+].join("") + `<p class="sub" style="margin:10px 0 0;font-size:13px">Or <b>none</b>: nothing found (a loss on the Bench).</p>`;
+
+// ---- Board drawing ----
+const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function boardSvg(svg, { pos = new Map(), view = { x: R.x, y: R.y, w: R.w, h: R.h }, s = 28, redId = null, hi = null, target = null, cross = null, arrows = null, labels = null, extra = "" }) {
+  let o = "";
+  const X = (x) => (x - view.x) * s, Y = (y) => (y - view.y) * s, g = s * 0.08;
+  o += `<rect x="0" y="0" width="${view.w * s}" height="${view.h * s}" fill="var(--bg)" rx="6"/>`;
+  if (target) { const b = blocks.get(redId); o += `<rect x="${X(target[0]) + g}" y="${Y(target[1]) + g}" width="${b.w * s - 2 * g}" height="${b.h * s - 2 * g}" rx="${s * 0.2}" fill="none" stroke="var(--red)" stroke-width="2" stroke-dasharray="5 4"/>`; }
+  for (const b of blocks.values()) {
+    const p = pos.get(b.id) ?? [b.x, b.y];
+    if (p[0] + b.w <= view.x || p[1] + b.h <= view.y || p[0] >= view.x + view.w || p[1] >= view.y + view.h) continue;
+    const fill = b.fixed ? "var(--wall)" : b.id === redId ? "var(--red)" : b.id === hi ? "var(--hi)" : "var(--block)";
+    o += `<rect x="${X(p[0]) + g}" y="${Y(p[1]) + g}" width="${b.w * s - 2 * g}" height="${b.h * s - 2 * g}" rx="${s * 0.2}" fill="${fill}"/>`;
+  }
+  if (cross) { const cx = X(cross[0] + 0.5), cy = Y(cross[1] + 0.5), r = s * 0.42; o += `<path d="M${cx - r} ${cy}H${cx + r}M${cx} ${cy - r}V${cy + r}" stroke="var(--ink)" stroke-width="2.5"/>`; }
+  if (arrows) o += arrows(X, Y, s);
+  if (labels) o += labels(X, Y, s);
+  o += extra;
+  svg.setAttribute("viewBox", `0 0 ${view.w * s} ${view.h * s}`);
+  svg.innerHTML = `<defs><marker id="ah${svg.id}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--ink)"/></marker></defs>` + o;
+}
+const centre = (id, pos, X, Y, s) => { const b = blocks.get(id), p = pos.get(id) ?? [b.x, b.y]; return [X(p[0]) + (b.w * s) / 2, Y(p[1]) + (b.h * s) / 2]; };
+
+boardSvg($("exRequest"), { cross: EX.last });
+// Which later move each move makes way for (the first to sweep a cell it vacated).
+const sweptCells = ([id, from, to]) => { const b = blocks.get(id), h = b.w > b.h, out = new Set(); const lo = h ? Math.min(from[0], to[0]) : Math.min(from[1], to[1]), hi = (h ? Math.max(from[0], to[0]) : Math.max(from[1], to[1])) + (h ? b.w : b.h); for (let q = lo; q < hi; q++) out.add(h ? `${q},${from[1]}` : `${from[0]},${q}`); return out; };
+const cellsOf = (id, at) => { const b = blocks.get(id), out = []; for (let i = 0; i < b.w; i++) for (let j = 0; j < b.h; j++) out.push(`${at[0] + i},${at[1] + j}`); return out; };
+const wayFor = EX.moves.map((m, i) => { const to = new Set(cellsOf(m[0], m[2])), vac = cellsOf(m[0], m[1]).filter((c) => !to.has(c)); for (let j = i + 1; j < M; j++) if (EX.moves[j][0] !== m[0] && vac.some((c) => sweptCells(EX.moves[j]).has(c))) return j; return -1; });
+const crop = { x: area.x0, y: area.y0, w: area.x1 - area.x0, h: area.y1 - area.y0 };
+boardSvg($("exGoal"), {
+  view: crop, s: 40, redId: EX.red, target: EX.target,
+  arrows: (X, Y, s) => EX.moves.map((m, i) => { const j = wayFor[i]; if (j < 0) return ""; const [x1, y1] = centre(m[0], new Map(), X, Y, s), [x2, y2] = centre(EX.moves[j][0], new Map(), X, Y, s), k = 0.72; return `<line x1="${x1}" y1="${y1}" x2="${x1 + (x2 - x1) * k}" y2="${y1 + (y2 - y1) * k}" stroke="var(--ink)" stroke-width="2" marker-end="url(#ahexGoal)"/>`; }).join(""),
+  labels: (X, Y, s) => EX.moves.map((m, i) => { const [x, y] = centre(m[0], new Map(), X, Y, s); return `<circle cx="${x}" cy="${y}" r="11" fill="var(--card)" stroke="var(--ink)" stroke-width="1.5"/><text x="${x}" y="${y + 4.5}" text-anchor="middle" font-size="13" font-weight="700" fill="var(--ink)">${i + 1}</text>`; }).join(""),
+});
+// The replay strip: the start, then the board after each move.
+$("replay").innerHTML = states.map((_, i) => `<figure><svg id="st${i}"></svg><figcaption>${i === 0 ? "start" : `${i}. ${EX.moves[i - 1][0]} ${EX.moves[i - 1][1].join(",")} → ${EX.moves[i - 1][2].join(",")}`}</figcaption></figure>`).join("");
+states.forEach((pos, i) => boardSvg($(`st${i}`), { pos, view: crop, s: 22, redId: EX.red, hi: i ? EX.moves[i - 1][0] : null, target: EX.target }));
+const droppable = EX.moves.filter((_, i) => solves(EX.moves.filter((__, k) => k !== i))).length;
+const merged = EX.moves.some((m, i) => i && EX.moves[i - 1][0] === m[0]);
+$("checks").innerHTML = [
+  `1 · ${EX.red} is a sliding block at ${start.join(", ")}`,
+  `2 · all ${M} moves are slides: block at <i>from</i>, on its axis, path empty`,
+  `3 · after the last move ${EX.red} is on ${EX.target.join(", ")}`,
+  `4 · tidy: ${merged ? "✗" : "no block moves twice in a row"}; dropping any one move breaks it (${droppable} could be dropped)`,
+  `5 · ${M} moves ≤ 100`,
+  `6 · deterministic: the Bench asks twice`,
+].map((t) => `<li>${t}</li>`).join("");
+
+// ---- The Judge, named and filled in ----
+const mt = (t) => `<mtext>${t}</mtext>`, mn = (n) => `<mn>${n}</mn>`, mo = (o) => `<mo>${o}</mo>`;
+const pow = (b, e) => `<msup>${b}${e}</msup>`, half = `<mrow>${mo("(")}<mfrac>${mn(1)}${mn(2)}</mfrac>${mo(")")}</mrow>`;
+const bal = (m, c, d, t, tail = "") => `<mrow>${mt("balance")}${mo("=")}<mfrac><mrow>${m}${mo("×")}<msub><mi>log</mi>${mn(2)}</msub>${mo("(")}${c}${mo(")")}</mrow>${pow(d, mn("0.6"))}</mfrac>${mo("×")}${pow(half, t)}${tail}</mrow>`;
+const fit = (b, aimOff, r, cl, tail = "") => `<mrow>${mt("fitness")}${mo("=")}${b}${mo("×")}${pow(half, aimOff)}${mo("×")}${pow(mn("0.8"), r)}${mo("×")}${pow(half, cl)}${tail}</mrow>`;
+$("named").innerHTML = `<mtable columnalign="left" rowspacing="0.9em"><mtr><mtd>${bal(mt("fewest moves"), mt("choices"), mt("distance"), mt("track blocks"))}</mtd></mtr><mtr><mtd>${fit(mt("balance"), `<mrow>${mo("|")}${mt("fewest moves − aim")}${mo("|")}</mrow>`, mt("reach beyond 4"), mt("clashes"))}</mtd></mtr></mtable>`;
+$("filled").innerHTML = `<mtable columnalign="left" rowspacing="0.9em"><mtr><mtd>${bal(mn(M), mn(choices.toFixed(1)), mn(distance), mn(track.size), `${mo("=")}${mn(balance.toFixed(1))}`)}</mtd></mtr><mtr><mtd>${fit(mn(balance.toFixed(1)), mn(Math.abs(M - EX.aim)), mn(Math.max(0, reach - 4)), mn(0), `${mo("=")}<mn mathvariant="bold">${fitness.toFixed(1)}</mn>`)}</mtd></mtr></mtable>`;
+$("terms").innerHTML = `<tr><th>Term</th><th>Here</th><th>How it is measured</th></tr>` + [
+  ["fewest moves", M, "the Goal's moves (the Auditor checks none shorter exists)"],
+  ["choices", choices.toFixed(1), `legal moves on an average board along the replay, blocks in the play area (${crop.w}×${crop.h})`],
+  ["distance", distance, "cells red travels"],
+  ["track blocks", track.size, "blocks lying the same way in red's lane, start to target"],
+  ["aim", EX.aim, `the ramp's; off by ${Math.abs(M - EX.aim)}`],
+  ["reach", reach, "cells from the last target to red; free up to 4"],
+  ["clashes", 0, "earlier targets overlapped, earlier tracks shared"],
+].map(([a, b, c]) => `<tr><td>${a}</td><td>${b}</td><td>${c}</td></tr>`).join("");
+
+// ---- Rule breakers, each on a tiny board ----
+function mini(cells, cap) {
+  // cells: [x, y, w, h, kind] with kind r(ed), b(lock), w(all), g(host: where it claims to be), t(arget); arrows: [x1,y1,x2,y2,bad]
+  const s = 26, W = 6, H = 3;
+  let o = `<rect width="${W * s}" height="${H * s}" rx="6" fill="var(--bg)"/>`;
+  for (const [x, y, w, h, k] of cells.blocks) {
+    const g = s * 0.08, a = `x="${x * s + g}" y="${y * s + g}" width="${w * s - 2 * g}" height="${h * s - 2 * g}" rx="${s * 0.2}"`;
+    o += k === "t" ? `<rect ${a} fill="none" stroke="var(--red)" stroke-width="2" stroke-dasharray="4 3"/>` : k === "g" ? `<rect ${a} fill="none" stroke="var(--ink-2)" stroke-width="1.5" stroke-dasharray="2 3"/>` : `<rect ${a} fill="${k === "r" ? "var(--red)" : k === "w" ? "var(--wall)" : "var(--block)"}"/>`;
+  }
+  for (const [x1, y1, x2, y2, bad] of cells.arrows ?? []) o += `<line x1="${x1 * s}" y1="${y1 * s}" x2="${x2 * s}" y2="${y2 * s}" stroke="${bad ? "var(--bad)" : "var(--ink)"}" stroke-width="2.5" marker-end="url(#mk)"/>`;
+  for (const [x, y] of cells.bad ?? []) o += `<path d="M${x * s - 7} ${y * s - 7}l14 14m0 -14l-14 14" stroke="var(--bad)" stroke-width="3"/>`;
+  return `<figure><svg viewBox="0 0 ${W * s} ${H * s}"><defs><marker id="mk" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--bad)"/></marker></defs>${o}</svg><figcaption>${cap}</figcaption></figure>`;
+}
+$("rules").innerHTML = [
+  mini({ blocks: [[1, 1, 2, 1, "g"], [3, 1, 2, 1, "r"]], bad: [[2, 1.5]] }, "<b>1 · Red isn't there.</b> The Goal says red starts at the dotted cells; it is elsewhere."),
+  mini({ blocks: [[0, 1, 2, 1, "r"], [3, 0, 1, 2, "b"], [4, 1, 2, 1, "t"]], arrows: [[2, 1.5, 4.6, 1.5, 1]] }, "<b>2 · The path is blocked.</b> A slide can't pass through another block."),
+  mini({ blocks: [[1, 1, 2, 1, "r"]], arrows: [[2, 1.5, 2, 0.2, 1]] }, "<b>2 · Off its axis.</b> A 2×1 block only slides sideways."),
+  mini({ blocks: [[0, 1, 2, 1, "r"], [2, 1, 1, 1, "w"]], arrows: [[1, 1.5, 3.3, 1.5, 1]] }, "<b>2 · Through a wall</b>, or out of the region."),
+  mini({ blocks: [[2, 1, 2, 1, "r"], [4, 1, 2, 1, "t"]], bad: [[5, 1.5]] }, "<b>3 · Not on the target</b> after the last move."),
+  mini({ blocks: [[0, 1, 2, 1, "r"], [3, 0, 1, 2, "b"]], arrows: [[3.5, 2, 3.5, 2.9, 1], [3.5, 1, 3.5, 0.1, 1]] }, "<b>4 · Not tidy.</b> A block slid down then back up: drop both and it still solves."),
+].join("");
+
+// ---- Diagrams: boxes and arrows ----
+function diagram(svg, W, H, boxes, links, extra = "") {
+  const col = { s: ["var(--shared)", "var(--shared-soft)"], p: ["var(--hi)", "var(--hi-soft)"], d: ["var(--dev)", "var(--dev-soft)"] };
+  let o = `<defs><marker id="m${svg.id}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--ink-2)"/></marker></defs>` + extra;
+  const by = Object.fromEntries(boxes.map((b) => [b.id, b]));
+  const edge = (a, b) => { const ax = a.x + a.w / 2, ay = a.y + a.h / 2, bx = b.x + b.w / 2, by_ = b.y + b.h / 2, dx = bx - ax, dy = by_ - ay; const t = (r) => Math.min(Math.abs(dx) > 1e-6 ? r.w / 2 / Math.abs(dx) : Infinity, Math.abs(dy) > 1e-6 ? r.h / 2 / Math.abs(dy) : Infinity); const ta = t(a), tb = t(b); return [ax + dx * ta, ay + dy * ta, bx - dx * tb, by_ - dy * tb]; };
+  for (const [a, b, label, dash] of links) {
+    const [x1, y1, x2, y2] = edge(by[a], by[b]);
+    o += `<line x1="${x1}" y1="${y1}" x2="${x2 - Math.sign(x2 - x1) * 3}" y2="${y2 - Math.sign(y2 - y1) * 3}" stroke="var(--ink-2)" stroke-width="1.6" ${dash ? 'stroke-dasharray="5 4"' : ""} marker-end="url(#m${svg.id})"/>`;
+    if (label) o += `<text x="${(x1 + x2) / 2 + (Math.abs(x2 - x1) < 4 ? 6 : 0)}" y="${(y1 + y2) / 2 - 5}" text-anchor="${Math.abs(x2 - x1) < 4 ? "start" : "middle"}" font-size="11.5" fill="var(--ink-2)">${label}</text>`;
+  }
+  for (const b of boxes) {
+    const [stroke, fill] = col[b.k];
+    o += `<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="10" fill="${fill}" stroke="${stroke}" stroke-width="1.6"/>`;
+    o += `<text x="${b.x + b.w / 2}" y="${b.y + (b.sub ? b.h / 2 - 3 : b.h / 2 + 5)}" text-anchor="middle" font-size="14" font-weight="650" fill="var(--ink)">${b.t}</text>`;
+    if (b.sub) o += `<text x="${b.x + b.w / 2}" y="${b.y + b.h / 2 + 14}" text-anchor="middle" font-size="11.5" fill="var(--ink-2)">${b.sub}</text>`;
+  }
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.innerHTML = o;
+}
+const lane = (x, y, w, h, t, k) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="14" fill="none" stroke="var(${k})" stroke-width="1.2" stroke-dasharray="3 5"/><text x="${x + 12}" y="${y + 20}" font-size="12.5" font-weight="650" fill="var(${k})">${t}</text>`;
+diagram($("map"), 900, 470, [
+  { id: "engine", t: "Engine", sub: "board, slides, replay", x: 30, y: 40, w: 190, h: 52, k: "s" },
+  { id: "contract", t: "Contract", sub: "Request → Goal", x: 250, y: 40, w: 190, h: 52, k: "s" },
+  { id: "referee", t: "Referee", sub: "legal? yes / no", x: 470, y: 40, w: 190, h: 52, k: "s" },
+  { id: "judge", t: "Judge", sub: "how good? fitness", x: 690, y: 40, w: 180, h: 52, k: "s" },
+  { id: "game", t: "Game", sub: "sends a Request", x: 30, y: 170, w: 160, h: 50, k: "p" },
+  { id: "contender", t: "Contender", sub: "the shipped maker", x: 30, y: 270, w: 160, h: 50, k: "p" },
+  { id: "pref", t: "Referee", x: 240, y: 270, w: 120, h: 50, k: "p" },
+  { id: "player", t: "Player", sub: "gets the Goal", x: 240, y: 170, w: 120, h: 50, k: "p" },
+  { id: "fallback", t: "Retry, then Reference", sub: "next seed; effort 0", x: 30, y: 380, w: 200, h: 50, k: "p" },
+  { id: "bench", t: "Bench", sub: "fixed cases", x: 490, y: 170, w: 150, h: 50, k: "d" },
+  { id: "makers", t: "Makers", sub: "Reference + Contenders", x: 690, y: 170, w: 180, h: 50, k: "d" },
+  { id: "dref", t: "Referee + Judge", sub: "+ Auditor re-counts", x: 690, y: 270, w: 180, h: 50, k: "d" },
+  { id: "records", t: "Records", sub: "best ever per case", x: 490, y: 270, w: 150, h: 50, k: "d" },
+  { id: "gate", t: "Gate", sub: "ship or not", x: 490, y: 380, w: 150, h: 50, k: "d" },
+  { id: "tuner", t: "Tuner", sub: "a subagent", x: 690, y: 380, w: 180, h: 50, k: "d" },
+], [
+  ["game", "contender", "Request"], ["contender", "pref", "Goal"], ["pref", "player", "legal"], ["pref", "fallback", "illegal"],
+  ["bench", "makers", "cases"], ["makers", "dref", "Goals"], ["dref", "records", "fitness"], ["records", "gate", ""], ["gate", "contender", "ships", true],
+], `<path d="M870 405 H884 V195 H878" fill="none" stroke="var(--ink-2)" stroke-width="1.6" marker-end="url(#mmap)"/><text x="876" y="354" text-anchor="end" font-size="11.5" fill="var(--ink-2)">writes</text>` + lane(15, 125, 400, 330, "IN PLAY", "--hi") + lane(470, 125, 415, 330, "IN DEVELOPMENT", "--dev") + `<text x="30" y="24" font-size="12.5" font-weight="650" fill="var(--shared)">EVERYWHERE</text>`);
+
+diagram($("bench"), 900, 210, [
+  { id: "cases", t: "Cases", sub: "Requests as data", x: 20, y: 80, w: 140, h: 54, k: "d" },
+  { id: "maker", t: "Maker", sub: "× effort × seed", x: 195, y: 80, w: 130, h: 54, k: "d" },
+  { id: "ref", t: "Referee", sub: "legal, twice same", x: 360, y: 20, w: 140, h: 54, k: "s" },
+  { id: "jud", t: "Judge", sub: "fitness", x: 360, y: 140, w: 140, h: 54, k: "s" },
+  { id: "aud", t: "Auditor", sub: "shorter? re-count", x: 535, y: 140, w: 140, h: 54, k: "d" },
+  { id: "rec", t: "Records", sub: "best per case", x: 535, y: 20, w: 140, h: 54, k: "d" },
+  { id: "gate", t: "Gate", sub: "quality, time", x: 720, y: 80, w: 160, h: 54, k: "d" },
+], [["cases", "maker"], ["maker", "ref"], ["maker", "jud"], ["jud", "aud"], ["aud", "rec", "better? keep"], ["rec", "gate"], ["aud", "gate"], ["ref", "gate"]]);
+
+diagram($("tuner"), 900, 170, [
+  { id: "spec", t: "Spec + Bench", sub: "what to beat", x: 20, y: 58, w: 170, h: 54, k: "s" },
+  { id: "agent", t: "Tuner subagent", sub: "writes a Contender", x: 250, y: 58, w: 180, h: 54, k: "d" },
+  { id: "run", t: "Bench run", sub: "scores, padding, time", x: 490, y: 58, w: 170, h: 54, k: "d" },
+  { id: "gate", t: "Gate", sub: "passes and beats?", x: 720, y: 58, w: 160, h: 54, k: "d" },
+], [["spec", "agent"], ["agent", "run"], ["run", "gate"]],
+`<path d="M800 112 C800 160 340 160 340 116" fill="none" stroke="var(--ink-2)" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#mtuner)"/><text x="570" y="160" text-anchor="middle" font-size="11.5" fill="var(--ink-2)">no: try again, with the scores</text>`);
+
+// ---- Performance profile sketch ----
+(function () {
+  const W = 420, H = 220, m = { l: 44, r: 14, t: 14, b: 36 };
+  const x = (t) => m.l + (Math.log10(t) - 1) / 3 * (W - m.l - m.r), y = (q) => H - m.b - q * (H - m.t - m.b);
+  const curve = (f) => Array.from({ length: 60 }, (_, i) => { const t = Math.pow(10, 1 + (3 * i) / 59); return `${x(t)},${y(f(t))}`; }).join(" ");
+  let s = "";
+  for (const q of [0, 0.5, 0.8, 0.95, 1]) s += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(q)}" y2="${y(q)}" stroke="var(--line)"/><text x="${m.l - 6}" y="${y(q) + 4}" text-anchor="end" font-size="11" fill="var(--ink-2)">${q}</text>`;
+  for (const t of [10, 100, 1000, 10000]) s += `<text x="${x(t)}" y="${H - m.b + 16}" text-anchor="middle" font-size="11" fill="var(--ink-2)">${t >= 1000 ? t / 1000 + " s" : t + " ms"}</text>`;
+  s += `<line x1="${x(300)}" x2="${x(300)}" y1="${m.t}" y2="${H - m.b}" stroke="var(--hi)" stroke-dasharray="4 4"/><text x="${x(300) + 4}" y="${y(0.3)}" font-size="11" fill="var(--hi)">budget (waiting)</text>`;
+  s += `<polyline fill="none" stroke="var(--ink-2)" stroke-width="2" points="${curve((t) => 1 - Math.exp(-t / 2500))}"/><text x="${x(4000)}" y="${y(0.6)}" font-size="11" fill="var(--ink-2)">Reference</text>`;
+  s += `<polyline fill="none" stroke="var(--dev)" stroke-width="2.5" points="${curve((t) => 1 - 0.9 * Math.exp(-t / 90))}"/><text x="${x(60)}" y="${y(0.9)}" font-size="11" fill="var(--dev)">Contender</text>`;
+  s += `<text x="${(W + m.l) / 2}" y="${H - 4}" text-anchor="middle" font-size="11" fill="var(--ink-2)">time per goal</text><text transform="translate(12 ${H / 2}) rotate(-90)" text-anchor="middle" font-size="11" fill="var(--ink-2)">quality (fitness / record)</text>`;
+  $("profile").setAttribute("viewBox", `0 0 ${W} ${H}`);
+  $("profile").innerHTML = s;
+})();
+</script>
+</body></html>
