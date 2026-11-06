@@ -73,7 +73,7 @@ const throbScale = (t: number) => (t <= 0 || t >= 1 ? 1 : 1 + 0.15 * Math.sin(Ma
 export function draw(
   canvas: HTMLCanvasElement,
   scene: Scene,
-  { fullscreen, density, fps = true, sliding, sparkles = [], throb = null, cue = null, ripples = [], shake = null, pinThrob = null, used = 0, trace, finish = null, soul = null, waiting = false, stillRed = null, detail = 1, now = 0, hud = null, surface = null, labels = [] }: {
+  { fullscreen, density, fps = true, sliding, sparkles = [], throb = null, cue = null, ripples = [], shake = null, pinThrob = null, used = 0, trace, finish = null, soul = null, waiting = false, appear = 1, stillRed = null, detail = 1, now = 0, hud = null, surface = null, labels = [] }: {
     fullscreen: boolean;
     density: number;
     /** Whether the fps counter is showing. */
@@ -108,6 +108,9 @@ export function draw(
     labels?: { x: number; y: number; text: string }[];
     /** The next red block is shown, its soul not yet set off (the last one's finish plays). */
     waiting?: boolean;
+    /** How far the current goal has faded in since it was shown, 0..1: its red block (from
+     * its own colour), its target and its score track. */
+    appear?: number;
     /** A reached red block still red: its finish plays, or its soul is yet to set off. */
     stillRed?: string | null;
     /** The last red block's soul flying to the new one (world px), and when it set off. */
@@ -303,7 +306,7 @@ export function draw(
         : block.wall ? COLORS.wall
         : block.id === scene.dragging?.id ? COLORS.dragging
         : block.id === scene.stuckId ? COLORS.stuck
-        : isGoal ? (waiting ? COLORS.goalWaiting : soulK < SOUL.TRAVEL_MS && block.id === soul?.toId ? COLORS.goalWaiting : block.id === soul?.toId && soulFlash(soulK) > 0 ? mix(COLORS.goal, "#ffffff", soulFlash(soulK)) : COLORS.goal)
+        : isGoal ? (waiting ? mix(block.moved ? COLORS.moved : COLORS.block, COLORS.goalWaiting, appear) : soulK < SOUL.TRAVEL_MS && block.id === soul?.toId ? COLORS.goalWaiting : block.id === soul?.toId && soulFlash(soulK) > 0 ? mix(COLORS.goal, "#ffffff", soulFlash(soulK)) : COLORS.goal)
         : wasGoal ? doneColor(block.id)
         : block.moved ? COLORS.moved
         : COLORS.block;
@@ -380,14 +383,22 @@ export function draw(
     }
   }
 
+  ctx.save();
+  ctx.globalAlpha = appear;
   targets.forEach((t, i) => t.goal === goal && drawTarget(i));
+  ctx.restore();
 
   // Each target's score track, over the blocks: the current goal's as it is played, a
   // reached one's finish and then its row of stars.
   timed(ctx, "score tracks", () => {
     for (const { goal: g, cells } of targets) {
       // (Not an island square's: the bar at the top has its moves.)
-      if (g === goal && !g.unrated && !scene.locked) drawScoreTrack(ctx, trackRect(cells), fewestOf(g), used, { undone: g.undone });
+      if (g === goal && !g.unrated && !scene.locked) {
+        ctx.save();
+        ctx.globalAlpha = appear;
+        drawScoreTrack(ctx, trackRect(cells), fewestOf(g), used, { undone: g.undone });
+        ctx.restore();
+      }
       else if (g.used !== undefined && !g.step && !(finish?.island && finish.id === g.id)) drawScoreTrack(ctx, trackRect(cells), fewestOf(g), shownUsed(g)!, { t: finish?.id === g.id ? (finishClock(scene, finish, now) ?? Infinity) : Infinity, undone: g.undone, trace: finish?.id === g.id ? trace : undefined, detail });
     }
   });

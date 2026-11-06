@@ -295,6 +295,9 @@ function measured({ of, difficulty, choices }: Measured): void {
   }
   save();
 }
+/** When the current goal was shown: it fades in over APPEAR_MS. */
+let goalShownAt = -Infinity;
+const APPEAR_MS = 400;
 function showGoal(goal: Goal | null): void {
   job++; // anything still on its way is stale
   ahead.wanted = "";
@@ -305,6 +308,7 @@ function showGoal(goal: Goal | null): void {
   }
   if (goal) cutToGoal = false;
   scene.goal = goal;
+  goalShownAt = performance.now();
   if (goal) {
     goal.tries = tries;
     // (An island square's next goal counts from where the one before was reached: moves made
@@ -903,7 +907,7 @@ function redraw(): void {
     pace(now);
     const moving = advance(now);
     paint(now, moving);
-    if (animation || sparkles.length || flight || throb || cue || ripples.length || shake || finish || soul || pinThrob || fading()) redraw();
+    if (animation || sparkles.length || flight || throb || cue || ripples.length || shake || finish || soul || pinThrob || fading() || now < goalShownAt + APPEAR_MS) redraw();
   });
 }
 
@@ -1024,6 +1028,7 @@ function paint(now: number, moving: ReturnType<typeof sliding>, to: HTMLCanvasEl
         finish,
         soul,
         waiting: soulWaits(),
+        appear: Math.min(1, (now - goalShownAt) / APPEAR_MS),
         stillRed: finish?.id ?? soulFrom?.id ?? (soul && soul.born < 0 ? soul.from.id : null),
         trace,
         hud: scene.locked ? islandHud() : null,
