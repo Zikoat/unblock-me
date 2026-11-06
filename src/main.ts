@@ -792,7 +792,9 @@ function lockView(): void {
     }
     k = null;
   }
-  scene.locked = k === null ? null : islandRects(k);
+  // (The last square's bay shows only once its gate is open: shut, it floated outside.)
+  const shut = k !== null && isLast(k) && !!GATE && scene.moved.get(GATE.id) !== GATE_GONE;
+  scene.locked = k === null ? null : shut ? islandRects(k).slice(0, 1) : islandRects(k);
   scene.uiOnTop = k !== null && debug;
   if (k !== null && !flight) scene.camera = islandCamera(k, borderOnScreen(scene));
 }
