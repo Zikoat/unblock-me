@@ -240,14 +240,19 @@ export function drawScoreTrack(
     ctx.stroke();
     ctx.restore();
     // The move count, white with a shadow, at the start of the track.
-    const size = Math.min(T * 0.42, Math.max(8, ((fewest - 1) * w - T * 0.3) / (0.62 * String(used).length)));
+    // As big as fits before the first star (and no bigger than the stars): across a tall
+    // track its digits stand in that room, along a wide one they run into it.
+    const text = String(Math.round(used * grow)), digits = String(used).length;
+    const star = Math.min(T * 0.6, step * w * 0.8), room = fewest * w - star / 2;
+    const fits = vertical ? Math.min(room * 0.9, (T * 0.8) / (0.62 * digits)) : (room - T * 0.3) / (0.62 * digits);
+    const size = Math.max(8, Math.min(T * 0.42, star * 1.1, fits));
     // A picture made once (text with a shadow drawn every frame was slow).
-    const text = String(Math.round(used * grow)), font = `700 ${size}px system-ui, sans-serif`;
+    const font = `700 ${size}px system-ui, sans-serif`;
     ctx.save();
     ctx.globalAlpha = 1 - collapse;
     ctx.font = font;
     const tw = ctx.measureText(text).width, bw = tw + size * 0.4, bh = size * 1.4;
-    upright(vertical ? size * 0.9 : T * 0.18 + tw / 2, cv, () =>
+    upright(vertical ? Math.max(size * 0.5, room / 2) : T * 0.18 + tw / 2, cv, () =>
       sprite(ctx, `count:${text}:${size}`, bw, bh, null, (c) => {
         c.shadowColor = "rgba(0, 0, 0, 0.55)";
         c.shadowBlur = 2;
