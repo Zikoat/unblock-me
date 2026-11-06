@@ -2,7 +2,7 @@
 // page (copied as it is) or Markdown (made into a page).
 // The Markdown is the plain kind the analyses use: headings, paragraphs, lists, tables,
 // code blocks, **bold**, *italic*, `code` and [links](url).
-import { mkdir, readdir, readFile, rm, stat } from "node:fs/promises";
+import { cp, mkdir, readdir, readFile, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 
 const escape = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
@@ -104,6 +104,11 @@ export async function buildReports(from: string, to: string): Promise<void> {
   await mkdir(to, { recursive: true });
   const reports: { file: string; title: string; changed: Date }[] = [];
   for (const name of await readdir(from).catch(() => [])) {
+    // A folder is a report's files (its pictures and films), copied as they are.
+    if ((await stat(join(from, name))).isDirectory()) {
+      await cp(join(from, name), join(to, name), { recursive: true });
+      continue;
+    }
     const text = await readFile(join(from, name), "utf8");
     let title: string, file: string;
     if (name.endsWith(".html")) {
