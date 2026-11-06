@@ -654,14 +654,26 @@ export function screenFlash(ctx: CanvasRenderingContext2D, fx: Fx, width: number
 /** The red block's soul flying on to the next red block. */
 export const SOUL = { TRAVEL_MS: 1000, BURST_MS: 450 };
 /** How the soul looks (reports/soul.html compares them; `?soul=` picks one): the orb as it
- * was, or a smaller head with a trail: a ribbon (ember), a long streak (comet), a gold star
- * shedding sparks (sparks), or a small red block with ghosts of itself (ghost). */
-export const SOUL_STYLES = ["classic", "ember", "comet", "sparks", "ghost"] as const;
+ * was, or a red head with a trail (smallSoul): the head's look and the trail's vary. */
+export const SOUL_STYLES = ["classic", "comet", "ember", "rim", "drop", "flame", "beads", "ring", "sparkle", "gold"] as const;
 export type SoulStyle = (typeof SOUL_STYLES)[number];
 let soulStyle: SoulStyle = "classic";
 export const setSoulStyle = (s: string | null) => {
   if (SOUL_STYLES.includes(s as SoulStyle)) soulStyle = s as SoulStyle;
 };
+/** Whether the soul draws the old block's red in (it stays red till then), or the classic
+ * one (the block goes gold as its stars gather). */
+export const soulGathers = () => soulStyle !== "classic";
+/** The soul's parts in time, as shares of SOUL.TRAVEL_MS: the old block's red draws into a
+ * ball on it, then flies off, speeding up all the way into the new block. */
+const GATHER = 0.25;
+/** How far the new red block is knocked by the soul's hit (px, along its flight), `k` ms
+ * after the soul set off: a quick shove and back. */
+export function soulJolt(k: number, zoom: number): number {
+  if (soulStyle === "classic") return 0;
+  const t = (k - SOUL.TRAVEL_MS) / 260;
+  return t < 0 || t >= 1 ? 0 : 7 * big(zoom) * Math.sin(t * Math.PI) * (1 - t);
+}
 type Rect = { x: number; y: number; width: number; height: number };
 
 /** The soul `k` ms after it set off: it rises out of the old block as a glowing ghost of it,
@@ -752,122 +764,184 @@ export function soul(ctx: CanvasRenderingContext2D, from: Rect, to: Rect, k: num
   ctx.restore();
 }
 
-/** A smaller soul with a trail (see SOUL_STYLES): it leaves the old block's middle, flies
- * straight to the new one's, easing in and out, pours into it, and one thin ring goes out. */
+/** A red head with a trail (see SOUL_STYLES): the old block's red draws in to a ball on its
+ * middle (the block gold under it), which flies straight to the new block's middle, slow at
+ * first and faster all the way, dropping red sparks; it hits: a splash of red the way it
+ * was going, a ring, and the block knocked (soulJolt). */
 function smallSoul(ctx: CanvasRenderingContext2D, from: Rect, to: Rect, k: number, zoom: number, style: SoulStyle): void {
-  const B = big(zoom), p = clamp(k / SOUL.TRAVEL_MS), r = UNIT * 0.15 * B;
+  const B = big(zoom), p = clamp(k / SOUL.TRAVEL_MS), r = UNIT * 0.21 * B;
   const c0 = { x: from.x + from.width / 2, y: from.y + from.height / 2 }, c1 = { x: to.x + to.width / 2, y: to.y + to.height / 2 };
-  const along = (q: number) => {
-    const t = clamp(q), e = t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2;
+  const len = Math.hypot(c1.x - c0.x, c1.y - c0.y) || 1, dir = { x: (c1.x - c0.x) / len, y: (c1.y - c0.y) / len };
+  const along = (f: number) => {
+    const e = clamp(f) ** 2;
     return { x: c0.x + (c1.x - c0.x) * e, y: c0.y + (c1.y - c0.y) * e };
   };
+  const RED = "#d64545";
   ctx.save();
-  if (p < 1) {
-    const q = clamp(p / 0.9), pour = clamp((p - 0.9) / 0.1), at = along(q);
-    // The trail: where it was a moment ago, thinning and fading out behind it.
-    const ribbon = (n: number, dq: number, width: number, color: (f: number) => string) => {
+  if (p < GATHER) {
+    // The block's red draws in to the ball.
+    const g = p / GATHER, e = g < 0.5 ? 2 * g * g : 1 - (-2 * g + 2) ** 2 / 2;
+    const w = from.width + (2 * r - from.width) * e, h = from.height + (2 * r - from.height) * e;
+    ctx.fillStyle = RED;
+    ctx.beginPath();
+    ctx.roundRect(c0.x - w / 2, c0.y - h / 2, w, h, 8 + (r - 8) * e);
+    ctx.fill();
+  } else if (p < 1) {
+    const f = (p - GATHER) / (1 - GATHER), at = along(f);
+    const ribbon = (n: number, df: number, width: number, color: (t: number) => string) => {
       ctx.lineCap = "round";
       for (let j = n; j >= 1; j--) {
-        if (q - (j - 1) * dq <= 0) continue;
-        const a = along(q - j * dq), b = along(q - (j - 1) * dq), f = 1 - j / n;
-        ctx.strokeStyle = color(f);
-        ctx.lineWidth = Math.max(0.5, width * f);
+        if (f - (j - 1) * df <= 0) continue;
+        const a = along(f - j * df), b = along(f - (j - 1) * df), t = 1 - j / n;
+        ctx.strokeStyle = color(t);
+        ctx.lineWidth = Math.max(0.5, width * t);
         ctx.beginPath();
         ctx.moveTo(a.x, a.y);
         ctx.lineTo(b.x, b.y);
         ctx.stroke();
       }
     };
-    const fade = 1 - pour;
-    if (style === "ember") {
-      ribbon(22, 0.012, r * 1.6, (f) => `rgba(226, 72, 72, ${0.55 * f * fade})`);
-      glow(ctx, "soul", at.x, at.y, r * 2.6, 0.55 * fade);
-      ctx.globalAlpha = fade;
-      ctx.fillStyle = "#e04848";
-      ctx.beginPath();
-      ctx.arc(at.x, at.y, r, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "#ffe2e2";
-      ctx.beginPath();
-      ctx.arc(at.x - r * 0.25, at.y - r * 0.25, r * 0.4, 0, Math.PI * 2);
-      ctx.fill();
-    } else if (style === "comet") {
-      ribbon(40, 0.008, r * 1.4, (f) => `rgba(${Math.round(214 + 41 * f)}, ${Math.round(69 + 150 * f * f)}, ${Math.round(69 + 150 * f * f)}, ${0.7 * f * fade})`);
-      for (let i = 0; i < 8; i++) {
-        const born = (Math.floor(q * 40) - i) / 40;
+    // Sparks dropped along the way: deep red and gold with a dark edge, so they show on the
+    // pale board, drifting off and down as they fade.
+    const sparks = (n: number) => {
+      const step = 1 / 60, last = Math.floor(f / step);
+      for (let i = 0; i < n; i++) {
+        const born = (last - i) * step;
         if (born <= 0) continue;
-        const age = (q - born) / 0.2, h = hash(i + Math.floor(q * 40) * 7);
+        const age = (f - born) / 0.4;
         if (age >= 1) continue;
-        const sp = along(born);
-        ctx.globalAlpha = (1 - age) * fade;
-        ctx.fillStyle = "#ffd6d6";
+        const h1 = hash(last - i), h2 = hash(last - i + 500), sp = along(born);
+        const x = sp.x + (h1 - 0.5) * r * 7 * Math.sqrt(age), y = sp.y + (h2 - 0.5) * r * 5 * Math.sqrt(age) + r * 4 * age * age;
+        ctx.globalAlpha = 1 - age;
+        ctx.fillStyle = (last - i) % 3 ? "#c93838" : "#f2a81d";
+        ctx.strokeStyle = "rgba(90, 20, 20, 0.5)";
+        ctx.lineWidth = 0.8 * B;
         ctx.beginPath();
-        ctx.arc(sp.x + (h - 0.5) * r * 3 * age, sp.y + (hash(i + 31) - 0.5) * r * 3 * age, r * 0.18, 0, Math.PI * 2);
+        ctx.arc(x, y, r * (0.34 - 0.18 * age), 0, Math.PI * 2);
         ctx.fill();
+        ctx.stroke();
       }
       ctx.globalAlpha = 1;
-      glow(ctx, "soul", at.x, at.y, r * 3, 0.5 * fade);
-      ctx.globalAlpha = fade;
-      ctx.fillStyle = "#fff3f3";
+    };
+    const ball = (fill: string | CanvasGradient, radius = r) => {
+      ctx.fillStyle = fill;
       ctx.beginPath();
-      ctx.arc(at.x, at.y, r * 0.6, 0, Math.PI * 2);
+      ctx.arc(at.x, at.y, radius, 0, Math.PI * 2);
       ctx.fill();
-    } else if (style === "sparks") {
-      for (let j = 14; j >= 1; j--) {
-        const born = q - j * 0.035;
-        if (born <= 0) continue;
-        const sp = along(born), age = j / 14, h = hash(j + Math.floor((q - j * 0.035) / 0.035) * 13);
-        ctx.globalAlpha = (1 - age) * fade;
-        ctx.fillStyle = j % 2 ? "#ffcf3f" : "#f08080";
-        starShape(ctx, sp.x + (h - 0.5) * r * 2, sp.y + r * 2.5 * age * age, r * 0.55 * (1 - age * 0.6));
-        ctx.fill();
-      }
-      ctx.globalAlpha = 1;
-      glow(ctx, "gold", at.x, at.y, r * 2.4, 0.5 * fade);
-      ctx.globalAlpha = fade;
-      ctx.save();
-      ctx.translate(at.x, at.y);
-      ctx.rotate(q * Math.PI * 2);
-      ctx.fillStyle = "#ffcf3f";
-      ctx.strokeStyle = "#e07b00";
-      ctx.lineWidth = 1.5 * B;
-      starShape(ctx, 0, 0, r * 1.3);
-      ctx.fill();
+    };
+    const shaded = (inner: string, outer: string) => {
+      const g = ctx.createRadialGradient(at.x, at.y, 0, at.x, at.y, r);
+      g.addColorStop(0, inner);
+      g.addColorStop(1, outer);
+      return g;
+    };
+    const streak = (rgb: string) => ribbon(40, 0.012, r * 1.5, (t) => `rgba(${rgb}, ${0.75 * t})`);
+    if (style === "comet") {
+      streak("214, 69, 69");
+      sparks(14);
+      glow(ctx, "soul", at.x, at.y, r * 2.8, 0.5);
+      ball(shaded("#ef6a6a", RED));
+    } else if (style === "ember") {
+      ribbon(22, 0.016, r * 1.8, (t) => `rgba(214, 69, 69, ${0.6 * t})`);
+      sparks(10);
+      glow(ctx, "soul", at.x, at.y, r * 2.6, 0.5);
+      ball(RED);
+    } else if (style === "rim") {
+      streak("214, 69, 69");
+      sparks(14);
+      ball(RED);
+      ctx.strokeStyle = "#ffb0b0";
+      ctx.lineWidth = 2 * B;
       ctx.stroke();
-      ctx.restore();
-    } else {
-      // ghost: the old block in small, its shape kept, ghosts of itself behind.
-      const s = (r * 2.6) / Math.max(from.width, from.height), w = from.width * s, h = from.height * s;
-      for (let j = 5; j >= 0; j--) {
-        const g = along(q - j * 0.03);
-        ctx.globalAlpha = (j ? 0.35 * (1 - j / 6) : 1) * fade;
-        ctx.fillStyle = "#d64545";
+    } else if (style === "drop") {
+      // A teardrop: the ball drawn out to a point behind it, the trail part of it.
+      const tail = r * (2.5 + 3 * f), back = { x: at.x - dir.x * tail, y: at.y - dir.y * tail };
+      const g = ctx.createLinearGradient(back.x, back.y, at.x, at.y);
+      g.addColorStop(0, "rgba(214, 69, 69, 0)");
+      g.addColorStop(0.6, "rgba(214, 69, 69, 0.8)");
+      g.addColorStop(1, RED);
+      sparks(12);
+      ctx.fillStyle = g;
+      const a = Math.atan2(dir.y, dir.x);
+      ctx.beginPath();
+      ctx.moveTo(back.x, back.y);
+      ctx.arc(at.x, at.y, r, a - Math.PI / 2, a + Math.PI / 2);
+      ctx.closePath();
+      ctx.fill();
+      ball(RED);
+    } else if (style === "flame") {
+      ribbon(30, 0.012, r * 2.2, (t) => `rgba(245, 140, 50, ${0.5 * t})`);
+      ribbon(30, 0.01, r * 1.2, (t) => `rgba(214, 69, 69, ${0.8 * t})`);
+      sparks(16);
+      glow(ctx, "gold", at.x, at.y, r * 2.4, 0.5);
+      ball(shaded("#f58a3c", RED));
+    } else if (style === "beads") {
+      for (let j = 10; j >= 1; j--) {
+        const b = along(f - j * 0.035);
+        if (f - j * 0.035 <= 0) continue;
+        ctx.globalAlpha = 1 - j / 11;
+        ctx.fillStyle = RED;
         ctx.beginPath();
-        ctx.roundRect(g.x - w / 2, g.y - h / 2, w, h, 4 * B);
+        ctx.arc(b.x, b.y, r * (1 - j / 12), 0, Math.PI * 2);
         ctx.fill();
       }
-    }
-    if (pour > 0) {
-      // Pouring in: a pale copy of the new block fills it from its middle.
-      ctx.globalAlpha = 0.7 * pour;
-      ctx.fillStyle = "#ff8f8f";
-      const w = r * 2 + (to.width - r * 2) * pour, h = r * 2 + (to.height - r * 2) * pour;
+      ctx.globalAlpha = 1;
+      ball(RED);
+    } else if (style === "ring") {
+      streak("214, 69, 69");
+      sparks(14);
+      glow(ctx, "soul", at.x, at.y, r * 2.6, 0.45);
+      ctx.strokeStyle = RED;
+      ctx.lineWidth = r * 0.55;
       ctx.beginPath();
-      ctx.roundRect(c1.x - w / 2, c1.y - h / 2, w, h, 8);
+      ctx.arc(at.x, at.y, r * 0.75, 0, Math.PI * 2);
+      ctx.stroke();
+    } else if (style === "sparkle") {
+      streak("214, 69, 69");
+      sparks(14);
+      glow(ctx, "soul", at.x, at.y, r * 2.6, 0.5);
+      // A four-pointed glint, turning slowly.
+      ctx.translate(at.x, at.y);
+      ctx.rotate(f * Math.PI);
+      ctx.fillStyle = RED;
+      ctx.beginPath();
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2, rr = i % 2 ? r * 0.45 : r * 1.5;
+        ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
+      }
+      ctx.closePath();
       ctx.fill();
+    } else {
+      // gold: a red ball ringed in the stars' gold.
+      ribbon(26, 0.014, r * 1.6, (t) => `rgba(214, 69, 69, ${0.65 * t})`);
+      sparks(14);
+      ball(RED);
+      ctx.strokeStyle = "#f2b632";
+      ctx.lineWidth = 2.5 * B;
+      ctx.stroke();
     }
   } else {
+    // The hit: a splash of red drops thrown on the way it was going, a ring, a pale flash.
     const b = (k - SOUL.TRAVEL_MS) / SOUL.BURST_MS;
     if (b < 1) {
-      ctx.globalAlpha = (1 - b) ** 2 * 0.6;
-      ctx.fillStyle = "#ffffff";
+      ctx.globalAlpha = (1 - b) ** 2 * 0.5;
+      ctx.fillStyle = "#ffd0d0";
       ctx.beginPath();
       ctx.roundRect(to.x, to.y, to.width, to.height, 8);
       ctx.fill();
-      const grow = UNIT * 0.5 * B * easeOut(b);
+      const a0 = Math.atan2(dir.y, dir.x), out = easeOut(b);
+      for (let i = 0; i < 12; i++) {
+        const a = a0 + (hash(i + 70) - 0.5) * Math.PI * 1.3, d = UNIT * (0.5 + hash(i + 90) * 0.7) * B * out;
+        ctx.globalAlpha = 1 - b;
+        ctx.fillStyle = i % 3 ? "#c93838" : "#f2a81d";
+        ctx.beginPath();
+        ctx.arc(c1.x + Math.cos(a) * d, c1.y + Math.sin(a) * d + UNIT * 0.3 * B * b * b, r * 0.28 * (1 - b * 0.6), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      const grow = UNIT * 0.7 * B * out;
       ctx.globalAlpha = (1 - b) ** 1.5;
-      ctx.strokeStyle = style === "sparks" ? "#ffcf3f" : "#ff6b6b";
-      ctx.lineWidth = (3 * (1 - b) + 1) * B;
+      ctx.strokeStyle = RED;
+      ctx.lineWidth = (5 * (1 - b) + 1) * B;
       ctx.beginPath();
       ctx.roundRect(to.x - grow, to.y - grow, to.width + 2 * grow, to.height + 2 * grow, 8 + grow);
       ctx.stroke();

@@ -7,7 +7,7 @@ import { bestKnown, shownUsed, type Goal } from "./goal";
 import { islandSide, redId, squareOf } from "./island";
 import { timed } from "./perf";
 import { cinemaOverlay, dance, glitch, glitchShift, lit, overMore, tilt } from "./finish-fx2";
-import { onBlock, over, punch, quake, screenFlash, soul as drawSoul, SOUL, squash, timeWarp, under, wave, type Fx } from "./finish-fx";
+import { onBlock, over, punch, quake, screenFlash, soul as drawSoul, SOUL, soulGathers, soulJolt, squash, timeWarp, under, wave, type Fx } from "./finish-fx";
 import { borderOnScreen, latticeRect, quickPush, uiToolbar, visibleBlocks, whereIs, type Scene } from "./scene";
 
 export const COLORS = {
@@ -73,7 +73,7 @@ const throbScale = (t: number) => (t <= 0 || t >= 1 ? 1 : 1 + 0.15 * Math.sin(Ma
 export function draw(
   canvas: HTMLCanvasElement,
   scene: Scene,
-  { fullscreen, density, fps = true, sliding, sparkles = [], throb = null, cue = null, ripples = [], shake = null, pinThrob = null, used = 0, trace, finish = null, soul = null, waiting = false, detail = 1, now = 0, hud = null, surface = null, labels = [] }: {
+  { fullscreen, density, fps = true, sliding, sparkles = [], throb = null, cue = null, ripples = [], shake = null, pinThrob = null, used = 0, trace, finish = null, soul = null, waiting = false, stillRed = null, detail = 1, now = 0, hud = null, surface = null, labels = [] }: {
     fullscreen: boolean;
     density: number;
     /** Whether the fps counter is showing. */
@@ -108,6 +108,8 @@ export function draw(
     labels?: { x: number; y: number; text: string }[];
     /** The next red block is shown, its soul not yet set off (the last one's finish plays). */
     waiting?: boolean;
+    /** A reached red block still red: its finish plays, or its soul is yet to set off. */
+    stillRed?: string | null;
     /** The last red block's soul flying to the new one (world px), and when it set off. */
     soul?: { from: { x: number; y: number; width: number; height: number }; toId: string; born: number } | null;
     /** How much of the finish's detail to draw (less when frames come late: main.ts). */
@@ -244,6 +246,7 @@ export function draw(
    * as they gather. */
   const doneColor = (id: string) => {
     if (finish?.island && finish.id === id) return COLORS.goal; // an island square's stays red (its card goes gold)
+    if (soulGathers() && id === stillRed) return COLORS.goal; // red till its soul draws it in
     const g = finish?.id === id ? scene.done.find((d) => d.id === id) : null;
     if (!g || g.used === undefined || g.step) return COLORS.done;
     const k = Math.max(0, Math.min(1, (finishClock(scene, finish, now)! - finishTimes(fewestOf(g), shownUsed(g)!).gather) / FINISH.GATHER_MS));
@@ -300,7 +303,7 @@ export function draw(
         : block.wall ? COLORS.wall
         : block.id === scene.dragging?.id ? COLORS.dragging
         : block.id === scene.stuckId ? COLORS.stuck
-        : isGoal ? (waiting ? COLORS.goalWaiting : soulK < SOUL.TRAVEL_MS && block.id === soul?.toId ? mix(COLORS.goalWaiting, COLORS.goal, Math.max(0, (soulK / SOUL.TRAVEL_MS - 0.85) / 0.15)) : COLORS.goal)
+        : isGoal ? (waiting ? COLORS.goalWaiting : soulK < SOUL.TRAVEL_MS && block.id === soul?.toId ? (soulGathers() ? COLORS.goalWaiting : mix(COLORS.goalWaiting, COLORS.goal, Math.max(0, (soulK / SOUL.TRAVEL_MS - 0.85) / 0.15))) : COLORS.goal)
         : wasGoal ? doneColor(block.id)
         : block.moved ? COLORS.moved
         : COLORS.block;
@@ -325,9 +328,16 @@ export function draw(
         ctx.scale(squashed.sx, squashed.sy);
         ctx.translate(-squashed.about.x, -squashed.about.y);
       }
-      if (beat !== 1 || jolt) {
+      // The new red block knocked as the soul hits it, the way it flew.
+      const hit = soul && block.id === soul.toId ? soulJolt(soulK, camera.scale) : 0;
+      if (beat !== 1 || jolt || hit) {
         ctx.save();
         if (jolt) ctx.translate(block.w > block.h ? jolt : 0, block.w > block.h ? 0 : jolt);
+        if (hit) {
+          const fx0 = soul!.from.x + soul!.from.width / 2, fy0 = soul!.from.y + soul!.from.height / 2;
+          const dx = (block.x + block.w / 2) * UNIT - fx0, dy = (block.y + block.h / 2) * UNIT - fy0, d = Math.hypot(dx, dy) || 1;
+          ctx.translate((dx / d) * hit, (dy / d) * hit);
+        }
         const cx = (block.x + block.w / 2) * UNIT, cy = (block.y + block.h / 2) * UNIT;
         ctx.translate(cx, cy);
         ctx.scale(beat, beat);

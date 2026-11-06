@@ -460,8 +460,8 @@ const STEP_MS = 700;
 // Once the finish is over, the red block's soul flies from it (`soulFrom`, world px) to the
 // next red block, the view gliding along; the new block throbs once it arrives.
 type WorldRect = { x: number; y: number; width: number; height: number };
-let soulFrom: WorldRect | null = null;
-let soul: { from: WorldRect; toId: string; born: number } | null = null;
+let soulFrom: (WorldRect & { id: string }) | null = null;
+let soul: { from: WorldRect & { id: string }; toId: string; born: number } | null = null;
 /** The last red block's soul flies to the new one (shown already, muted, while the finish
  * played), the view following it there; on the island to the square's middle, at its zoom. */
 function sendSoul(): void {
@@ -515,7 +515,7 @@ function reachGoal(now: number): void {
     };
   });
   // The next goal shows at once (its red block muted until the soul gets there).
-  soulFrom = { x: at.x * UNIT + 3, y: at.y * UNIT + 3, width: red.w * UNIT - 6, height: red.h * UNIT - 6 };
+  soulFrom = { id: goal.id, x: at.x * UNIT + 3, y: at.y * UNIT + 3, width: red.w * UNIT - 6, height: red.h * UNIT - 6 };
   requestGoal(goal.target, true);
   save();
 }
@@ -1017,6 +1017,7 @@ function paint(now: number, moving: ReturnType<typeof sliding>, to: HTMLCanvasEl
         finish,
         soul,
         waiting: soulWaits(),
+        stillRed: finish?.id ?? soulFrom?.id ?? (soul && soul.born < 0 ? soul.from.id : null),
         trace,
         hud: scene.locked ? islandHud() : null,
         surface: surface(now),
