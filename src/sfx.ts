@@ -278,23 +278,9 @@ const SOUNDS: Record<Sound, Make> = {
     tone(a, out, t, 220, 110, 0.2, 0.3);
   },
   soul(a, out, t) {
-    // A steady, airy tone as it flies (no wobble nor glide: they sounded goofy), a bright
-    // bell as it arrives.
-    const g = a.createGain();
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(0.09, t + 0.3);
-    g.gain.setValueAtTime(0.09, t + 0.75);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 1.05);
-    g.connect(out);
-    for (const [f, type] of [[659, "sine"], [988, "triangle"]] as const) {
-      const o = a.createOscillator();
-      o.type = type;
-      o.frequency.value = f;
-      o.connect(g);
-      o.start(t);
-      o.stop(t + 1.1);
-    }
-    noise(a, out, t, 1, 0.05, "bandpass", 1800, 1800, 0.4, 3);
+    // A soft airy rush as it flies (held tones sounded like a train horn; a wobble and glide,
+    // goofy), a bright bell as it arrives.
+    noise(a, out, t, 1, 0.07, "bandpass", 2400, 2400, 0.45, 1.2);
     bell(a, out, t + 1, 1318, 0.9, 0.25);
     bell(a, out, t + 1, 1975, 0.7, 0.12);
   },
