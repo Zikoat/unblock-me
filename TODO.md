@@ -5,7 +5,6 @@
 - Special goals styled as a flame or a glint that unlock those souls (src/main.ts SOUL_UNLOCK: for now they unlock after 7 world goals); waits on deciding how special goals look and are placed.
 - Walls in generated boards (dead ends to plan around); waits on a difficulty measure to tune them against.
 - Density × walls report graph; waits on walls in generated boards.
-- Pins pointing the same way can overlap (red wins the tap); waits on seeing it bother you in play.
 - Faster `Window.lower` (half the measure's time: array scans, allocations per call); waits on tournament levels 2-3 being too slow in play.
 - Difficulty's branching counts slides, not blocks (choices a move now counts chain blocks, but the score doesn't); waits on playtesting whether the score tracks felt hardness.
 - A* cap per density (95% finds the fewest moves): a background agent is tuning it; when it reports, review, test, push and update the report's "Being tuned" line.
@@ -65,7 +64,7 @@ These have been suggested by AI (Claude, in conversation) and are not necessaril
 
 ### Finish, animation and game feel
 - **Done**: landing hit, star bursts, medal blast, confetti, word, gather arcs, shine, stars in from the edges, streaks, fireworks, zoom punch, soul to the next red block with the camera following, slow motion and hit-stop, grid shock waves with hopping blocks, orbiting stars, +1s, giant rays, star rain, letterbox and speed lines, lightning, giant medal, glitch, stamp, dance party, emoji.
-- **Recommended**: scale the finish with the result (full show for medals and perfect solves, short for ordinary goals) and let a tap skip or speed it up; a ~10 s finish every goal will tire.
+- **Recommended**: scale the finish with the result (full show for medals and perfect solves, short for ordinary goals); a ~10 s finish every goal will tire. (**Done**: a tap skips it and the soul.)
 - **Not chosen**: full-screen vignette in the slow motion (removed: too costly to draw).
 - **Suggested**: haptics (navigator.vibrate, Android).
 - **Recommended**: Tweakpane (or lil-gui) in the inspector to tune timings, counts, sizes, colours and volumes live.
