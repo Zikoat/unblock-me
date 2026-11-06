@@ -2,6 +2,7 @@
 
 ## Later
 
+- Special goals styled as a flame or a glint that unlock those souls (src/main.ts SOUL_UNLOCK: for now they unlock after 7 world goals); waits on deciding how special goals look and are placed.
 - Walls in generated boards (dead ends to plan around); waits on a difficulty measure to tune them against.
 - Density × walls report graph; waits on walls in generated boards.
 - Pins pointing the same way can overlap (red wins the tap); waits on seeing it bother you in play.
