@@ -10,7 +10,7 @@ import * as sfx from "./sfx";
 import { timedFrame } from "./perf";
 import { bestKnown, medal, rampTarget, shownUsed, viewCentre, type Goal } from "./goal";
 import type { GoalRequest } from "./goal-worker";
-import { Gestures, type Input } from "./gestures";
+import { Gestures, TAP_SLOP, type Input } from "./gestures";
 import { ISLAND_LEVELS } from "./island-levels";
 import { bayReached, GATE, GATE_GONE, inIsland, opensGate, isLast, islandCamera, islandGoals, islandRects, nextIslandGoal, squareAt, squareMiddle, squareOf } from "./island";
 import { fixedLayout, MAX_TRIES, MIN_TRIES, randomLayout, TRIES, UNIT, type Placed, type Ui } from "./layout";
@@ -743,7 +743,7 @@ function surface(now: number): { rects: Rect[]; alpha: number } | null {
 /** Each island square's level, on its top wall. */
 const LABELS = ISLAND_LEVELS.map((_, k) => ({ x: squareMiddle(k).x, y: squareAt(k).y - 0.5, text: `Level ${k + 1}` }));
 
-/** A press while a finish plays skips to its end (its stars shown, its sounds left out):
+/** A tap while a finish plays skips to its end (its stars shown, its sounds left out):
  * whether there was one to skip. */
 function skipFinish(now: number): boolean {
   if (!finish || finish.quiet || finish.heard === Infinity || now - finish.born >= finish.end) return false;
@@ -1177,9 +1177,12 @@ let pinThrob: { pin: "red" | "ui"; born: number } | null = null;
 // page goes away.
 for (const type of ["touchstart", "touchend", "pointerup", "click", "keydown"]) addEventListener(type, () => sfx.unlock(type), { capture: true, passive: true });
 addEventListener("pagehide", () => sfx.release());
+/** Presses begun while a finish played (where): one that ends as a tap skips it (a drag
+ * doesn't), see skipFinish. */
+const pressedInFinish = new Map<number, { x: number; y: number }>();
 canvas.addEventListener("pointerdown", (e) => {
   if (inspector?.open) return; // the board is a replay while it is open
-  if (skipFinish(performance.now())) return;
+  if (finish) pressedInFinish.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (finish?.island) return; // under an island square's finish card
   if (e.pointerType === "mouse" && e.button !== 0) return;
   canvas.setPointerCapture(e.pointerId);
@@ -1215,6 +1218,9 @@ canvas.addEventListener("pointerup", (e) => {
     redraw();
     return;
   }
+  const pressed = pressedInFinish.get(e.pointerId);
+  pressedInFinish.delete(e.pointerId);
+  if (pressed && Math.hypot(e.clientX - pressed.x, e.clientY - pressed.y) < TAP_SLOP) skipFinish(performance.now());
   const tapped = scene.circle;
   gestures.up(e.pointerId, point(e));
   if (scene.circle && scene.circle !== tapped) {
@@ -1224,6 +1230,7 @@ canvas.addEventListener("pointerup", (e) => {
   redraw();
 });
 canvas.addEventListener("pointercancel", (e) => {
+  pressedInFinish.delete(e.pointerId);
   if (e.pointerId === onArrow) onArrow = null;
   gestures.cancel(e.pointerId);
   redraw();
