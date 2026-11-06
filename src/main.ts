@@ -939,8 +939,10 @@ function pace(now: number): void {
     keepDetail();
   }
 }
-/** The step is kept for next time, so a slow phone starts where it got to. */
+/** The step is kept for next time, so a slow phone starts where it got to (not while a
+ * shared board is open: nothing is stored then). */
 function keepDetail(): void {
+  if (shared) return;
   try {
     localStorage.setItem(DETAIL_KEY, String(detailStep));
   } catch {
