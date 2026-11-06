@@ -297,7 +297,7 @@ function measured({ of, difficulty, choices }: Measured): void {
 }
 /** When the current goal was shown: it fades in over APPEAR_MS. */
 let goalShownAt = -Infinity;
-const APPEAR_MS = 400;
+const APPEAR_MS = 200;
 function showGoal(goal: Goal | null): void {
   job++; // anything still on its way is stale
   ahead.wanted = "";
