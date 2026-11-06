@@ -29,13 +29,13 @@
   .chapters button.on { color: var(--ink); border-color: var(--ink-2); font-weight: 600; }
   .goals { margin: 0 0 14px; } .goals a { text-decoration: none; font-size: 14px; color: var(--ink-2); border: 1px solid var(--line); border-radius: 999px; padding: 3px 12px; }
   .goals a.on { color: var(--ink); border-color: var(--ink-2); font-weight: 600; }
-  .formula { font: 15px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; margin: 0 0 12px; overflow-x: auto; white-space: pre; }
-  dl.terms { display: grid; grid-template-columns: minmax(130px, max-content) 1fr; gap: 6px 16px; margin: 0; }
-  dl.terms dt { font-weight: 650; } dl.terms dd { margin: 0; color: var(--ink-2); max-width: 70ch; }
-  .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
-  .bar { display: inline-block; height: 10px; border-radius: 0 3px 3px 0; background: var(--hi); vertical-align: -1px; margin-right: 6px; }
-  tr.win td { font-weight: 650; }
-  .caption { margin-top: 10px; min-height: 4.5em; max-width: 80ch; }
+  .rule { font-size: 15px; color: var(--ink-2); }
+  .big-math { font-size: 21px; margin: 10px 0; overflow-x: auto; }
+  .terms { display: flex; flex-wrap: wrap; gap: 4px 18px; font-size: 13px; color: var(--ink-2); margin-bottom: 8px; }
+  .terms b { color: var(--ink); font-weight: 600; }
+  .note { font-size: 14px; color: var(--ink-2); margin: 0; text-align: center; }
+  #scatter circle[data-i] { cursor: pointer; }
+  .caption { margin-top: 10px; min-height: 3em; max-width: 80ch; }
   .caption b { font-weight: 650; }
   .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--ink-2); margin-top: 8px; }
   .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
@@ -50,12 +50,11 @@
 </style></head><body><main>
 <a class="back" href="./">← All reports</a>
 <h1>How a goal is made</h1>
-<p class="sub">One world goal made step by step, each step logged and played back: which blocks were tried as the red block, how they were pushed, how every cell they reached was measured, and how A* found the fewest moves for the best few. Seed <span id="seed"></span>, density <span id="tries"></span>, effort level 2 (the next goal, made ahead while the player solves the current one). <span id="aimText"></span></p>
+<p class="sub">One goal's search, logged and played back. Seed <span id="seed"></span>, density <span id="tries"></span>. <span id="aimText"></span></p>
 <div class="chapters goals" id="goals"></div>
 <div class="tiles" id="tiles"></div>
 
 <h2>The film</h2>
-<p class="sub">Play it through, or jump to a chapter. The caption under it says what each step is doing.</p>
 <div class="card player">
   <canvas id="film" role="img" aria-label="Animation of the goal search on one board"></canvas>
   <div class="controls">
@@ -68,61 +67,35 @@
   <div class="chapters" id="chapters"></div>
   <div class="caption" id="caption"></div>
   <div class="legend">
-    <span><i style="background:var(--red)"></i>Red block (the one pushed or measured)</span>
+    <span><i style="background:var(--red)"></i>Red block</span>
     <span><i style="background:transparent;border:2px solid var(--cand)"></i>Candidate red blocks</span>
-    <span><i style="background:var(--hi)"></i>Block just moved</span>
+    <span><i style="background:var(--hi)"></i>Moving</span>
     <span><i style="background:var(--wall)"></i>Wall / standing still</span>
     <span>●→ makes way for</span>
-    <span>Fewest moves<span class="ramp" id="ramp"></span>(ring: only a lower bound)</span>
+    <span>Fewest moves<span class="ramp" id="ramp"></span>(ring: at least)</span>
   </div>
 </div>
 
-<h2>How it works</h2>
-<ol>
-  <li><b>Candidates.</b> The sliding blocks nearest the last target (in the 8×8 box round it), at most 12, nearest first; not an earlier red block, nor one on its track.</li>
-  <li><b>Push search</b> (<code>pushes</code>, src/goal-fast.ts). Each candidate is pushed both ways one cell at a time. Before each step, a small backwards search clears the cell ahead: the block in it slides away, which may need other blocks out of its way first (at most <span class="s-perCell"></span> moves a cell, depth-first with prunings). A push stops when a cell can't be cleared, or its share of the work budget is spent (<span class="s-goalBudget"></span> ticks for all pushes, each cell costing <span class="s-cellCost"></span>). The moves so far prove its cell can be reached.</li>
-  <li><b>Rough measure.</b> Every cell reached is a candidate target. Its proof is shortened (moves folded together where the sequence still plays), and A* gets <span class="s-rough"></span> boards to find its fewest moves: exact if it finishes, else only a lower bound.</li>
-  <li><b>Ranking.</b> Nearest the ramp's aim first; then by difficulty for the distance: score / distance<sup>0.6</sup>, halved for each block on the red block's own track (score = fewest moves × log₂ of the average moves to choose from); then the shorter proof.</li>
-  <li><b>Exact measure</b> (<code>measure</code>, src/difficulty.ts) for the best <span class="s-finalists"></span>, with up to <span class="s-exact"></span> boards. The search runs in a window round the red block's run (2 cells round, widened to fit the proof), where only the blocks a chain of lanes links to the red block or the proof may slide; everything else stands still. First a greedy pass (weight 4 on the lower bound) finds some solution fast; then plain A* proves nothing shorter exists, skipping boards that can't beat it. A shorter solution replaces the push's proof.</li>
-  <li><b>The goal.</b> The finalists are ranked again with their exact measures; the best is the goal, its solution checked to replay on the real board.</li>
-</ol>
-
-<h2>What a goal is optimised for</h2>
-<p class="sub">A goal should be hard (many moves, many choices on the way) but near (the player shouldn't travel, and a long push is mostly sliding). The candidates are filtered, then sorted by a key of four parts, each breaking the ties of the one before:</p>
-<div class="formula">rank: 1. |M − aim|      smaller first (during the ramp only)
-      2. balance        bigger first
-      3. proof length   shorter first
-      4. d              nearer first
-
-balance = score / d^0.6 × 0.5^n
-score   = M × log₂ b</div>
-<dl class="terms">
-  <dt>M: fewest moves</dt><dd>The fewest moves that solve it (one block sliding any distance is one move), by A* in a window round the red block's run; a lower bound when the search stops first. The player's moves are compared with it for medals.</dd>
-  <dt>b: choices</dt><dd>The legal moves on an average board the search expanded: how many ways the player could go at each step (counted in the window, so mostly blocks that matter).</dd>
-  <dt>score</dt><dd>M × log₂ b: the size of the tree of move sequences as long as the shortest solution, in bits; each point doubles it. 7 moves at 16 choices is 28.</dd>
-  <dt>d: distance</dt><dd>Cells the red block travels to its target, divided out as d<sup>0.6</sup>: a goal twice as far needs a score about 1.5× higher to win, so a near goal nearly as hard wins. (A power of 0 would nearly always take the furthest cell; 1 would rank by score per cell.) Tuned on play data (play-analysis).</dd>
-  <dt>n: blocks on the track</dt><dd>Blocks lying the same way in the red block's own lane, between it and the target: they can only be pushed ahead of it, tedious rather than hard. Each halves the balance (blocks-on-track).</dd>
-  <dt>aim</dt><dd>The first 30 world goals ramp up: goal k aims at round(4 + 6k / 30) fewest moves, 4 for the first and 10 for the 30th. During the ramp the candidates nearest the aim always win; after it there is no aim (world-ramp).</dd>
-  <dt>Near the last target</dt><dd>Not scored but a filter: only blocks in the 8×8 box round the last target can be the red block (nearest first, at most 12), so the next goal starts within about 4 cells of where the last one ended.</dd>
-  <dt>Rules</dt><dd>Not an earlier red block, nor a block on its row (horizontal) or column (vertical); the target never on an earlier target's cells; the solution must replay on the real board.</dd>
-</dl>
-<div class="two" style="margin-top:14px">
-  <div class="card"><b style="font-size:14px">The aim over the first world goals</b><svg id="rampChart" role="img" aria-label="Aimed fewest moves by world goal"></svg></div>
-  <div class="card"><b style="font-size:14px">What distance costs: the balance for the same score</b><svg id="distChart" role="img" aria-label="Balance multiplier by distance"></svg></div>
+<h2>How a goal is ranked</h2>
+<div class="card">
+  <div class="rule"><span id="aimRule"></span>then the highest balance:</div>
+  <math display="block" class="big-math" id="formula"></math>
+  <div class="terms">
+    <span><b>fewest moves</b> to solve it (A*)</span>
+    <span><b>choices</b>: legal moves on an average board</span>
+    <span><b>distance</b>: cells the red block travels</span>
+    <span><b>track blocks</b>: blocks in its own lane it must push ahead</span>
+  </div>
+  <svg id="scatter" role="img" aria-label="Candidate targets: difficulty by distance, with lines of equal balance"></svg>
+  <math display="block" class="big-math" id="filled"></math>
+  <p class="note" id="picked"></p>
 </div>
-<h3 style="font-size:16px;margin:18px 0 6px">This goal's ranking, term by term</h3>
-<p class="sub">The 12 best candidates after the rough measure (≥: only a lower bound). The finalists then get the exact measure, which can change their M, b and order.</p>
-<div class="card"><table id="ranking"></table></div>
-
-<h2>Every candidate target</h2>
-<p class="sub">Each cell the pushes reached, by how far the red block went and its fewest moves from the rough measure. Bigger dots are more candidates; a ring is a lower bound (the rough measure ran out first). The dashed line is the aim, if any. Hover for counts.</p>
-<div class="card"><svg id="scatter" role="img" aria-label="Candidate targets by distance and fewest moves"></svg></div>
+<p class="sub" style="margin-top:8px">Every target the pushes reached. Up is harder (the formula's top), right is further (its bottom); each curve is one balance, so the winner sits on the highest curve. <span id="aimNote"></span>Hover or tap a dot to fill in the formula. Not scored: the red block must start within the 8×8 box round the last target. Ties go to the shorter solution.</p>
 
 <h2>The finalists</h2>
-<p class="sub">The best four after the rough measure, measured exactly. Boards: how many A* expanded (greedy pass + exact pass).</p>
 <div class="card"><table id="finals"></table></div>
 
-<h2>What it shows</h2>
+<h2>Takeaways</h2>
 <ul id="conclusions"></ul>
 <div class="tip" id="tip"></div>
 </main>
@@ -140,16 +113,15 @@ const dirName = (id, dir) => { const b = D.blocks.find((x) => x.id === id); retu
 
 // ---- Text bits ----
 $("seed").textContent = D.seed; $("tries").textContent = D.tries;
-$("aimText").innerHTML = D.target != null ? `Aiming at ${D.target} moves: the ramp's aim for the 16th world goal.` : `No aim: past the ramp's first 30 world goals, the hardest for the distance wins.`;
+$("aimText").innerHTML = D.target != null ? `The 16th world goal: the ramp aims at ${D.target} moves.` : `After the ramp: no aim.`;
 $("goals").innerHTML = [["a", "Goal 16 (aim 7)"], ["b", "A later goal (no aim)"]].map(([k, t]) => `<a href="?goal=${k}" class="${k === GOAL ? "on" : ""}">${t}</a>`).join(" ") + ` <span style="font-size:13px;color:var(--ink-2)">(the same board and place)</span>`;
 for (const [k, v] of Object.entries(D.settings)) document.querySelectorAll(".s-" + k).forEach((e) => (e.textContent = fmt(v)));
-const cells = P.reduce((n, p) => n + p.cells.length, 0), pushMoves = P.reduce((n, p) => n + p.cells.reduce((m, c) => m + c.plan.length, 0), 0);
-const exactRough = C.filter((c) => c.rough.moves !== null).length;
+
+
 const boards = F.reduce((n, f) => n + f.expanded, 0);
 const tiles = [
-  [D.red.length, "candidate red blocks"], [P.length, "pushes (both ways)"], [fmt(pushMoves), "moves the pushes made"],
-  [C.length, "candidate targets"], [`${exactRough}`, `measured exactly by the rough pass (${Math.round((100 * exactRough) / C.length)}%)`],
-  [F.length, "finalists"], [boards, "boards A* expanded for them"], [winnerFinal.difficulty.moves, `fewest moves of the goal (push's proof: ${winnerFinal.pushSolution.length})`],
+  [D.red.length, "candidate red blocks"], [C.length, "candidate targets"], [F.length, "finalists"],
+  [fmt(boards), "boards A* searched for them"], [winnerFinal.difficulty.moves, `fewest moves (push found ${winnerFinal.pushSolution.length})`],
 ];
 $("tiles").innerHTML = tiles.map(([b, w]) => `<div class="tile"><div class="big">${b}</div><div class="what">${w}</div></div>`).join("");
 
@@ -246,7 +218,7 @@ add({ chapter: "Candidates", dur: 6000, cam: nearCam, draw(v, lt) {
   const n = Math.min(D.red.length, Math.floor(Math.max(0, lt - 1200) / 220));
   board(v, { style: (id) => (D.red.indexOf(id) >= 0 && D.red.indexOf(id) < n ? "cand" : null), numbers: n });
   nearMark(v);
-}, caption: () => `The last target was round the <b>cross</b>; the next goal is made near it, so the player needn't travel. The sliding blocks in the <b>8×8 box</b>, nearest first, are the <b>candidate red blocks</b> (here ${D.red.length}, the most allowed at this effort). Which one becomes the red block is free.` });
+}, caption: () => `<b>Candidates:</b> the ${D.red.length} sliding blocks nearest the last target (cross), in its 8×8 box.` });
 
 // Chapter 2: the pushes, the first one slowly.
 P.forEach((p, i) => {
@@ -268,12 +240,12 @@ P.forEach((p, i) => {
     hud(v, [`push ${i + 1} of ${P.length}: ${p.id} ${dirName(p.id, p.dir)}`, `cell ${Math.min(p.cells.length, (cur?.cell ?? 0) + (done >= moves.length ? 1 : 0))} of ${p.cells.length}`]);
   }, caption(lt) {
     const t = Math.max(0, lt - (i === 0 ? 1500 : 0)) / ms, done = Math.floor(t), cur = moves[Math.min(done, moves.length - 1)];
-    const end = done >= moves.length ? ` It stopped: ${p.stop === "stuck" ? `the next cell (×) can't be cleared in ${D.settings.perCell} moves or fewer` : "its share of the work budget ran out (the next cell could be cleared, given more)"}.` : "";
+    const end = done >= moves.length ? ` Stopped: ${p.stop === "stuck" ? "the next cell (×) can't be cleared" : "its budget ran out"}.` : "";
     if (i === 0) {
       const c = p.cells[cur.cell];
-      return `<b>Push search.</b> Each candidate is pushed one cell at a time. Here block ${p.id} goes ${dirName(p.id, p.dir)}: before each step, a small backwards search clears the cell ahead, moving the blocker away, and whatever is in <i>its</i> way first (blue: the block moving). Cell ${cur.cell + 1} took ${c.plan.length - 1} move${c.plan.length === 2 ? "" : "s"} to clear. Every cell it reaches (dots) is a candidate target, the moves so far its proof. The arrows are the chain: each block to move points at the block it makes way for, ending at the red block.${end}`;
+      return `<b>Push search:</b> ${p.id} is pushed ${dirName(p.id, p.dir)} a cell at a time; blocks in the way move first (blue), the arrows showing which block each makes way for. Every cell reached (dot) is a possible target.${end}`;
     }
-    return `<b>Push ${i + 1} of ${P.length}:</b> ${p.id} ${dirName(p.id, p.dir)}, ${p.cells.length} cells in ${moves.length} moves. Each candidate is pushed both ways; the board is reset between pushes. Each push gets an equal share of the budget the pushes before it left.${end}`;
+    return `<b>Push ${i + 1} of ${P.length}:</b> ${p.id} ${dirName(p.id, p.dir)}, ${p.cells.length} cells.${end}`;
   } });
 });
 
@@ -285,7 +257,7 @@ add({ chapter: "Rough measure", dur: 7000, cam: pushCam, draw(v, lt) {
   const shown = Math.floor(clamp((lt - 500) / 3500) * C.length);
   dots(v, allCands.map(({ c, i }) => (i < shown ? { at: c.target, color: seq(valueOf(c)), ring: c.rough.moves === null, r: 0.3 } : { at: c.target, color: css("--ink-2"), r: 0.16 })));
   hud(v, [`measured ${Math.min(shown, C.length)} of ${C.length} targets`]);
-}, caption: () => `<b>Rough measure.</b> All ${C.length} cells reached are candidate targets. Each proof is shortened (a block's moves folded into one where the sequence still plays), then A* looks for the fewest moves with only ${fmt(D.settings.rough)} boards. ${exactRough} finished (filled dots: darker is more moves); the rest only got a lower bound (rings).` });
+}, caption: () => `<b>Rough measure:</b> a quick A* (${fmt(D.settings.rough)} boards) gives each of the ${C.length} targets its fewest moves; rings are only a lower bound.` });
 
 const rankCam = bbox(order.flatMap((k) => { const b = home.get(C[k].id); return [C[k].target, [b.x, b.y]]; }), 5);
 add({ chapter: "Ranking", dur: 7500, cam: rankCam, draw(v, lt) {
@@ -293,7 +265,7 @@ add({ chapter: "Ranking", dur: 7500, cam: rankCam, draw(v, lt) {
   board(v, { style: (id) => (order.some((k) => C[k].id === id) ? "red" : null) });
   dots(v, allCands.filter(({ i }) => !order.includes(i)).map(({ c }) => ({ at: c.target, color: seq(valueOf(c)), ring: c.rough.moves === null, r: 0.3 - 0.14 * fade, alpha: 1 - 0.75 * fade })));
   order.forEach((k, j) => { if (lt > 1800 + j * 600) target(v, C[k], String(j + 1)); });
-}, caption: () => `<b>Ranking.</b> ${D.target != null ? `Nearest the ramp's aim (${D.target} moves) first; ${C.filter((c) => c.off === 0).length} targets hit it. Among those, the most` : "No aim past the ramp, so the most"} difficult for the distance wins: the score (fewest moves × log₂ of the moves to choose from) over distance<sup>0.6</sup>, halved per block on the red block's own track. The best ${F.length} (dashed, numbered) go on to the exact measure.` });
+}, caption: () => `<b>Ranking:</b> ${D.target != null ? `closest to ${D.target} moves, then ` : ""}the highest balance (formula below). The best ${F.length} go on.` });
 
 // Chapter 4: the exact measure of each finalist.
 F.forEach((f, j) => {
@@ -319,14 +291,14 @@ F.forEach((f, j) => {
     else hud(v, [`finalist ${j + 1} of ${F.length}: ${c.id}`, `${w.sliders.length} blocks may slide`]);
   }, caption(lt) {
     const k = Math.min(nf - 1, Math.floor(Math.max(0, lt - intro) / ms)), frame = f.frames[k];
-    if (lt < intro) return `<b>Exact measure, finalist ${j + 1}.</b> The search runs in a <b>window</b> (the box) round the red block's run to its target (dashed). Only the ${w.sliders.length} blocks linked to the red block or the proof by a chain of lanes may slide; the rest (hatched) stand still. That keeps the boards to search few.`;
+    if (lt < intro) return `<b>Exact measure, finalist ${j + 1}:</b> A* in the window (box), where only the ${w.sliders.length} linked blocks may slide; hatched ones stand still.`;
     if (lt >= intro + nf * ms) {
       const shorter = f.solution.length < f.pushSolution.length;
-      return `<b>Finalist ${j + 1}: ${f.difficulty.moves} moves</b> at the fewest, ${fmt(f.expanded)} boards expanded, ${f.difficulty.branching} moves to choose from on an average one (score ${f.difficulty.score}). ${shorter ? `A* found a shorter solution than the push's proof (${f.pushSolution.length} moves): it replaces it, shown being played.` : `The push's proof was already that short; it is shown being played.`}`;
+      return `<b>Finalist ${j + 1}: ${f.difficulty.moves ?? "at least " + f.difficulty.atLeast} moves</b>, ${fmt(f.expanded)} boards searched.${shorter ? ` Shorter than the push's ${f.pushSolution.length}.` : ""}`;
     }
     return frame.greedy
-      ? `<b>Greedy pass.</b> A* with the lower bound on the moves left weighted 4×: it dives for <i>some</i> solution fast (the red outline tints where the red block has been). A board's bucket is moves made + 4 × the bound. ${f.greedy} boards here.`
-      : `<b>Exact pass.</b> Plain A*: boards in order of moves made + a lower bound on the moves left (one for the red block, one per block that must move). The first solved board taken out is a shortest solution; a board that can't beat the greedy one is skipped, so it only has to rule out anything shorter. ${f.expanded - f.greedy} boards.`;
+      ? `<b>Greedy pass:</b> dives for any solution fast (tint: where the red block has been).`
+      : `<b>Exact pass:</b> proves no shorter solution exists.`;
   } });
 });
 
@@ -341,7 +313,7 @@ add({ chapter: "The goal", dur: 2500 + solved.length * 900 + 3000, cam: winCam(w
   target(v, W);
   chains(v, solved, solvedWay, pos, lt < 2500 ? -1 : Math.min(done, solved.length - 1), lt < 2500 ? -1 : done);
   hud(v, [lt < 2500 ? `the goal: ${W.id}` : `move ${Math.min(done + 1, solved.length)} of ${solved.length}`]);
-}, caption: () => `<b>The goal.</b> Re-ranked with the exact measures, block ${W.id} to the dashed cells wins: ${winnerFinal.difficulty.moves} moves at the fewest, ${W.distance} cell${W.distance === 1 ? "" : "s"} from where it stands. Its solution is checked to replay on the real board, then the goal is sent to the game. The arrows show why each block moves: it is in the way of the block it points at, down to the red block.${chainDepth > 2 ? ` The longest chain is ${chainDepth} blocks: one moves to free one that frees … the red block's path.` : ""} The player sees the red block and its target, never the solution.` });
+}, caption: () => `<b>The goal:</b> ${W.id} to the dashed cells in ${winnerFinal.difficulty.moves} moves. Arrows: why each block moves${chainDepth > 2 ? ` (longest chain ${chainDepth} blocks)` : ""}.` });
 
 // ---- Drawing ----
 let view = null;
@@ -500,96 +472,77 @@ addEventListener("resize", resize);
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", render);
 resize();
 
-// ---- The candidates chart ----
+// ---- How a goal is ranked: the formula, and the candidates on its terms ----
+const aimed = (c) => D.target == null || c.off === 0;
+const diffOf = (c) => c.rough.score * Math.pow(0.5, c.train);
+const mt = (t) => `<mtext>${t}</mtext>`, mn = (n) => `<mn>${n}</mn>`, mo = (o) => `<mo>${o}</mo>`;
+/** balance = fewest × log2(choices) / distance^0.6 × (1/2)^track, with names or numbers. */
+function formula(m, b, d, n, result) {
+  return `<mrow>${mt("balance")}${mo("=")}<mfrac><mrow>${m}${mo("×")}<msub><mi>log</mi>${mn(2)}</msub>${mo("(")}${b}${mo(")")}</mrow><msup>${d}${mn("0.6")}</msup></mfrac>${mo("×")}<msup><mrow>${mo("(")}<mfrac>${mn(1)}${mn(2)}</mfrac>${mo(")")}</mrow>${n}</msup>${result ?? ""}</mrow>`;
+}
+$("formula").innerHTML = formula(mt("fewest moves"), mt("choices"), mt("distance"), mt("track blocks"));
+$("aimRule").innerHTML = D.target != null ? `Closest to the ramp's aim first (it rises from 4 to 10 fewest moves over the first 30 world goals; ${D.target} here), ` : "Past the first 30 world goals there is no aim: ";
+$("aimNote").innerHTML = D.target != null ? `Faded: not at ${D.target} moves, so out before the balance counts. ` : "";
+function fill(i) {
+  const c = C[i], r = c.rough, at = r.moves === null ? "≥ " : "";
+  $("filled").innerHTML = formula(mn(at + (r.moves ?? r.atLeast)), mn(r.branching), mn(c.distance), mn(c.train), `${mo("=")}<mfrac>${mn(r.score)}${mn(Math.pow(c.distance, 0.6).toFixed(2))}</mfrac>${mo("×")}${mn(Math.pow(0.5, c.train))}${mo("=")}<mn mathvariant="bold">${c.balance.toFixed(1)}</mn>`);
+  const rank = D.order.indexOf(i) + 1;
+  $("picked").innerHTML = `${i === D.winner ? "★ the goal: " : ""}${c.id} → ${c.target.join(", ")}, ${aimed(c) ? `ranked ${rank} of ${C.length}` : `${c.off} off the aim`}${F.some((f) => f.candidate === i) ? " (a finalist)" : ""}`;
+}
 (function scatter() {
-  const svg = $("scatter"), Wd = 860, Ht = 340, m = { l: 44, r: 16, t: 12, b: 40 };
-  const maxD = Math.max(...C.map((c) => c.distance));
-  const x = (d) => m.l + ((d - 0.5) / maxD) * (Wd - m.l - m.r), y = (v) => Ht - m.b - ((v - 0) / (maxV + 1)) * (Ht - m.t - m.b);
-  const groups = new Map();
-  for (const c of C) {
-    const key = `${c.distance},${valueOf(c)},${c.rough.moves === null ? 1 : 0}`;
-    groups.set(key, [...(groups.get(key) ?? []), c]);
-  }
-  const maxN = Math.max(...[...groups.values()].map((g) => g.length));
+  const svg = $("scatter"), Wd = 860, Ht = 380, m = { l: 52, r: 16, t: 14, b: 40 };
+  const maxD = Math.max(...C.map((c) => c.distance)), maxY = Math.ceil(Math.max(...C.map(diffOf)) / 10) * 10;
+  const x = (d) => m.l + (d / (maxD + 1)) * (Wd - m.l - m.r), y = (v) => Ht - m.b - (v / maxY) * (Ht - m.t - m.b);
   let s = "";
-  if (D.target != null) s += `<line x1="${m.l}" x2="${Wd - m.r}" y1="${y(D.target)}" y2="${y(D.target)}" stroke="var(--ink-2)" stroke-dasharray="5 4"/><text x="${Wd - m.r}" y="${y(D.target) - 5}" text-anchor="end" font-size="12" fill="var(--ink-2)">aim: ${D.target}</text>`;
-  for (let v = 0; v <= maxV + 1; v += 2) s += `<line x1="${m.l}" x2="${Wd - m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${m.l - 8}" y="${y(v) + 4}" text-anchor="end" font-size="12" fill="var(--ink-2)">${v}</text>`;
-  for (let d = 1; d <= maxD; d += d < 5 ? 1 : 5 - (d % 5 || 0) || 5) s += `<text x="${x(d)}" y="${Ht - m.b + 18}" text-anchor="middle" font-size="12" fill="var(--ink-2)">${d}</text>`;
-  s += `<text x="${(Wd + m.l) / 2}" y="${Ht - 4}" text-anchor="middle" font-size="12" fill="var(--ink-2)">cells the red block went</text>`;
-  s += `<text transform="translate(12 ${(Ht - m.b + m.t) / 2}) rotate(-90)" text-anchor="middle" font-size="12" fill="var(--ink-2)">fewest moves (rough)</text>`;
-  for (const [key, g] of groups) {
-    const [d, v, ring] = key.split(",").map(Number), r = 2.5 + 6 * Math.sqrt(g.length / maxN), cx = x(d) + (ring ? 5 : -5);
-    const tip = `${g.length} target${g.length > 1 ? "s" : ""} ${d} cell${d > 1 ? "s" : ""} out: ${ring ? "at least " : ""}${v} moves`;
-    s += ring ? `<circle cx="${cx}" cy="${y(v)}" r="${r}" fill="none" stroke="${seq(v)}" stroke-width="2" data-tip="${tip}"/>` : `<circle cx="${cx}" cy="${y(v)}" r="${r}" fill="${seq(v)}" stroke="var(--card)" stroke-width="1.5" data-tip="${tip}"/>`;
+  for (let v = 0; v <= maxY; v += 10) s += `<line x1="${m.l}" x2="${Wd - m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${m.l - 8}" y="${y(v) + 4}" text-anchor="end" font-size="12" fill="var(--ink-2)">${v}</text>`;
+  for (let d = 0; d <= maxD; d += 5) s += `<text x="${x(d)}" y="${Ht - m.b + 18}" text-anchor="middle" font-size="12" fill="var(--ink-2)">${d}</text>`;
+  s += `<text x="${(Wd + m.l) / 2}" y="${Ht - 4}" text-anchor="middle" font-size="12" fill="var(--ink-2)">distance (cells)</text>`;
+  s += `<text transform="translate(14 ${(Ht - m.b + m.t) / 2}) rotate(-90)" text-anchor="middle" font-size="12" fill="var(--ink-2)">fewest moves × log₂ choices × ½^track</text>`;
+  // Curves of equal balance: difficulty = balance × distance^0.6.
+  const top = C[D.winner].balance, step = top > 12 ? 4 : 2;
+  for (let b = step; b <= top + step; b += step) {
+    const pts = [];
+    for (let d = 0.5; d <= maxD + 1; d += 0.25) { const v = b * Math.pow(d, 0.6); if (v > maxY) break; pts.push(`${x(d)},${y(v)}`); }
+    s += `<polyline fill="none" stroke="var(--ink-2)" stroke-width="1" stroke-dasharray="3 4" points="${pts.join(" ")}"/>`;
+    const lx = Math.min(maxD + 0.5, Math.pow(maxY / b, 1 / 0.6) - 0.3), ly = b * Math.pow(lx, 0.6);
+    s += `<text x="${x(lx) - 4}" y="${y(ly) - 5}" text-anchor="end" font-size="11" fill="var(--ink-2)">balance ${b}</text>`;
+  }
+  const order = C.map((c, i) => i).sort((a, b) => (aimed(C[a]) ? 1 : 0) - (aimed(C[b]) ? 1 : 0));
+  for (const i of order) {
+    const c = C[i], cx = x(c.distance) + ((i * 7) % 5 - 2) * 1.2, cy = y(diffOf(c)), col = seq(valueOf(c)), op = aimed(c) ? 1 : 0.18;
+    s += c.rough.moves === null
+      ? `<circle data-i="${i}" cx="${cx}" cy="${cy}" r="4" fill="var(--card)" stroke="${col}" stroke-width="2" opacity="${op}"/>`
+      : `<circle data-i="${i}" cx="${cx}" cy="${cy}" r="4.5" fill="${col}" stroke="var(--card)" stroke-width="1" opacity="${op}"/>`;
   }
   F.forEach((f, j) => {
-    const c = C[f.candidate], cx = x(c.distance) - 5, cy = y(valueOf(c)) - 16 - 13 * j;
-    s += `<text x="${cx}" y="${cy}" text-anchor="middle" font-size="12" font-weight="600" fill="var(--ink)">${c === W ? "★" : j + 1}</text>`;
+    const c = C[f.candidate];
+    s += `<text x="${x(c.distance)}" y="${y(diffOf(c)) - 9}" text-anchor="middle" font-size="12" font-weight="650" fill="var(--ink)" pointer-events="none">${f.candidate === D.winner ? "★" : j + 1}</text>`;
   });
-  svg.setAttribute("viewBox", `0 0 ${Wd} ${Ht}`);
-  svg.innerHTML = s + `<rect x="0" y="0" width="${Wd}" height="${Ht}" fill="transparent" pointer-events="none"/>`;
-  const tip = $("tip");
-  svg.addEventListener("pointermove", (e) => {
-    const t = e.target.closest("[data-tip]");
-    if (!t) { tip.style.display = "none"; return; }
-    tip.textContent = t.dataset.tip; tip.style.display = "block";
-    tip.style.left = `${Math.min(innerWidth - 220, e.clientX + 12)}px`; tip.style.top = `${e.clientY + 12}px`;
-  });
-  svg.addEventListener("pointerleave", () => (tip.style.display = "none"));
-})();
-
-// ---- The optimisation charts and the ranking table ----
-function lineChart(svg, pts, { xl, tip, ymax, mark, fmtY = (v) => v, extra = [] }) {
-  const Wd = 420, Ht = 220, m = { l: 44, r: 12, t: 14, b: 38 }, xmax = Math.max(...pts.map((p) => p[0]));
-  const x = (v) => m.l + (v / xmax) * (Wd - m.l - m.r), y = (v) => Ht - m.b - (v / ymax) * (Ht - m.t - m.b);
-  let s = "";
-  for (let v = 0; v <= ymax + 1e-9; v += ymax / 4) s += `<line x1="${m.l}" x2="${Wd - m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${m.l - 6}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="var(--ink-2)">${fmtY(v)}</text>`;
-  for (let v = 0; v <= xmax; v += 5) s += `<text x="${x(v)}" y="${Ht - m.b + 16}" text-anchor="middle" font-size="11" fill="var(--ink-2)">${v}</text>`;
-  s += `<text x="${(Wd + m.l) / 2}" y="${Ht - 4}" text-anchor="middle" font-size="11" fill="var(--ink-2)">${xl}</text>`;
-  for (const e of extra) s += `<polyline fill="none" stroke="var(--ink-2)" stroke-width="1.5" stroke-dasharray="4 4" points="${e.pts.map((p) => `${x(p[0])},${y(p[1])}`).join(" ")}"/><text x="${x(e.at[0])}" y="${y(e.at[1]) - 6}" font-size="11" fill="var(--ink-2)">${e.label}</text>`;
-  s += `<polyline fill="none" stroke="var(--hi)" stroke-width="2" points="${pts.map((p) => `${x(p[0])},${y(p[1])}`).join(" ")}"/>`;
-  for (const p of pts) s += `<circle cx="${x(p[0])}" cy="${y(p[1])}" r="7" fill="transparent" data-tip="${tip(p)}"/>`;
-  if (mark) s += `<circle cx="${x(mark[0])}" cy="${y(mark[1])}" r="5" fill="var(--red)" stroke="var(--card)" stroke-width="2" pointer-events="none"/><text x="${x(mark[0]) + 8}" y="${y(mark[1]) - 8}" font-size="11" fill="var(--ink)">${mark[2]}</text>`;
+  s += `<circle id="sel" r="9" fill="none" stroke="var(--red)" stroke-width="2.5" pointer-events="none"/>`;
   svg.setAttribute("viewBox", `0 0 ${Wd} ${Ht}`);
   svg.innerHTML = s;
-  const t = $("tip");
-  svg.addEventListener("pointermove", (e) => { const h = e.target.closest("[data-tip]"); if (!h) { t.style.display = "none"; return; } t.textContent = h.dataset.tip; t.style.display = "block"; t.style.left = `${Math.min(innerWidth - 260, e.clientX + 12)}px`; t.style.top = `${e.clientY + 12}px`; });
-  svg.addEventListener("pointerleave", () => (t.style.display = "none"));
-}
-lineChart($("rampChart"), Array.from({ length: 30 }, (_, k) => [k + 1, Math.round(4 + (6 * k) / 30)]), { xl: "world goal (none past the 30th)", tip: (p) => `world goal ${p[0]}: aims at ${p[1]} fewest moves`, ymax: 12, mark: D.target != null ? [16, D.target, "this goal"] : null });
-const maxDist = Math.max(25, ...C.map((c) => c.distance));
-lineChart($("distChart"), Array.from({ length: maxDist }, (_, k) => [k + 1, 1 / Math.pow(k + 1, 0.6)]), {
-  xl: "d: cells to the target", tip: (p) => `${p[0]} cells: × ${p[1].toFixed(2)} (per cell: × ${(1 / p[0]).toFixed(2)})`, ymax: 1, fmtY: (v) => "×" + v.toFixed(2),
-  mark: [W.distance, 1 / Math.pow(W.distance, 0.6), "this goal"], extra: [{ pts: Array.from({ length: maxDist }, (_, k) => [k + 1, 1 / (k + 1)]), at: [14, 1 / 14], label: "score per cell (power 1)" }],
-});
-const finalOf = new Map(F.map((f) => [f.candidate, f]));
-const top12 = D.order.slice(0, 12), maxBal = Math.max(...top12.map((i) => C[i].balance));
-$("ranking").innerHTML = `<tr><th>#</th><th>Block → target</th>${D.target != null ? "<th>|M − aim|</th>" : ""}<th>M</th><th>b</th><th>score</th><th>d</th><th>d<sup>0.6</sup></th><th>n</th><th>balance</th><th>Exact M</th></tr>` +
-  top12.map((i, r) => {
-    const c = C[i], f = finalOf.get(i);
-    return `<tr class="${i === D.winner ? "win" : ""}"><td>${i === D.winner ? "★" : r + 1}</td><td>${c.id} → ${c.target.join(", ")}</td>${D.target != null ? `<td>${c.off}</td>` : ""}<td>${c.rough.moves ?? "≥ " + c.rough.atLeast}</td><td>${c.rough.branching}</td><td>${c.rough.score}</td><td>${c.distance}</td><td>${Math.pow(c.distance, 0.6).toFixed(2)}</td><td>${c.train}</td><td><span class="bar" style="width:${(60 * c.balance) / maxBal}px"></span>${c.balance.toFixed(1)}</td><td>${f ? (f.difficulty.moves ?? "≥ " + f.difficulty.atLeast) : ""}</td></tr>`;
-  }).join("");
+  let chosen = D.winner;
+  const show = (i) => { const c = C[i]; fill(i); const sel = $("sel"); sel.setAttribute("cx", x(c.distance)); sel.setAttribute("cy", y(diffOf(c))); };
+  svg.addEventListener("pointermove", (e) => { const t = e.target.closest("[data-i]"); show(t ? Number(t.dataset.i) : chosen); });
+  svg.addEventListener("click", (e) => { const t = e.target.closest("[data-i]"); if (t) show((chosen = Number(t.dataset.i))); });
+  svg.addEventListener("pointerleave", () => show(chosen));
+  show(chosen);
+})();
 
 // ---- The finalists table ----
-$("finals").innerHTML = `<tr><th></th><th>Block</th><th>Cells</th><th>Rough</th><th>Exact</th><th>Choices</th><th>Score</th><th>Boards</th><th>Proof → solution</th></tr>` +
+$("finals").innerHTML = `<tr><th></th><th>Block</th><th>Distance</th><th>Fewest (rough)</th><th>Fewest (exact)</th><th>Choices</th><th>Moves × log₂ choices</th><th>Boards (greedy + exact)</th><th>Solution (push → A*)</th></tr>` +
   F.map((f, j) => {
     const c = C[f.candidate];
     return `<tr><td>${c === W ? "★" : j + 1}</td><td>${c.id} ${dirName(c.id, P[c.push].dir)}</td><td>${c.distance}</td><td>${c.rough.moves ?? "≥ " + c.rough.atLeast}</td><td>${f.difficulty.moves ?? "≥ " + f.difficulty.atLeast}</td><td>${f.difficulty.branching}</td><td>${f.difficulty.score}</td><td>${f.greedy} + ${f.expanded - f.greedy}</td><td>${f.pushSolution.length} → ${f.solution.length}</td></tr>`;
   }).join("");
 
-// ---- Conclusions ----
-const stuck = P.filter((p) => p.stop === "stuck").length;
+// ---- Takeaways ----
+const flat = Math.round(100 * (1 - C[D.order[11]].balance / C[D.order[0]].balance));
 $("conclusions").innerHTML = [
-  `The push search does most of the work: ${P.length} pushes, ${fmt(pushMoves)} moves, ${C.length} candidate targets, in ${D.settings.goalBudget.toLocaleString("en-US")} ticks. ${stuck} pushes ended at a cell they couldn't clear; the rest ran out of their share of the budget.`,
-  `${D.target != null
-    ? `Most of what it finds is too hard or too easy for the aim: only ${C.filter((c) => c.off === 0).length} of ${C.length} targets measured at ${D.target} moves. The aim picks those; then the balance favours near ones as hard: the winner`
-    : `Without an aim the balance alone decides, and it favours near goals nearly as hard as far ones: the winner`} is only ${W.distance} cell${W.distance === 1 ? "" : "s"} away, though pushes went up to ${Math.max(...C.map((c) => c.distance))}.`,
-  `The balance is flat at the top: the 12 best candidates are within ${Math.round(100 * (1 - C[D.order[11]].balance / C[D.order[0]].balance))}% of each other, so which wins turns on small differences, and on the rough measure's lower bounds (a ≥ counts as its bound).`,
-  `The rough measure finishes on ${Math.round((100 * exactRough) / C.length)}% of targets; the rest are ranked on a lower bound, which can only make a goal look easier than it is.`,
-  D.target != null
-    ? `At this aim, A* is cheap: ${F.map((f) => f.expanded).join(", ")} boards for the finalists. ${F.reduce((n, f) => n + f.greedy, 0)} of those ${boards} were the greedy pass; the lower bound is tight enough that the exact pass then only rules out a few shorter ways.`
-    : `Harder goals cost A* more: ${F.map((f) => fmt(f.expanded)).join(", ")} boards for the finalists.${F.some((f) => f.difficulty.moves === null) ? ` One didn't finish: its window let ${Math.max(...F.filter((f) => f.difficulty.moves === null).map((f) => f.window.sliders.length))} blocks slide, with ${Math.round(Math.max(...F.filter((f) => f.difficulty.moves === null).map((f) => f.difficulty.branching)))} moves to choose from a board, so the ${fmt(D.settings.exact)} boards it may keep filled up after under a thousand were expanded; it is ranked on its lower bound.` : ""}`,
-  winnerFinal.solution.length < winnerFinal.pushSolution.length ? `The measure earns its keep on the proof: the push's ${winnerFinal.pushSolution.length}-move shuffle became a ${winnerFinal.solution.length}-move solution, so the game knows the real fewest (and its medal is fair).` : `The push's proof was already the shortest here.`,
+  `The winner is ${W.distance} cell${W.distance === 1 ? "" : "s"} away though pushes reached ${Math.max(...C.map((c) => c.distance))}: the distance term favours near goals.`,
+  `The top is flat: the best 12 are within ${flat}% on balance, so the rough measure's lower bounds can decide.`,
+  D.target != null ? `A* is cheap at this aim: ${F.map((f) => f.expanded).join(", ")} boards for the finalists.` : `Harder goals cost A* more: ${F.map((f) => fmt(f.expanded)).join(", ")} boards for the finalists${F.some((f) => f.difficulty.moves === null) ? "; one ran out and kept its lower bound" : ""}.`,
+  ...(winnerFinal.solution.length < winnerFinal.pushSolution.length ? [`The exact measure cut the push's ${winnerFinal.pushSolution.length}-move solution to ${winnerFinal.solution.length}, so the medal line is the real fewest.`] : []),
 ].map((t) => `<li>${t}</li>`).join("");
 </script>
 </body></html>
