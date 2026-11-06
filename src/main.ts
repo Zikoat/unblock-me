@@ -703,6 +703,10 @@ Object.assign(window, {
     /** Replace the random layout with exactly these blocks, and optionally a goal (for tests). */
     place: (blocks: Placed[], goal: Goal | null = null) => {
       job++; // any goal on its way is for the old board
+      // (And a finish still playing, its soul and the view's flight with it, are the old board's.)
+      finish = null;
+      soul = soulFrom = flight = null;
+      ahead.wanted = "";
       placed = blocks;
       restart(scene, fixedLayout(blocks));
       logged = 0;
