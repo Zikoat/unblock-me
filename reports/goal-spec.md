@@ -80,23 +80,23 @@ Measured from the Request and the Goal alone, never from how the maker found it:
 | **clashes** | earlier targets the target overlaps, and earlier red blocks whose track red shares |
 
 ```
-difficulty = fewest moves + 2 × decisions
-balance    = difficulty / distance^0.6 × ½^track blocks
+difficulty = fewest moves + decisions
+balance    = difficulty / distance^0.4 × ½^track blocks
 fitness    = balance × ½^|fewest moves − ramp aim| × 0.8^(reach beyond 4) × ½^clashes
 ```
 
-Every number is a weight in `wishes`; none is a rule. Today's hard rules (red within the 8×8 box round the last target, no shared track, no overlapping target) become the reach and clash factors, so a far better goal can still win. The weight of a decision (2 moves) is a placeholder: it is fitted to play data, so that the extra moves players need rise with it.
+Every number is a weight in `wishes`; none is a rule. Today's hard rules (red within the 8×8 box round the last target, no shared track, no overlapping target) become the reach and clash factors, so a far better goal can still win. The weight of a decision (1 move) and the distance's power (0.4) come from test/experiments/decisions-variants.ts. In play (384 goals players reached, mostly from three players), the extra moves players needed follow nothing measured here, but their time does: with the fewest moves held, a decision costs about as much time as 0.7 of a move (90% interval 0.35 to 1.5), so 2 was too much. A near goal may win, but only by needing as many moves: with the distance to the power 0.6, goals with no ramp aim were won by 3-move goals one cell away; at 0.4 the winners need many moves, and the few near goals that need as many still win.
 
 ### Decisions
 
-How a person works a goal out: try to move red towards the target; whatever is in the way has to move first; and so on, back from the target. A **decision** is a block in that chain that could plausibly go either way.
+How a person works a goal out: try to move red towards the target; whatever is in the way has to move first; and so on, back from the target. A **decision** is a block in that chain that could plausibly go either way, met on the way to the first way that works.
 
 1. **Stages.** Replay the solution. Before each of red's moves (at the start, and after each red move that leaves it short of the target), look at the cells between red and its target. Each block there has to be cleared.
 2. **Clearing a block** from some cells: it can go either way along its axis, by the least that frees the cells. A way is **out** if it runs into the edge or a wall, or into a block already in this chain (a cycle: red itself, or a block waiting on this one). Otherwise it is **plausible**, and the blocks it would sweep into must be cleared in turn, from the cells it sweeps.
-3. **A decision** is a block with two plausible ways. Both are explored, and a way that dead-ends further on still counts: a person has to try it to find out.
-4. **decisions** is how many blocks are decisions, each counted once a stage however many branches meet it, summed over the stages. (Explored at most 6 blocks deep and 300 blocks in all.)
+3. **A decision** is a block met with two plausible ways. A person tries one way at a time, the easier first: the one with fewer blocks to clear, then the shorter slide (then up or left). A way works when every block it needs cleared can be, in turn. They stop at the first way that works: the other way, and the forks behind it, are never met. A way that fails (a block it needs cleared cannot be) sends them to the other, so a dead end still counts: what is behind it was met.
+4. **decisions** is how many blocks are decisions, each counted once a stage however many branches meet it, summed over the stages. (A way needing blocks cleared more than 6 deep, or after 300 blocks in all, is given up.)
 
-`Rr..gg` (red, then the target) has none. A blocker that can only go one way adds none, however long the chain behind it. A blocker free both ways adds one.
+`Rr..gg` (red, then the target) has none. A blocker that can only go one way adds none, however long the chain behind it. A blocker free both ways adds one. A blocker free one way adds one and nothing behind its other way: the free way is tried first and works. (Exploring every way, as the Judge did first, counted forks a person never meets: a 3-move goal one cell away counted 8, from the whole neighbourhood behind the ways not taken.)
 
 ## Auditor: keeping the Judge honest
 

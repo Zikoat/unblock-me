@@ -93,19 +93,19 @@ describe("judge", () => {
     // clashes), then h to (-4, 2), where the player is now.
     const terms = judge(request(5, [{ id: "k", target: { x: 5, y: 0 } }, { id: "h", target: { x: -4, y: 2 } }]), goal(SHORT));
     // Decisions, one stage (red moves once, onto the target): v blocks red's way; up it sweeps
-    // into u (which can then go left or right, both free: a decision), down by one is free:
-    // v is a decision too. Two.
+    // into u, down by one is free: v is a decision. Down is tried first (nothing to clear) and
+    // works, so u (which could go left or right) is never met. One.
     // Reach: from h's cells (x -4..-3, y 2) to r's (x 0..1, y 0): 3 across and 2 down, 5.
     // Track: nothing lying r's way in its row between x 0 and 5 (v crosses it). Distance 4.
-    expect(terms).toMatchObject({ moves: 2, decisions: 2, distance: 4, track: 0, aimOff: 3, reach: 5, clashes: 2, difficulty: 6 });
-    // balance = 6 / 4^0.6 = 2.61165; fitness = balance × ½^3 (3 off the aim) × 0.8^1 (reach
-    // 1 beyond 4) × ½^2 (clashes) = 0.0652913.
-    expect(terms.balance).toBeCloseTo(2.61165, 4);
-    expect(terms.fitness).toBeCloseTo(0.0652913, 6);
+    expect(terms).toMatchObject({ moves: 2, decisions: 1, distance: 4, track: 0, aimOff: 3, reach: 5, clashes: 2, difficulty: 3 });
+    // balance = 3 / 4^0.4 = 1.72305; fitness = balance × ½^3 (3 off the aim) × 0.8^1 (reach
+    // 1 beyond 4) × ½^2 (clashes) = 0.0430762.
+    expect(terms.balance).toBeCloseTo(1.72305, 4);
+    expect(terms.fitness).toBeCloseTo(0.0430762, 6);
     // With no history, the player is at the origin cell: reach 0 to r's (0, 0); no ramp aim.
     expect(judge(request(), goal(SHORT))).toMatchObject({ reach: 0, clashes: 0, aimOff: 0 });
     // The Auditor's count replaces the Goal's.
-    expect(judge(request(5), goal(SHORT), { fewest: 5 })).toMatchObject({ moves: 5, aimOff: 0, difficulty: 9 });
+    expect(judge(request(5), goal(SHORT), { fewest: 5 })).toMatchObject({ moves: 5, aimOff: 0, difficulty: 6 });
   });
 
   test("blocks on red's track count, those crossing it don't", () => {

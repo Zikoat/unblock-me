@@ -8,7 +8,7 @@ In approximate priority order, highest first; the middle ones are not ordered am
 - The Gate's time is measured on the VM, the spec's is on a mid phone; waits on timing the maker on a phone.
 - The Reference is shallow (breadth first, about 5 moves at most), so it loses wherever a longer goal wins (ramp aims over 6, none); a deeper plain search; waits on the Tuner runs showing whether the records need it.
 - Tuner runs: subagents improve the goal maker against the Bench; waits on goal spec phase 1.
-- Fit the Judge's decision weight to play data (players' extra moves against fewest moves and decisions); waits on goal spec phase 1.
+- The game's makers search a window 2 cells round red's run, so a near goal can need fewer moves than its proof (the Auditor, at 5, found it in 5% of the Records): the stars and the ramp then count too many; widen the game's window or re-measure; waits on its cost on a phone.
 - Island squares that teach tap-push and a half-way drag (a tap-push can't solve it; none turned up in a 5x5 search, a tap stops the red block on its target), and squares with several goals that are rated (the card scores only the last goal); subject a and b never learnt one or the other; waits on you playing the teaching squares.
 - Walls in generated boards (dead ends to plan around); waits on a difficulty measure to tune them against (the Judge).
 - Density × walls report graph; waits on walls in generated boards.

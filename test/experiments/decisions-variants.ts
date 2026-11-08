@@ -6,6 +6,8 @@
 //   bun test/experiments/decisions-variants.ts rank <pool.json>        the winners per variant and weights
 //   bun test/experiments/decisions-variants.ts play <play.json...> [--out=rows.json]  reached goals in play: extra moves and time against each variant
 // Run the slow ones capped (scripts/capped.sh). Play data is read, never copied into the repo.
+// The Judge now counts as "ii first/free" (src/decisions.ts), with a decision worth 1 move and
+// the distance to the power 0.4 (contract.ts WISHES); "i all" is how it counted before.
 import { Board } from "../../src/board";
 import type { Point } from "../../src/camera";
 import { contractGoal, playerCells, requestBoard, type Goal, type Request } from "../../src/contract";

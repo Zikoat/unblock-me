@@ -68,7 +68,7 @@
 </div>
 
 <h2>Decisions: the Judge's way of counting choices</h2>
-<p class="sub">How a person works it out: push red towards the target; whatever is in the way must move first, either way along its axis, by the least that frees the cells. A way is <b>out</b> at the edge, a wall, or a block already in the chain (a cycle). A <b>decision</b> (◆) is a block with two ways still in. Both get explored: a dead end costs thinking too.</p>
+<p class="sub">How a person works it out: push red towards the target; whatever is in the way must move first, either way along its axis, by the least that frees the cells. A way is <b>out</b> at the edge, a wall, or a block already in the chain (a cycle). A <b>decision</b> (◆) is a block met with two ways still in. A person tries the easier first (fewer blocks to clear, then the shorter slide) and stops at the first way that works: the other, and the forks behind it, are never met (<i>not tried</i>). A way that fails sends them to the other, so a dead end still counts.</p>
 <div class="two" id="decisionExamples"></div>
 <h3>The example goal</h3>
 <div class="card"><div id="exTree"></div></div>
@@ -167,7 +167,7 @@ const exBoard = (pos) => ({ blocks, at: (x, y) => { if (!inRegion(x, y)) return 
 const exStages = [decisionTree(exBoard(states[0]), EX.red, EX.target)];
 EX.moves.forEach((m, i) => { if (m[0] === EX.red && m[2].join() !== EX.target.join()) exStages.push(decisionTree(exBoard(states[i + 1]), EX.red, EX.target)); });
 const decisions = exStages.reduce((n, t) => n + t.decisions, 0);
-const difficulty = M + 2 * decisions, balance = (difficulty / Math.pow(distance, 0.6)) * Math.pow(0.5, track.size);
+const difficulty = M + decisions, balance = (difficulty / Math.pow(distance, 0.4)) * Math.pow(0.5, track.size);
 const aimF = Math.pow(0.5, Math.abs(M - EX.aim)), reachF = Math.pow(0.8, Math.max(0, reach - 4)), clashF = 1;
 const fitness = balance * aimF * reachF * clashF;
 
@@ -179,7 +179,7 @@ $("request").innerHTML = [
   field("moved", "{ chunk → blocks }", "the player's moved blocks, indexed; none here"),
   field("history", `[…, { red: "${prev.id}", target: ${prev.x},${prev.y} }]`, "the last is where the player is"),
   field("ramp aim", EX.aim, "fewest moves wanted early on, or none"),
-  field("wishes", "{ decision: 2, distance: 0.6, track: ½, ramp aim: ½, reach: 0.8 beyond 4, clash: ½ }", "the Judge's weights"),
+  field("wishes", "{ decision: 1, distance: 0.4, track: ½, ramp aim: ½, reach: 0.8 beyond 4, clash: ½ }", "the Judge's weights"),
   field("seed", 1, "for random choices"),
 ].join("");
 $("goal").innerHTML = [
@@ -189,9 +189,11 @@ $("goal").innerHTML = [
 ].join("") + `<p class="sub" style="margin:10px 0 0;font-size:13px">Or <b>none</b>: nothing found (a loss on the Bench).</p>`;
 
 // ---- Decisions: the chain of blocks to clear, back from red's path ----
-/** The clearing tree for red's path to `target` on board `B` ({ blocks, at(x, y) → id, null or "#", posOf(id) }):
- * each block in the way, each way it could go, and the blocks those ways need moved in turn. */
-function decisionTree(B, redId, target) {
+/** The clearing tree for red's path to `target` on board `B` ({ blocks, at(x, y) → id, null or "#", posOf(id) }),
+ * as a person works it out: each block in the way, each way it could go, and the blocks the ways tried need
+ * moved in turn; the easier way first (fewer blocks to clear, then the shorter slide), stopping at the first
+ * that works. With `every`, every way is tried (the count before; for comparison). */
+function decisionTree(B, redId, target, every = false) {
   const key = (c) => `${c[0]},${c[1]}`;
   const shape = (id) => { const b = B.blocks.get(id), p = B.posOf(id); return { x: p[0], y: p[1], w: b.w, h: b.h, hz: b.w > b.h }; };
   const r = shape(redId), path = [];
@@ -201,7 +203,7 @@ function decisionTree(B, redId, target) {
   const forks = new Set(); // a block counts once a stage, however many branches meet it
   const blockersIn = (cells, self) => [...new Set(cells.map((c) => B.at(...c)).filter((o) => o && o !== self))];
   function clear(id, region, chain, depth) {
-    const b = shape(id), node = { id, ways: [] };
+    const b = shape(id), node = { id, ways: [], ok: false }, sweeps = [], blockers = [];
     nodes++;
     for (const dir of [-1, 1]) {
       const sweep = [];
@@ -216,19 +218,29 @@ function decisionTree(B, redId, target) {
         if (!cells.some((c) => region.has(key(c)))) break;
         if (s > 12) { why = "too far"; break; }
       }
-      const way = { dir, s, why, needs: [] };
-      if (!why) {
-        const blockers = blockersIn(sweep, id), cyc = blockers.find((o) => chain.has(o));
-        if (cyc) way.why = `cycle (${cyc === redId ? "red" : label(B, cyc)})`;
-        else if (depth >= 6 || nodes >= 300) way.why = "too deep";
-        else way.needs = blockers.map((o) => clear(o, new Set(sweep.map(key)), new Set([...chain, id]), depth + 1));
-      }
-      way.ok = !way.why && way.needs.every((n) => n.ok);
-      node.ways.push(way);
+      const these = why ? [] : blockersIn(sweep, id), cyc = these.find((o) => chain.has(o));
+      if (cyc) why = `cycle (${cyc === redId ? "red" : label(B, cyc)})`;
+      node.ways.push({ dir, s, why, needs: [], tried: false, ok: false });
+      sweeps.push(sweep);
+      blockers.push(these);
     }
-    node.decision = node.ways.filter((w) => !w.why).length === 2;
+    const plausible = [0, 1].filter((k) => !node.ways[k].why);
+    node.decision = plausible.length === 2;
     if (node.decision) forks.add(id);
-    node.ok = node.ways.some((w) => w.ok);
+    // The easier way first: fewer blocks to clear, then the shorter slide, then up or left.
+    plausible.sort((a, c) => blockers[a].length - blockers[c].length || node.ways[a].s - node.ways[c].s || a - c);
+    for (const k of plausible) {
+      const way = node.ways[k];
+      way.tried = true;
+      if (blockers[k].length && (depth >= 6 || nodes >= 300)) { way.why = "too deep"; continue; }
+      way.ok = true;
+      for (const o of blockers[k]) {
+        const need = clear(o, new Set(sweeps[k].map(key)), new Set([...chain, id]), depth + 1);
+        way.needs.push(need);
+        if (!need.ok) { way.ok = false; break; } // this way fails: on to the other
+      }
+      if (way.ok) { node.ok = true; if (!every) break; }
+    }
     return node;
   }
   const roots = blockersIn(path, redId).map((o) => clear(o, new Set(path.map(key)), new Set([redId]), 1));
@@ -239,7 +251,7 @@ function treeHtml(B, t, redName = "red") {
   const arrow = (b, dir) => (b.w > b.h ? (dir > 0 ? "→" : "←") : dir > 0 ? "↓" : "↑");
   const node = (n) => {
     const b = B.blocks.get(n.id);
-    const ways = n.ways.map((w) => `<li>${arrow(b, w.dir)}${w.why ? "" : w.s} ${w.why ? `<span style="color:var(--bad)">✗ ${w.why}</span>` : w.needs.length ? `needs ${w.needs.map((c) => `<b>${label(B, c.id)}</b>`).join(" and ")} cleared` : `<span style="color:var(--ok)">✓ free</span>`}${w.needs.length ? `<ul>${w.needs.map(node).join("")}</ul>` : ""}</li>`).join("");
+    const ways = n.ways.map((w) => `<li>${arrow(b, w.dir)}${w.why ? "" : w.s} ${w.why ? `<span style="color:var(--bad)">✗ ${w.why}</span>` : !w.tried ? `<span class="sub">not tried</span>` : w.needs.length && !w.ok ? `needs ${w.needs.map((c) => `<b>${label(B, c.id)}</b>`).join(" and ")} cleared <span style="color:var(--bad)">✗ fails</span>` : w.needs.length ? `needs ${w.needs.map((c) => `<b>${label(B, c.id)}</b>`).join(" and ")} cleared` : `<span style="color:var(--ok)">✓ free</span>`}${w.needs.length ? `<ul>${w.needs.map(node).join("")}</ul>` : ""}</li>`).join("");
     return `<li><b>${label(B, n.id)}</b>${n.decision ? ` <span style="color:var(--dev);font-weight:700">◆ decision</span>` : ""}<ul>${ways}</ul></li>`;
   };
   return t.roots.length ? `<ul class="tree"><li>${redName} → target, blocked by ${t.roots.map((n) => `<b>${label(B, n.id)}</b>`).join(" and ")}<ul>${t.roots.map(node).join("")}</ul></li></ul>` : `<p class="sub" style="margin:0">${redName} → target: nothing in the way.</p>`;
@@ -274,14 +286,15 @@ const EXAMPLES = [
   { rows: ["Rr..gg"], note: "Nothing in the way: 0." },
   { rows: [".dbbd...", ".dd.d...", "Rrd..gg.", "..bb...."], note: "d@2,1 can only go up (down runs off the board), so no decision there; b@2,0 can go left or right." },
   { rows: [".ddbb...", ".dd.d...", "..Rrd.gg", "..bb...."], note: "After red's first step: d@4,1 only up; b@3,0 left or right." },
+  { rows: ["..bb....", "...d....", "Rr.d..gg", "...bb...", "........"], note: "d@3,1 up or down, each needing one block moved: up, the shorter, first; b@2,0 left or right, and left works. Down is never tried, so b@3,3 is never met (trying every way: 3)." },
 ];
 $("decisionExamples").innerHTML = EXAMPLES.map((e) => {
   const a = asciiBoard(e.rows), t = decisionTree(a.B, a.redId, a.target);
-  return `<div class="card">${asciiSvg(a)}<p style="margin:8px 0 4px"><b>${t.decisions} decision${t.decisions === 1 ? "" : "s"}.</b> <span class="sub">${e.note}</span></p>${treeHtml(a.B, t)}</div>`;
+  return `<div class="card" data-decisions="${t.decisions}" data-every="${decisionTree(a.B, a.redId, a.target, true).decisions}">${asciiSvg(a)}<p style="margin:8px 0 4px"><b>${t.decisions} decision${t.decisions === 1 ? "" : "s"}.</b> <span class="sub">${e.note}</span></p>${treeHtml(a.B, t)}</div>`;
 }).join("");
 const exB = exBoard(new Map());
 for (const b of blocks.values()) b.letter = b.w > b.h ? "b" : "d";
-$("exTree").innerHTML = `<p style="margin:0 0 6px"><b>${decisions} decision${decisions === 1 ? "" : "s"}</b> <span class="sub">(red moves once, at the end, so one stage: the start board; a block met in several branches counts once)</span></p><details><summary style="cursor:pointer;font-size:14px">The whole tree</summary>` + exStages.map((t) => treeHtml(exB, t)).join("") + `</details>`;
+$("exTree").innerHTML = `<p style="margin:0 0 6px"><b>${decisions} decision${decisions === 1 ? "" : "s"}</b> <span class="sub">(red moves once, at the end, so one stage: the start board; a block met in several branches counts once; trying every way would meet ${decisionTree(exBoard(states[0]), EX.red, EX.target, true).decisions})</span></p><details><summary style="cursor:pointer;font-size:14px">The tree as a person works it out</summary>` + exStages.map((t) => treeHtml(exB, t)).join("") + `</details>`;
 
 // ---- Board drawing ----
 const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
@@ -333,7 +346,7 @@ $("checks").innerHTML = [
 // ---- The Judge, named and filled in ----
 const mt = (t) => `<mtext>${t}</mtext>`, mn = (n) => `<mn>${n}</mn>`, mo = (o) => `<mo>${o}</mo>`;
 const pow = (b, e) => `<msup>${b}${e}</msup>`, half = `<mrow>${mo("(")}<mfrac>${mn(1)}${mn(2)}</mfrac>${mo(")")}</mrow>`;
-const bal = (m, k, d, t, tail = "") => `<mrow>${mt("balance")}${mo("=")}<mfrac><mrow>${m}${mo("+")}${mn(2)}${mo("×")}${k}</mrow>${pow(d, mn("0.6"))}</mfrac>${mo("×")}${pow(half, t)}${tail}</mrow>`;
+const bal = (m, k, d, t, tail = "") => `<mrow>${mt("balance")}${mo("=")}<mfrac><mrow>${m}${mo("+")}${k}</mrow>${pow(d, mn("0.4"))}</mfrac>${mo("×")}${pow(half, t)}${tail}</mrow>`;
 const fit = (b, aimOff, r, cl, tail = "") => `<mrow>${mt("fitness")}${mo("=")}${b}${mo("×")}${pow(half, aimOff)}${mo("×")}${pow(mn("0.8"), r)}${mo("×")}${pow(half, cl)}${tail}</mrow>`;
 $("named").innerHTML = `<mtable columnalign="left" rowspacing="0.9em"><mtr><mtd>${bal(mt("fewest moves"), mt("decisions"), mt("distance"), mt("track blocks"))}</mtd></mtr><mtr><mtd>${fit(mt("balance"), `<mrow>${mo("|")}${mt("fewest moves − ramp aim")}${mo("|")}</mrow>`, mt("reach beyond 4"), mt("clashes"))}</mtd></mtr></mtable>`;
 $("filled").innerHTML = `<mtable columnalign="left" rowspacing="0.9em"><mtr><mtd>${bal(mn(M), mn(decisions), mn(distance), mn(track.size), `${mo("=")}${mn(balance.toFixed(1))}`)}</mtd></mtr><mtr><mtd>${fit(mn(balance.toFixed(1)), mn(Math.abs(M - EX.aim)), mn(Math.max(0, reach - 4)), mn(0), `${mo("=")}<mn mathvariant="bold">${fitness.toFixed(1)}</mn>`)}</mtd></mtr></mtable>`;

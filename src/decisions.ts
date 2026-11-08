@@ -2,8 +2,11 @@
 // Back from the target: whatever is between red and its target has to be cleared; each such
 // block can go either way along its axis, by the least that frees the cells; a way is out if
 // it runs into the edge or a wall, or into a block already in this chain (a cycle), and
-// otherwise the blocks it sweeps into have to be cleared in turn. A block with two plausible
-// ways is a decision. Ported from the drawn spec's decisionTree (reports/goal-spec-visual.html).
+// otherwise the blocks it sweeps into have to be cleared in turn. A block met with two
+// plausible ways is a decision. A person tries one way at a time, the easier first (fewer
+// blocks to clear, then the shorter slide), and stops at the first that works: what lies
+// behind the other way is never met. Ported from the drawn spec's decisionTree
+// (reports/goal-spec-visual.html).
 import { isFixed, type Board } from "./board";
 import type { Point } from "./camera";
 import type { Goal } from "./contract";
@@ -15,21 +18,26 @@ export const EDGE = "#";
  * where a block is now. */
 export type Cells = { at(x: number, y: number): string | null; block(id: string): { x: number; y: number; w: number; h: number } };
 
-/** Explored at most this many blocks deep, and this many blocks in all (per stage). */
+/** A way needing blocks cleared deeper than this many blocks, or after this many blocks in
+ * all (per stage), is given up. */
 export const MAX_DEPTH = 6, MAX_NODES = 300;
 /** A way that has to slide further than this to free the cells is out. */
 const MAX_SLIDE = 12;
 
-export type Way = { dir: -1 | 1; slide: number; out: string | null; needs: Clearing[]; ok: boolean };
+/** One way a block could go: `tried` when the person got to it (a way after one that works
+ * is not), and `ok` when it was tried and every block it needs cleared could be. */
+export type Way = { dir: -1 | 1; slide: number; out: string | null; needs: Clearing[]; tried: boolean; ok: boolean };
 /** A block to clear: the ways it could go, and whether it is a decision (two plausible). */
 export type Clearing = { id: string; ways: Way[]; decision: boolean; ok: boolean };
 
 const key = (c: Point) => `${c.x},${c.y}`;
 
-/** The clearing tree for red's way to `target` on `cells`: each block in the way, each way it
- * could go, and the blocks those ways need moved in turn; and how many blocks are decisions,
- * each counted once however many branches meet it. */
-export function decisionTree(cells: Cells, red: string, target: Point): { roots: Clearing[]; decisions: number } {
+/** The clearing tree for red's way to `target` on `cells`, as a person works it out: each
+ * block in the way, the ways it could go, and the blocks the ways tried need moved in turn;
+ * and how many of the blocks met are decisions, each counted once however many branches
+ * meet it. With `every`, every plausible way is tried, whether or not one before it worked
+ * (the count before the Judge stopped at the first that works; for comparison). */
+export function decisionTree(cells: Cells, red: string, target: Point, { every = false } = {}): { roots: Clearing[]; decisions: number } {
   const shape = (id: string) => {
     const b = cells.block(id);
     return { ...b, hz: b.w > b.h };
@@ -48,6 +56,7 @@ export function decisionTree(cells: Cells, red: string, target: Point): { roots:
   function clear(id: string, region: Set<string>, chain: Set<string>, depth: number): Clearing {
     const b = shape(id), node: Clearing = { id, ways: [], decision: false, ok: false };
     nodes++;
+    const sweeps: Point[][] = [], blockers: string[][] = [];
     for (const dir of [-1, 1] as const) {
       // Slide one cell at a time until the block's cells are clear of the region.
       const sweep: Point[] = [];
@@ -68,19 +77,40 @@ export function decisionTree(cells: Cells, red: string, target: Point): { roots:
           break;
         }
       }
-      const way: Way = { dir, slide: s, out, needs: [], ok: false };
-      if (!out) {
-        const blockers = blockersIn(sweep, id), cycle = blockers.find((o) => chain.has(o));
-        if (cycle) way.out = `cycle (${cycle})`;
-        else if (depth >= MAX_DEPTH || nodes >= MAX_NODES) way.out = "too deep";
-        else way.needs = blockers.map((o) => clear(o, new Set(sweep.map(key)), new Set([...chain, id]), depth + 1));
-      }
-      way.ok = !way.out && way.needs.every((n) => n.ok);
-      node.ways.push(way);
+      const these = out ? [] : blockersIn(sweep, id), cycle = these.find((o) => chain.has(o));
+      if (cycle) out = `cycle (${cycle})`;
+      node.ways.push({ dir, slide: s, out, needs: [], tried: false, ok: false });
+      sweeps.push(sweep);
+      blockers.push(these);
     }
-    node.decision = node.ways.filter((w) => !w.out).length === 2;
+    const plausible = [0, 1].filter((k) => !node.ways[k]!.out);
+    node.decision = plausible.length === 2;
     if (node.decision) forks.add(id);
-    node.ok = node.ways.some((w) => w.ok);
+    // The easier way first: fewer blocks to clear, then the shorter slide, then up or left.
+    plausible.sort((a, c) => blockers[a]!.length - blockers[c]!.length || node.ways[a]!.slide - node.ways[c]!.slide || a - c);
+    for (const k of plausible) {
+      const way = node.ways[k]!;
+      way.tried = true;
+      if (blockers[k]!.length && (depth >= MAX_DEPTH || nodes >= MAX_NODES)) {
+        way.out = "too deep";
+        continue;
+      }
+      const from = new Set(sweeps[k]!.map(key)), inChain = new Set([...chain, id]);
+      way.ok = true;
+      for (const o of blockers[k]!) {
+        const need = clear(o, from, inChain, depth + 1);
+        way.needs.push(need);
+        // One block that cannot be cleared and this way fails: on to the other.
+        if (!need.ok) {
+          way.ok = false;
+          break;
+        }
+      }
+      if (way.ok) {
+        node.ok = true;
+        if (!every) break;
+      }
+    }
     return node;
   }
 

@@ -73,7 +73,7 @@ export type Wishes = {
   /** The factor per clash. */
   clash: number;
 };
-export const WISHES: Wishes = { decision: 2, distance: 0.6, track: 0.5, aim: 0.5, reach: 0.8, reachFree: 4, clash: 0.5 };
+export const WISHES: Wishes = { decision: 1, distance: 0.4, track: 0.5, aim: 0.5, reach: 0.8, reachFree: 4, clash: 0.5 };
 
 const chunkOf = (x: number, y: number) => `${Math.floor(x / CHUNK)},${Math.floor(y / CHUNK)}`;
 
