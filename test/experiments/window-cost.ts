@@ -13,7 +13,7 @@ type Row = { name: string; own: number; runs: { cfg: string; moves: number | nul
 export function configs(spec: string): (MeasureOptions & { cfg: string })[] {
   return spec.split(",").map((s) => {
     const [m, l] = s.split(":");
-    return { cfg: s, margin: Number(m), levels: l === "inf" ? Infinity : Number(l) };
+    return { cfg: s, margin: Number(m), levels: l === "inf" ? Infinity : Number(l), reach: null };
   });
 }
 

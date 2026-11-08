@@ -1,8 +1,8 @@
-// Today's maker (bench/current.ts) at an effort level with the measure's window at several
-// margins, on the Bench's cases: its time, its goal's fewest as the game would know it, and
+// Today's maker (bench/current.ts) at an effort level with the measure reaching several
+// ways, on the Bench's cases: its time, its goal's fewest as the game would know it, and
 // whether a wide search (the check below) finds that overstated, as it would let a player
 // win a bogus medal.
-//   scripts/capped.sh 2500 7200 bun test/experiments/window-effort.ts <out.json> <level> <margins, e.g. 2,5,8> [every] [check margin 12] [check limit 200k]
+//   scripts/capped.sh 2500 7200 bun test/experiments/window-effort.ts <out.json> <level> <reaches, e.g. -,6:40,8:60> [every] [check margin 12, then 16:200] [check limit 200k]
 //   bun test/experiments/window-effort.ts report <out.json>
 import { contractGoal, playerCells, requestBoard, worldLayout } from "../../src/contract";
 import { measure } from "../../src/difficulty";
@@ -14,7 +14,7 @@ import { pct } from "./window-cost";
 type Row = { name: string; margin: string; ms: number; moves: number | null; known: number | null; truth: number | null; exact: boolean };
 
 async function run(out: string, level: number, margins: string[], every: number, checkMargin: number, checkLimit: number) {
-  const cases: Case[] = await Bun.file(new URL("../../bench/cases-full.json", import.meta.url).pathname).json();
+  const cases: Case[] = await Bun.file(new URL(`../../bench/cases-${process.env.SET ?? "full"}.json`, import.meta.url).pathname).json();
   const rows: Row[] = [];
   for (const [i, c] of cases.entries()) {
     if (i % every) continue;
@@ -29,7 +29,9 @@ async function run(out: string, level: number, margins: string[], every: number,
     const options = { moved: board.pos, exclude: new Set(request.history.map((h) => h.red)), avoid, target: request.rampAim ?? undefined };
     for (const margin of margins) {
       const saved = { ...LEVELS_OF_EFFORT[level]! };
-      LEVELS_OF_EFFORT[level]!.margin = Number(margin);
+      // "8:60": the blocks that matter, 8 steps and 60 blocks at most; "-": the near window only.
+      const [depth, most] = margin.split(":").map(Number);
+      LEVELS_OF_EFFORT[level]!.reach = margin === "-" ? null : { depth: depth!, most: most! };
       const t = performance.now();
       const found = makeGoalHard(layout, near, options, level);
       const ms = performance.now() - t;
@@ -40,7 +42,7 @@ async function run(out: string, level: number, margins: string[], every: number,
       }
       const known = found.difficulty.moves ?? found.solution.length;
       const goal = contractGoal(found);
-      const check = measure(board, { id: goal.red, target: goal.target, solution: found.solution }, { margin: checkMargin, limit: checkLimit });
+      const check = measure(board, { id: goal.red, target: goal.target, solution: found.solution }, { margin: checkMargin, limit: checkLimit, reach: { depth: 16, most: 200 } });
       rows.push({ name: c.name, margin, ms, moves: found.difficulty.moves, known, truth: Math.min(known, check.solution?.length ?? Infinity), exact: check.moves !== null });
     }
     process.stderr.write(`\r${i + 1}/${cases.length}`);

@@ -4,7 +4,7 @@
 // with a large budget. A medal (fewer moves than the game knew, no undo) is bogus when a wider
 // search finds a solution no longer than the player's: the game's fewest was overstated.
 //   scripts/capped.sh 2500 7200 bun test/experiments/medals.ts measure <out.json> <play.json...>
-//   scripts/capped.sh 2500 7200 bun test/experiments/medals.ts measure <more.json> <play.json...> '[{"cfg": "6:2@50k", "margin": 6, "levels": 2, "limit": 50000}]'
+//   scripts/capped.sh 2500 7200 bun test/experiments/medals.ts measure <more.json> <play.json...> '[{"cfg": "reach 8:60@50k", "reach": {"depth": 8, "most": 60}, "limit": 50000}]'
 //   bun test/experiments/medals.ts report <out.json>[,<more.json>...] [cfg as the game's measure after the fix]
 // Play data is read, never copied into the repo.
 import { Board } from "../../src/board";
@@ -22,12 +22,14 @@ import { parse } from "./play-analysis";
  * large budget they find the true fewest (never more than the player's moves). */
 type Search = MeasureOptions & { cfg: string; player?: boolean; medals?: boolean };
 const SEARCHES: Search[] = [
-  { cfg: "2:2@50k", margin: 2, levels: 2, limit: 50_000 },
-  { cfg: "5:2@50k", margin: 5, levels: 2, limit: 50_000 },
-  { cfg: "8:2@50k", margin: 8, levels: 2, limit: 50_000 },
-  { cfg: "8:1@200k+player", margin: 8, levels: 1, limit: 200_000, player: true },
+  { cfg: "2:2@50k", margin: 2, levels: 2, limit: 50_000, reach: null },
+  { cfg: "5:2@50k", margin: 5, levels: 2, limit: 50_000, reach: null },
+  { cfg: "8:2@50k", margin: 8, levels: 2, limit: 50_000, reach: null },
+  // The game's measure now: the near window, then the blocks that matter (src/difficulty.ts).
+  { cfg: "reach 8:60@50k", limit: 50_000, reach: { depth: 8, most: 60 } },
+  { cfg: "8:1@200k+player", margin: 8, levels: 1, limit: 200_000, player: true, reach: null },
   // (Slow: only for medals.)
-  { cfg: "16:2@500k+player", margin: 16, levels: 2, limit: 500_000, player: true, medals: true },
+  { cfg: "16:2@500k+player", margin: 16, levels: 2, limit: 500_000, player: true, medals: true, reach: null },
 ];
 
 const MEDALS_FROM = Date.parse("2026-10-30T14:02:31Z");
