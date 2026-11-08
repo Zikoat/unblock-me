@@ -110,9 +110,9 @@ if (import.meta.main) {
     results.push({ ...r, quality });
     const line = `${c.name}: ${r.goal ? `${r.goal.moves.length} moves` : "none"}${r.verdict && !r.verdict.ok ? ` ILLEGAL rule ${r.verdict.rule}: ${r.verdict.why}` : ""}${r.same ? "" : " NOT DETERMINISTIC"}${r.audit?.padding ? ` padded +${r.audit.padding}` : ""} fitness ${r.terms?.fitness.toFixed(2) ?? "-"} quality ${quality.toFixed(2)} ${Math.round(r.ms)} ms`;
     if (verbose || (r.verdict && !r.verdict.ok) || !r.same) console.log(line);
-    else process.stderr.write(`\r${i + 1}/${cases.length}`);
+    else if (process.stderr.isTTY) process.stderr.write(`\r${i + 1}/${cases.length}`);
   }
-  process.stderr.write("\n");
+  if (process.stderr.isTTY) process.stderr.write("\n");
   const scores = score(makerName, set, results);
   await mkdir(`${dir}results`, { recursive: true });
   const shippingFile = Bun.file(`${dir}results/${SHIPPING}-${set}.json`);

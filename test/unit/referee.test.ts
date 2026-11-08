@@ -35,25 +35,26 @@ describe("referee", () => {
     expect(referee(request(), goal([mv("u", [3, -1], [1, -1]), mv("v", [3, 0], [3, -2]), mv("r", [0, 0], [4, 0])]))).toEqual({ ok: true });
   });
 
-  const broken: [string, Goal, number][] = [
+  const broken: [string, Goal, number, RegExp?][] = [
     ["red is not a block", goal(SHORT, { x: 4, y: 0 }, "nope"), 1],
     ["red is a wall", goal([], { x: 7, y: 1 }, "w7,0"), 1],
-    ["a move's block isn't at from", goal([mv("v", [3, 1], [3, 2]), mv("r", [0, 0], [4, 0])]), 2],
-    ["off its axis", goal([mv("r", [0, 0], [0, 1])]), 2],
-    ["going nowhere", goal([mv("v", [3, 0], [3, 0]), mv("r", [0, 0], [4, 0])]), 2],
-    ["through a block", goal([mv("r", [0, 0], [4, 0])]), 2],
-    ["through a wall", goal([mv("v", [3, 0], [3, 1]), mv("r", [0, 0], [6, 0])], { x: 6, y: 0 }), 2],
-    ["moving a wall", goal([mv("w3,3", [3, 3], [3, 4]), ...SHORT]), 2],
+    ["a move's block isn't at from", goal([mv("v", [3, 1], [3, 2]), mv("r", [0, 0], [4, 0])]), 2, /^move 1 .*the block is at 3,0/],
+    ["off its axis", goal([mv("r", [0, 0], [0, 1])]), 2, /^move 1 .*off the block's axis/],
+    ["going nowhere", goal([mv("v", [3, 0], [3, 1]), mv("u", [3, -1], [3, -1]), mv("r", [0, 0], [4, 0])]), 2, /^move 2 .*goes nowhere/],
+    ["through a block", goal([mv("r", [0, 0], [4, 0])]), 2, /^move 1 .*v is in the way at 3,0/],
+    ["through a wall", goal([mv("v", [3, 0], [3, 1]), mv("r", [0, 0], [6, 0])], { x: 6, y: 0 }), 2, /^move 2 .*w7,0 is in the way at 7,0/],
+    ["moving a wall", goal([mv("w3,3", [3, 3], [3, 4]), ...SHORT]), 2, /^move 1 .*never slides/],
     ["not ending on the target", goal([mv("v", [3, 0], [3, 1]), mv("r", [0, 0], [2, 0])]), 3],
     ["the target is where red starts", goal([], { x: 0, y: 0 }), 3],
     ["two moves in a row of one block", goal([mv("v", [3, 0], [3, 1]), mv("r", [0, 0], [2, 0]), mv("r", [2, 0], [4, 0])]), 4],
     ["a move that can be dropped", goal([mv("v", [3, 0], [3, 1]), mv("u", [3, -1], [1, -1]), mv("r", [0, 0], [4, 0])]), 4],
     ["over 100 moves", goal(Array.from({ length: 101 }, (_, i) => (i % 2 ? mv("u", [1, -1], [3, -1]) : mv("u", [3, -1], [1, -1])))), 5],
   ];
-  for (const [what, g, rule] of broken) {
+  for (const [what, g, rule, why] of broken) {
     test(`rule ${rule}: ${what}`, () => {
       const verdict = referee(request(), g);
       expect(verdict.ok ? 0 : verdict.rule).toBe(rule);
+      if (why && !verdict.ok) expect(verdict.why).toMatch(why);
     });
   }
 
