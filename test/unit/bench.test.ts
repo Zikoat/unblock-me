@@ -32,6 +32,19 @@ describe("auditor", () => {
     expect(a).toEqual({ fewest: 2, exact: true, padding: 0 });
   });
 
+  test("a shorter way just past the game's window is found", () => {
+    // r has to get past v. Up, v needs u moved left (right is walled), and u needs t moved
+    // left: 4 moves. Down, v needs z (rows 2 and 3) moved down by one, into row 4: 3 moves,
+    // but row 4 is past the game's window (2 rows round red's run), which saw only the 4.
+    const placed = [W(-1, 0), H("r", 0, 0), V("v", 3, 0), H("u", 3, -1), W(5, -1), H("t", 0, -1), V("z", 3, 2), W(7, 0)];
+    const request = gameRequest({ seed: 0, tries: 0, ui: {}, placed, moved: new Map(), done: [] });
+    const long: Goal = { red: "r", target: { x: 4, y: 0 }, moves: [mv("t", [0, -1], [-2, -1]), mv("u", [3, -1], [1, -1]), mv("v", [3, 0], [3, -2]), mv("r", [0, 0], [4, 0])] };
+    expect(referee(request, long)).toEqual({ ok: true });
+    const a = audit(request, long);
+    expect(a).toMatchObject({ fewest: 3, exact: true, padding: 1 });
+    expect(a.shorter!.moves.map((m) => m.block)).toEqual(["z", "v", "r"]);
+  });
+
   test("records: set, kept when not beaten, replaced when beaten or the case changed", () => {
     const records: Records = {};
     const c = { name: "c", request };
