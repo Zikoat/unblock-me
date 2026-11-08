@@ -139,7 +139,7 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
   await tap(cell(-0.5, 3.5));
   await pass(page, 100);
   const text = await page.evaluate(() => document.body.innerText.trim());
-  check(/^\d+ fps · \d+[smhd] ago · [0-9a-f]{7,}\+?\nWorld goals solved: 0\nRamp target: 4 fewest moves\nAudio: [a-z]+ · \d+ tries · .+$/.test(text), `the fps toggle shows the debug counter: fps, build age and commit, world goals solved and the ramp's target ("${text}")`);
+  check(/^\d+ fps · \d+[smhd] ago · [0-9a-f]{7,}\+?\nWorld goals solved: 0\nRamp target: 4 fewest moves\nAudio: [a-z]+ · \d+ tries · .+\nMaker: (idle|making, effort \d, \d+s|ready, \d+ moves, fitness [\d.]+)\nAhead: .+$/.test(text), `the fps toggle shows the debug counter: fps, build age and commit, world goals solved, the ramp's target and what the goal makers are doing ("${text}")`);
   await pass(page, 1200);
   const idleFps = await page.evaluate(() => parseInt(document.querySelector("#fps").textContent));
   check(idleFps > 10, `with nothing moving the counter still counts frames (${idleFps} fps)`);

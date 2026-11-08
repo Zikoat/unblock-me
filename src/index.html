@@ -20,6 +20,12 @@
   /* Turns a little every frame, so frames keep coming and the fps counter shows the real rate. */
   #spin { position: absolute; top: 15px; left: 6px; width: 8px; height: 8px; border-radius: 2px; background: #b9b6ad; pointer-events: none !important; }
   #fps { position: absolute; top: 6px; left: 20px; padding: 6px 10px; border-radius: 8px; background: rgba(29, 29, 31, 0.82); color: #f3f2ee; font: 13px/1.5 ui-monospace, monospace; white-space: pre; pointer-events: none !important; }
+  /* Under it, what each goal maker is doing: a square in its state's colour (main.ts MAKING). */
+  #makers i { display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 2px; vertical-align: 1px; background: #8e8e93; }
+  #makers i[data-is="working"] { background: #f2b632; }
+  #makers i[data-is="ready"] { background: #5fd38d; }
+  #makers i[data-is="none"] { background: #8fa3bf; }
+  #makers i[data-is="rejected"] { background: #ff6b6b; }
   #tip { position: fixed; display: none; white-space: pre-line; max-width: 260px; padding: 7px 10px; border-radius: 8px; background: #1d1d1f; color: #f3f2ee; font: 13px/1.4 system-ui, sans-serif; pointer-events: none; box-shadow: 0 4px 14px rgba(0,0,0,.18); z-index: 2; }
   /* The island's next button, under its finish card (main.ts sets its top). */
   #next { position: absolute; left: 50%; transform: translateX(-50%); padding: 0.8em 1.7em; border: 0; border-radius: 999px; background: #f2b632; color: #fff; font: 800 18px/1 system-ui, -apple-system, "Segoe UI", sans-serif; box-shadow: 0 4px 16px rgba(0,0,0,.3); cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
@@ -31,7 +37,7 @@
 <canvas></canvas>
 <div id="view">
 <div id="spin"></div>
-<div id="fps"></div>
+<div id="fps"><span></span><div id="makers"><div><i></i><span></span></div><div><i></i><span></span></div></div></div>
 <div id="tip" role="tooltip"></div>
 <button id="next" hidden>Next level</button>
 </div>

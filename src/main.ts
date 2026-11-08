@@ -84,6 +84,7 @@ let forgetting = false;
 
 const canvas = document.querySelector("canvas")!;
 const fps = document.querySelector<HTMLElement>("#fps")!;
+const fpsText = fps.firstElementChild as HTMLElement; // (the makers' lines follow it)
 const tip = document.querySelector<HTMLElement>("#tip")!;
 const viewBox = document.querySelector<HTMLElement>("#view")!;
 
@@ -261,6 +262,54 @@ restoreCamera();
 // A fresh start (first visit or after a reset) keeps its seed from the first load on.
 if (localStorage.getItem(SEED_KEY) === null) save();
 
+/** What a goal maker (a worker) is doing, for the debug text under the fps counter: idle,
+ * making a goal (at an effort level, since when), or how the last goal it sent came out. */
+type Making = { is: "idle" } | { is: "working"; level: number; since: number } | { is: "ready"; moves: number; fitness: number } | { is: "none" } | { is: "rejected"; rule: number };
+/** The maker of goals waited for (0) and the one making the next goal ahead (1): what each is
+ * doing, and how many requests it has yet to answer. */
+const makers = [0, 1].map(() => ({ making: { is: "idle" } as Making, pending: 0 }));
+const makerRows = [...document.querySelectorAll<HTMLElement>("#makers > div")];
+/** A maker was asked for a goal. */
+function asking(k: number, to: Worker, request: GoalRequest): void {
+  to.postMessage(request);
+  makers[k]!.pending++;
+  setMaking(k, { is: "working", level: request.level ?? 1, since: performance.now() });
+}
+/** A maker answered: with how its goal came out, or none if the answer was stale (it goes
+ * on to the next request, if it has one). */
+function answered(k: number, making: Making | null): void {
+  const m = makers[k]!;
+  m.pending = Math.max(0, m.pending - 1);
+  if (making) setMaking(k, making);
+  else if (m.pending && m.making.is === "working") setMaking(k, { ...m.making, since: performance.now() });
+  else setMaking(k, { is: "idle" });
+}
+/** How a checked goal came out, for its maker's line. */
+const madeAs = ({ goal, rule }: Checked): Making =>
+  rule !== undefined ? { is: "rejected", rule } : goal ? { is: "ready", moves: goal.solution.length, fitness: goal.judged?.fitness ?? NaN } : { is: "none" };
+function setMaking(k: number, making: Making): void {
+  makers[k]!.making = making;
+  showMaking();
+}
+/** The makers' lines: written only when they change (and once a second while one works, for
+ * its seconds), never per frame. */
+function showMaking(): void {
+  makers.forEach(({ making: m }, k) => {
+    const [square, text] = makerRows[k]!.children as unknown as [HTMLElement, HTMLElement];
+    const said = `${k ? "Ahead" : "Maker"}: ${
+      m.is === "working" ? `making, effort ${m.level}, ${Math.floor((performance.now() - m.since) / 1000)}s`
+      : m.is === "ready" ? `ready, ${m.moves} moves, fitness ${m.fitness.toFixed(2)}`
+      : m.is === "rejected" ? `rejected (rule ${m.rule})`
+      : m.is === "none" ? "none found"
+      : "idle"
+    }`;
+    if (text.textContent !== said) text.textContent = said;
+    if (square.dataset.is !== m.is) square.dataset.is = m.is;
+  });
+}
+showMaking();
+setInterval(() => makers.some((m) => m.making.is === "working") && showMaking(), 1000);
+
 // Goals are made by a worker: shuffling a dense board can take a second or two. Only the
 // newest request counts; a slider drag or reset in between makes older answers stale.
 const worker = new Worker("goal-worker.js");
@@ -297,7 +346,7 @@ function requestGoal(near: Point = viewCentre(scene.camera, scene.width, scene.h
   }
   const request: GoalRequest = { job: ++job, seed, tries, ui: shownUi, placed, near, moved: [...scene.moved], level: 0, exclude, avoid: targetsOf(scene.done), target: rampTarget(worldGoals()) };
   asked = { request: asRequest(request, scene.done), near, level: 0 };
-  worker.postMessage(request);
+  asking(0, worker, request);
 }
 /** What a worker was last asked, as the goal contract has it (src/contract.ts), so the goal
  * that comes back can be checked against it. */
@@ -308,9 +357,11 @@ const asRequest = (r: GoalRequest, done: readonly { id: string; target: Point }[
 /** For tests: a change made to the next goal a worker sends, before it is checked. */
 let tamper: ((goal: Goal) => void) | null = null;
 /** A goal from a worker, checked by the Referee (an assertion: a rejected goal is a bug,
- * logged with its Request, and counts as none found) and scored by the Judge. */
-function checked(goal: Goal | null, by: Asked | null): Goal | null {
-  if (!goal || !by) return goal;
+ * logged with its Request, and counts as none found, with the rule it broke) and scored by
+ * the Judge. */
+type Checked = { goal: Goal | null; rule?: number };
+function checked(goal: Goal | null, by: Asked | null): Checked {
+  if (!goal || !by) return { goal };
   if (tamper) {
     tamper(goal);
     tamper = null;
@@ -319,10 +370,10 @@ function checked(goal: Goal | null, by: Asked | null): Goal | null {
   const verdict = referee(by.request, made, board);
   if (!verdict.ok) {
     log({ e: "rejected", rule: verdict.rule, why: verdict.why, goal: made, ...by });
-    return null;
+    return { goal: null, rule: verdict.rule };
   }
   goal.judged = judge(by.request, made, { board });
-  return goal;
+  return { goal };
 }
 /** How many world goals (off the island) were reached: the next one's place on the ramp. */
 const worldGoals = () => scene.done.filter((g) => squareOf(g) === null).length;
@@ -330,8 +381,10 @@ type Measured = { of: { id: string; target: Point }; difficulty: Difficulty; cho
 type Reply = { job: number; goal: Goal | null } | ({ job: number } & Measured);
 worker.onmessage = (event: MessageEvent<Reply>) => {
   if ("difficulty" in event.data) return measured(event.data);
-  if (event.data.job !== job) return;
-  showGoal(checked(event.data.goal, asked));
+  if (event.data.job !== job) return answered(0, null);
+  const made = checked(event.data.goal, asked);
+  answered(0, madeAs(made));
+  showGoal(made.goal);
 };
 /** A goal's difficulty arrived: it belongs to whichever goal it was measured for. */
 function measured({ of, difficulty, choices }: Measured): void {
@@ -421,7 +474,7 @@ function prefetchFirst(): void {
   ahead.asked = boardKey(worldMoved(moved), exclude, near);
   const request: GoalRequest = { job: ++ahead.job, seed, tries, ui: shownUi, placed, near, moved: [...moved], level: 3, exclude, avoid: targetsOf(all), target: rampTarget(0) };
   ahead.contract = { request: asRequest(request, all), near, level: 3 };
-  ahead.worker.postMessage(request);
+  asking(1, ahead.worker, request);
 }
 function lookAhead(): void {
   const goal = scene.goal;
@@ -440,12 +493,14 @@ function lookAhead(): void {
   ahead.asked = key;
   const request: GoalRequest = { job: ++ahead.job, seed, tries, ui: shownUi, placed, near: goal.target, moved: [...moved], level: 2, exclude, avoid: targetsOf([...scene.done, goal]), target: rampTarget(worldGoals() + 1) };
   ahead.contract = { request: asRequest(request, [...scene.done, goal]), near: goal.target, level: 2 };
-  ahead.worker.postMessage(request);
+  asking(1, ahead.worker, request);
 }
 ahead.worker.onmessage = (event: MessageEvent<Reply>) => {
   if ("difficulty" in event.data) return measured(event.data);
-  if (event.data.job !== ahead.job) return;
-  ahead.ready = { key: ahead.asked, goal: checked(event.data.goal, ahead.contract) };
+  if (event.data.job !== ahead.job) return answered(1, null);
+  const made = checked(event.data.goal, ahead.contract);
+  answered(1, madeAs(made));
+  ahead.ready = { key: ahead.asked, goal: made.goal };
   if (ahead.wanted && ahead.wanted === ahead.asked) requestGoal(finish?.next);
 };
 if (testbed) {
@@ -947,7 +1002,7 @@ function showFps(now: number): void {
   // And the world's goals solved, the ramp's target for the goal being played (or next), and
   // how sound is doing.
   const target = rampTarget(worldGoals());
-  fps.textContent = [
+  fpsText.textContent = [
     `${frames.length} fps · ${ago(Date.now() - builtAt)} · ${__COMMIT__}`,
     `World goals solved: ${worldGoals()}`,
     `Ramp target: ${target === undefined ? "none" : `${target} fewest moves`}`,
