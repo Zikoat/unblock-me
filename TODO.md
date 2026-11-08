@@ -4,7 +4,9 @@
 
 In approximate priority order, highest first; the middle ones are not ordered among themselves.
 
-- Goal spec phase 1 (reports/goal-spec.html): the Bench and Records, the Referee and Judge (with decisions), and a new, simpler Reference written to the spec; makes goal making measurable; waits on nothing.
+- In play, a goal the Referee rejects counts as none found (the game is left without a goal); the spec asks the maker again with the next seed; waits on a maker that takes a seed.
+- The Gate's time is measured on the VM, the spec's is on a mid phone; waits on timing the maker on a phone.
+- The Reference is shallow (breadth first, about 5 moves at most), so it loses wherever a longer goal wins (ramp aims over 6, none); a deeper plain search; waits on the Tuner runs showing whether the records need it.
 - Tuner runs: subagents improve the goal maker against the Bench; waits on goal spec phase 1.
 - Fit the Judge's decision weight to play data (players' extra moves against fewest moves and decisions); waits on goal spec phase 1.
 - Island squares that teach tap-push and a half-way drag (a tap-push can't solve it; none turned up in a 5x5 search, a tap stops the red block on its target), and squares with several goals that are rated (the card scores only the last goal); subject a and b never learnt one or the other; waits on you playing the teaching squares.
