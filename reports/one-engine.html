@@ -40,14 +40,14 @@
 <h3>What the engine owns</h3>
 <div class="two">
   <div class="card"><dl class="goal">
-    <dt>1</dt><dd><b>Level generation</b>: the endless board from a seed and density, the starter island, goals (the level maker).</dd>
+    <dt>1</dt><dd><b>Level generation</b>: the endless board from a seed and density, the home and offline islands, goals (the level maker).</dd>
     <dt>2</dt><dd><b>Board storage</b>: where every moved block is, indexed by chunk; behind one storage interface with two backends (IndexedDB offline, SpacetimeDB tables online).</dd>
     <dt>3</dt><dd><b>Moving</b>: an interaction in, the next board state out (and the store updated).</dd>
     <dt>4</dt><dd><b>View</b>: from a player's location and viewport, the blocks that matter to them, sent to the renderer.</dd>
   </dl></div>
   <div class="card"><dl class="goal">
     <dt>5</dt><dd><b>Multiplayer</b>: several players and locations, their interactions on one board, who sees what.</dd>
-    <dt>6</dt><dd><b>Offline</b>: playing with no connection, then handing it over when online again; merging the starter island into the shared world.</dd>
+    <dt>6</dt><dd><b>Islands and offline</b>: the home island, stamped beside the world once online; finishing a goal offline, then the offline island; the outbox replayed on reconnecting.</dd>
     <dt>7</dt><dd><b>Game features</b> still to come (new block kinds, immovable blocks, goals ending at a place…).</dd>
     <dt>8</dt><dd><b>Its own checks</b>: assertions and unit tests in place of the Referee, Judge and Auditor; the benchmark as a binary in the same crate.</dd>
   </dl></div>
@@ -69,9 +69,15 @@
 <h3>Online, with the client predicting</h3>
 <p class="sub">The interaction goes to the server, which decides. The client applies it at once with the same engine, so the game feels instant through lag, and replays its unconfirmed moves on top of each confirmed state when it arrives (client-side prediction and server reconciliation).</p>
 <div class="card"><svg id="online" role="img" aria-label="Online: predict locally, the server decides, subscriptions update every player"></svg></div>
-<h3>Offline to online</h3>
-<div class="card"><svg id="handover" role="img" aria-label="Handing an offline session over to the server"></svg></div>
-<p class="note">The offline session is kept as a log of interactions, not only a board. On reconnecting, the server replays them in order through the same engine. A move another player has since made impossible is rejected, and the client rebuilds from the server's board. Block positions can't be merged freely (a CRDT would give boards with overlapping blocks); replaying moves through the engine keeps every board legal.</p>
+<h3>Islands, offline and back (your design, from TODO.md)</h3>
+<div class="card"><svg id="handover" role="img" aria-label="The home island, the shared world, the offline island"></svg></div>
+<ul class="note">
+  <li>A player starts on a <b>home island</b> on the server, cut off from everyone.</li>
+  <li>After some progress, and only while online, it is <b>stamped beside the shared world</b>: an area of any shape (the cells the player touched, plus a margin) that overrides generation there. Online only, so the server places islands so they never overlap.</li>
+  <li>Going offline in the world, the player <b>finishes the current goal</b>; its moves wait in an outbox. Then they carry on on an <b>offline island</b>, with its own seed, which is never merged.</li>
+  <li>Back online, the server replays the outbox through the same engine: the goal's <b>rewards are kept</b>, and the world is <b>rolled back where the moves conflict</b> with what others did meanwhile. The next goal is in the shared world again.</li>
+  <li>Offline play never writes into the shared world beyond one goal, so there is no general merge. (Block positions couldn't be merged freely anyway: a CRDT would give overlapping blocks.)</li>
+</ul>
 
 <h2>Why not now</h2>
 <div class="two">
@@ -90,7 +96,7 @@
 <table style="margin-top:12px">
   <tr><th>Phase</th><th>What happens</th><th>Done when</th></tr>
   <tr><td>1 · Goal spec</td><td>As the goal spec says: the Bench and Records, the Referee and Judge in TypeScript, a simpler Reference; Tuner subagents hill-climb makers against it, in any language (a Rust one compiled to WASM, checked by the TypeScript Referee).</td><td>The maker stops improving: new Contenders rarely beat the Records.</td></tr>
-  <tr><td>2 · Features settle</td><td>Keep building the game in TypeScript: multiplayer rules, offline, island merging, new block kinds. Each new rule lands in the spec and the Reference first.</td><td>No big feature planned that changes the board's shape.</td></tr>
+  <tr><td>2 · Features settle</td><td>Keep building the game in TypeScript: multiplayer rules, offline, the home and offline islands, new block kinds. Each new rule lands in the spec and the Reference first.</td><td>No big feature planned that changes the board's shape.</td></tr>
   <tr><td>3 · Rust engine</td><td>Port the engine (generation, storage, moves, view, maker) to one Rust crate. The browser calls it through WASM; the TypeScript engine is the oracle: both play the Bench cases and recorded sessions, and must agree. Then the TypeScript engine is deleted.</td><td>The game runs on the Rust engine only, offline, with IndexedDB storage.</td></tr>
   <tr><td>4 · Online</td><td>The same crate inside a SpacetimeDB module: tables for the board, players and goals; reducers for interactions; subscriptions to each player's area; chat and presence. The client predicts and reconciles; offline sessions hand over by replay.</td><td>Two players on one board, one dropping offline and back, with no divergence in a long simulated session.</td></tr>
   <tr><td>5 · Fold in</td><td>The Referee becomes assertions in the move engine; the Judge becomes the maker's hardcoded objective; the Auditor and Bench become a test binary; the contract becomes an internal function. Optimise the engine as a whole.</td><td>One crate, one language, no contract.</td></tr>
@@ -117,9 +123,9 @@
   <li><b>Server time.</b> Reducers run in turn; a long goal search blocks every other player. SpacetimeDB procedures can run longer outside a transaction, but they are still beta. Making goals ahead in scheduled jobs avoids depending on them.</li>
   <li><b>One machine.</b> A SpacetimeDB module keeps its state in memory on one machine. The board grows with play; how big does a world get, and when does it need splitting?</li>
   <li><b>Prediction can still miss.</b> Even with a deterministic engine, the client's guess differs when another player's move arrives first; the client must snap back cleanly, and visibly enough that it isn't confusing.</li>
-  <li><b>Offline conflicts.</b> Replaying an offline log rejects moves that no longer fit. How much of an offline session can be lost, and how does the player see it?</li>
+  <li><b>Rolling back.</b> When a goal finished offline conflicts with others' moves, the world rolls back there but the rewards stay: how does the player see what changed?</li>
   <li><b>The port itself.</b> Phase 3 is a rewrite of everything at once; the differential tests (same cases, same recorded sessions, same boards) are what make it safe.</li>
-  <li><b>Island merging.</b> Each player's starter island has to join the shared world somewhere that doesn't collide with others: a placement rule for the engine, not yet designed.</li>
+  <li><b>Stamping islands.</b> Where each home island goes beside the world as players join: a free spot that fits its shape, near the world's edge, never over another's.</li>
 </ul>
 
 <h2>Sources</h2>
@@ -162,7 +168,7 @@ diagram($("endState"), 900, 470, [
   { id: "store", t: "Board storage", sub: "chunk index · one interface", x: 330, y: 156, w: 240, h: 46, k: "core" },
   { id: "move", t: "Moving", sub: "interaction → next board", x: 330, y: 212, w: 240, h: 46, k: "core" },
   { id: "view", t: "View", sub: "location + viewport → blocks", x: 330, y: 268, w: 240, h: 46, k: "core" },
-  { id: "mp", t: "Multiplayer · offline · features", sub: "players, handover, island merge", x: 330, y: 324, w: 240, h: 46, k: "core" },
+  { id: "mp", t: "Multiplayer · offline · features", sub: "players, islands, outbox", x: 330, y: 324, w: 240, h: 46, k: "core" },
   { id: "checks", t: "Assertions + tests", sub: "old Referee, Judge, Auditor", x: 330, y: 380, w: 240, h: 46, k: "core" },
   { id: "input", t: "Player input", sub: "taps and drags", x: 30, y: 100, w: 220, h: 50, k: "web" },
   { id: "wasm", t: "Engine as WASM", sub: "wasm-bindgen", x: 30, y: 190, w: 220, h: 46, k: "web" },
@@ -212,14 +218,16 @@ diagram($("offline"), 900, 120, [
   $("online").innerHTML = o;
 })();
 
-// Offline to online.
-diagram($("handover"), 900, 130, [
-  { id: "log", t: "Offline log", sub: "sent on reconnect", x: 20, y: 40, w: 170, h: 54, k: "web" },
-  { id: "replay", t: "Server replays", sub: "each through the engine", x: 250, y: 40, w: 190, h: 54, k: "srv" },
-  { id: "ok", t: "Still legal", sub: "applied, shared", x: 510, y: 10, w: 160, h: 50, k: "srv" },
-  { id: "no", t: "No longer fits", sub: "rejected, reported", x: 510, y: 74, w: 160, h: 50, k: "srv" },
-  { id: "client", t: "Client", sub: "rebuilds from server", x: 730, y: 40, w: 150, h: 54, k: "web" },
-], [["log", "replay"], ["replay", "ok"], ["replay", "no"], ["ok", "client"], ["no", "client"]]);
+// The home island, the shared world and the offline island.
+diagram($("handover"), 900, 350, [
+  { id: "home", t: "Home island", sub: "on the server, cut off", x: 20, y: 30, w: 220, h: 60, k: "srv" },
+  { id: "stamp", t: "Stamped beside the world", sub: "online, after some progress\nany shape: touched cells + margin", x: 300, y: 30, w: 240, h: 60, k: "srv" },
+  { id: "world", t: "Shared world", sub: "with other players", x: 600, y: 30, w: 270, h: 60, k: "srv" },
+  { id: "finish", t: "Offline: finish the goal", sub: "its moves wait in the outbox", x: 600, y: 160, w: 270, h: 60, k: "web" },
+  { id: "isle", t: "Offline island", sub: "own seed, never merged", x: 300, y: 160, w: 240, h: 60, k: "web" },
+  { id: "back", t: "Back online", sub: "outbox replayed: rewards kept,\nworld rolled back where it conflicts", x: 600, y: 270, w: 270, h: 64, k: "srv" },
+], [["home", "stamp"], ["stamp", "world"], ["world", "finish", "goes offline", { dx: 6, anchor: "start" }], ["finish", "isle", "goal done"], ["finish", "back", "reconnects", { dx: 6, anchor: "start" }], ["isle", "back", "reconnects", { dy: 16 }]],
+`<path d="M870 302 H888 V60 H876" fill="none" stroke="var(--ink-2)" stroke-width="1.6" marker-end="url(#mhandover)"/><text x="884" y="182" text-anchor="end" font-size="11.5" fill="var(--ink-2)" transform="rotate(-90 884 182)">next goal</text>`);
 
 // Phases as a timeline.
 (function () {
