@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>One engine</title>
+<meta name="date" content="2026-11-08">
+<style>
+  :root { color-scheme: light dark; --bg: #f9f9f7; --card: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --line: #e1e0d9;
+    --core: #6b4fc4; --core-soft: rgba(107,79,196,.10); --web: #2a78d6; --web-soft: rgba(42,120,214,.10); --srv: #2f8a4c; --srv-soft: rgba(47,138,76,.10);
+    --dev: #b97c0c; --dev-soft: rgba(185,124,12,.10); --gone: #8a8984; --gone-soft: rgba(138,137,132,.10); --bad: #c43d3d; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0d0d0d; --card: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --line: #2c2c2a;
+    --core: #a48cf0; --core-soft: rgba(164,140,240,.13); --web: #5b9cf0; --web-soft: rgba(91,156,240,.12); --srv: #5fc27f; --srv-soft: rgba(95,194,127,.12);
+    --dev: #e3a93a; --dev-soft: rgba(227,169,58,.12); --gone: #8f8e88; --gone-soft: rgba(143,142,136,.12); --bad: #e86a6a; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 system-ui, sans-serif; }
+  main { max-width: 960px; margin: 0 auto; padding: 24px 16px 56px; }
+  .back { color: var(--ink-2); text-decoration: none; font-size: 14px; }
+  h1 { font-size: 24px; margin: 10px 0 4px; } h2 { font-size: 19px; margin: 34px 0 8px; } h3 { font-size: 15.5px; margin: 18px 0 6px; }
+  .sub { color: var(--ink-2); margin: 0 0 12px; max-width: 74ch; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; overflow-x: auto; }
+  svg { display: block; width: 100%; height: auto; font-family: system-ui, sans-serif; }
+  ul, ol { padding-left: 22px; } li { max-width: 74ch; margin: 4px 0; }
+  table { border-collapse: collapse; font-size: 14px; }
+  th, td { padding: 7px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+  th { color: var(--ink-2); font-weight: 600; }
+  .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+  .goal { display: grid; grid-template-columns: 26px 1fr; gap: 4px 8px; margin: 0; }
+  .goal dt { font-weight: 700; color: var(--core); } .goal dd { margin: 0 0 6px; }
+  .pill { display: inline-block; font-size: 12px; font-weight: 650; padding: 1px 8px; border-radius: 999px; }
+  .note { font-size: 13.5px; color: var(--ink-2); }
+  a { color: inherit; }
+  .src { font-size: 13.5px; color: var(--ink-2); } .src li { margin: 2px 0; }
+</style></head><body><main>
+<a class="back" href="./">← All reports</a>
+<h1>One engine</h1>
+<p class="sub">Where the game's architecture should end up once the features settle: one Rust engine, running in the browser offline and inside SpacetimeDB online, with the goal maker, its checks and its benchmark folded in. A plan for review; nothing here is built. It follows the <a href="goal-spec.html">goal spec</a> (<a href="goal-spec-visual.html">drawn</a>) and says where the two disagree.</p>
+
+<h2>The end state</h2>
+<p class="sub">One engine crate. Two hosts. The renderer only draws what the engine hands it.</p>
+<div class="card"><svg id="endState" role="img" aria-label="One engine, two hosts"></svg></div>
+
+<h3>What the engine owns</h3>
+<div class="two">
+  <div class="card"><dl class="goal">
+    <dt>1</dt><dd><b>Level generation</b>: the endless board from a seed and density, the starter island, goals (the level maker).</dd>
+    <dt>2</dt><dd><b>Board storage</b>: where every moved block is, indexed by chunk; behind one storage interface with two backends (IndexedDB offline, SpacetimeDB tables online).</dd>
+    <dt>3</dt><dd><b>Moving</b>: an interaction in, the next board state out (and the store updated).</dd>
+    <dt>4</dt><dd><b>View</b>: from a player's location and viewport, the blocks that matter to them, sent to the renderer.</dd>
+  </dl></div>
+  <div class="card"><dl class="goal">
+    <dt>5</dt><dd><b>Multiplayer</b>: several players and locations, their interactions on one board, who sees what.</dd>
+    <dt>6</dt><dd><b>Offline</b>: playing with no connection, then handing it over when online again; merging the starter island into the shared world.</dd>
+    <dt>7</dt><dd><b>Game features</b> still to come (new block kinds, immovable blocks, goals ending at a place…).</dd>
+    <dt>8</dt><dd><b>Its own checks</b>: assertions and unit tests in place of the Referee, Judge and Auditor; the benchmark as a binary in the same crate.</dd>
+  </dl></div>
+</div>
+
+<h2>The aims, as you put them</h2>
+<ul>
+  <li><b>One engine</b> for offline and online play, never two, so they can't drift apart.</li>
+  <li><b>Data next to logic.</b> Online, the board's state and the code that changes it live in the same place (a SpacetimeDB module), with no network hop between them.</li>
+  <li><b>One language</b> for board storage, the level maker, the benchmark harness, and what were the Referee, Judge and Auditor.</li>
+  <li><b>Fewer moving parts.</b> The Referee, Judge and Auditor may become assertions and unit tests in the engine. The wishes may be hardcoded, to optimise for today's wishes rather than every possible set.</li>
+  <li><b>No contract between parts.</b> With one engine in one language, it can be optimised as a whole, not just the goal maker.</li>
+  <li><b>Light on players' devices.</b> Production runs the tuned engine with only cheap assertions; the expensive checks stay in development.</li>
+</ul>
+
+<h2>How play flows</h2>
+<h3>Offline</h3>
+<div class="card"><svg id="offline" role="img" aria-label="Offline: interactions go to the engine in the browser and its IndexedDB store"></svg></div>
+<h3>Online, with the client predicting</h3>
+<p class="sub">The interaction goes to the server, which decides. The client applies it at once with the same engine, so the game feels instant through lag, and replays its unconfirmed moves on top of each confirmed state when it arrives (client-side prediction and server reconciliation).</p>
+<div class="card"><svg id="online" role="img" aria-label="Online: predict locally, the server decides, subscriptions update every player"></svg></div>
+<h3>Offline to online</h3>
+<div class="card"><svg id="handover" role="img" aria-label="Handing an offline session over to the server"></svg></div>
+<p class="note">The offline session is kept as a log of interactions, not only a board. On reconnecting, the server replays them in order through the same engine. A move another player has since made impossible is rejected, and the client rebuilds from the server's board. Block positions can't be merged freely (a CRDT would give boards with overlapping blocks); replaying moves through the engine keeps every board legal.</p>
+
+<h2>Why not now</h2>
+<div class="two">
+  <div class="card"><b>Now: separate parts, a strict contract</b><ul>
+    <li>Features are still being added fast; one tightly optimised engine would make each one harder to add.</li>
+    <li>Goal making is the slowest part, so it is optimised on its own. It needs the Referee and Judge to hill-climb against, and a contract so a maker in another language can be checked.</li>
+  </ul></div>
+  <div class="card"><b>Later: one engine, no contract</b><ul>
+    <li>Once the maker sits in a local minimum, the gains are across the whole system (storage, moves, view, maker together), and a contract between them gets in the way.</li>
+    <li>Once the features settle, the engine's shape can be fixed and ported once.</li>
+  </ul></div>
+</div>
+
+<h2>The plan</h2>
+<div class="card"><svg id="phases" role="img" aria-label="Five phases from now to one engine"></svg></div>
+<table style="margin-top:12px">
+  <tr><th>Phase</th><th>What happens</th><th>Done when</th></tr>
+  <tr><td>1 · Goal spec</td><td>As the goal spec says: the Bench and Records, the Referee and Judge in TypeScript, a simpler Reference; Tuner subagents hill-climb makers against it, in any language (a Rust one compiled to WASM, checked by the TypeScript Referee).</td><td>The maker stops improving: new Contenders rarely beat the Records.</td></tr>
+  <tr><td>2 · Features settle</td><td>Keep building the game in TypeScript: multiplayer rules, offline, island merging, new block kinds. Each new rule lands in the spec and the Reference first.</td><td>No big feature planned that changes the board's shape.</td></tr>
+  <tr><td>3 · Rust engine</td><td>Port the engine (generation, storage, moves, view, maker) to one Rust crate. The browser calls it through WASM; the TypeScript engine is the oracle: both play the Bench cases and recorded sessions, and must agree. Then the TypeScript engine is deleted.</td><td>The game runs on the Rust engine only, offline, with IndexedDB storage.</td></tr>
+  <tr><td>4 · Online</td><td>The same crate inside a SpacetimeDB module: tables for the board, players and goals; reducers for interactions; subscriptions to each player's area; chat and presence. The client predicts and reconciles; offline sessions hand over by replay.</td><td>Two players on one board, one dropping offline and back, with no divergence in a long simulated session.</td></tr>
+  <tr><td>5 · Fold in</td><td>The Referee becomes assertions in the move engine; the Judge becomes the maker's hardcoded objective; the Auditor and Bench become a test binary; the contract becomes an internal function. Optimise the engine as a whole.</td><td>One crate, one language, no contract.</td></tr>
+</table>
+
+<h2>What becomes of the goal spec's parts</h2>
+<div class="card"><svg id="fold" role="img" aria-label="Each goal-spec subsystem and what it becomes"></svg></div>
+
+<h2>Where this disagrees with the goal spec, and how to settle it</h2>
+<table>
+  <tr><th>Goal spec says</th><th>This says</th><th>Settle it by</th></tr>
+  <tr><td>A strict, versioned contract between maker and game.</td><td>No contract; one engine optimised as a whole.</td><td>Both, in order. The contract is scaffolding for phases 1–3, while makers in several languages compete and the TypeScript engine is the oracle. In phase 5 it shrinks to an internal function with the same shape.</td></tr>
+  <tr><td>Referee, Judge and Auditor are separate subsystems, the same for every maker.</td><td>They become assertions and unit tests in the engine.</td><td>The Referee's rules are what the move engine enforces anyway: in one engine they are assertions on every move, and on every goal in debug builds. The Judge becomes the maker's own objective. The Auditor and Bench stay as a development binary and tests; they don't ship.</td></tr>
+  <tr><td>Wishes come in the Request, so they can be tuned without changing makers.</td><td>Wishes hardcoded.</td><td>Tunable while tuning (phases 1–2), then frozen as constants, so the maker can be optimised for exactly today's wishes. Changing them later means a re-tune.</td></tr>
+  <tr><td>The engine, Referee and Judge are TypeScript, and check makers in other languages.</td><td>Everything in one language, Rust.</td><td>TypeScript is the reference until the port is proven by differential tests (phase 3); then it is deleted, and the checks move to Rust with it.</td></tr>
+  <tr><td>The Request carries the world (seed, density) and a read-only chunk index of moved blocks.</td><td>The maker reads board storage directly: IndexedDB offline, SpacetimeDB tables online.</td><td>The chunk index becomes the storage interface itself; the maker reads through it, so it works on either backend. No copying either way.</td></tr>
+  <tr><td>Goals are made in the browser, within 300 ms on a mid phone.</td><td>Online, goals are made on the server.</td><td>Two budgets: the browser one for offline, and a server one. SpacetimeDB runs reducers one after another, so a slow maker in a reducer holds up everyone. Make goals ahead, in a scheduled job, before the player needs them, or keep the maker well under a few ms of server time.</td></tr>
+  <tr><td>One player: the history, reach from the last red block, clashes with earlier goals.</td><td>Many players on one board.</td><td>Goals stay per player, but clashes widen to other players' goals and tracks. New: another player can move a block a goal's solution needs. Re-check a goal when a block in its play area moves (an assertion of the old Referee rules, run on someone else's move), and make a new one if it can't be solved any more.</td></tr>
+  <tr><td>Determinism: the same Request and seed give the same Goal; no clock.</td><td>Reducers on the server, the engine in the browser.</td><td>Agrees: SpacetimeDB gives reducers a seeded random source and a fixed timestamp for this. Keep the engine's own maths in integers where it decides anything, so the browser's and the server's WASM agree to the bit.</td></tr>
+</table>
+
+<h2>Risks and open questions</h2>
+<ul>
+  <li><b>Server time.</b> Reducers run in turn; a long goal search blocks every other player. SpacetimeDB procedures can run longer outside a transaction, but they are still beta. Making goals ahead in scheduled jobs avoids depending on them.</li>
+  <li><b>One machine.</b> A SpacetimeDB module keeps its state in memory on one machine. The board grows with play; how big does a world get, and when does it need splitting?</li>
+  <li><b>Prediction can still miss.</b> Even with a deterministic engine, the client's guess differs when another player's move arrives first; the client must snap back cleanly, and visibly enough that it isn't confusing.</li>
+  <li><b>Offline conflicts.</b> Replaying an offline log rejects moves that no longer fit. How much of an offline session can be lost, and how does the player see it?</li>
+  <li><b>The port itself.</b> Phase 3 is a rewrite of everything at once; the differential tests (same cases, same recorded sessions, same boards) are what make it safe.</li>
+  <li><b>Island merging.</b> Each player's starter island has to join the shared world somewhere that doesn't collide with others: a placement rule for the engine, not yet designed.</li>
+</ul>
+
+<h2>Sources</h2>
+<ul class="src">
+  <li>SpacetimeDB: <a href="https://spacetimedb.com/docs/functions/reducers">reducers</a> (each a transaction, no outside I/O), <a href="https://spacetimedb.com/docs/functions/procedures">procedures</a> (HTTP and manual transactions, beta), <a href="https://spacetimedb.com/docs/functions/reducers/reducer-context">reducer context</a> (seeded random, fixed timestamp), <a href="https://spacetimedb.com/docs/clients/subscriptions">subscriptions</a> and the <a href="https://spacetimedb.com/docs/clients/typescript">TypeScript client</a> (a local cache of subscribed rows, updates pushed).</li>
+  <li>Scheduling: a SpacetimeDB commit notes the scheduler waits for each operation, so <a href="https://git.adamlamers.com/PublicArchive/SpacetimeDB/commits/branch/bot/sql-format-option/crates/standalone">a long-running one blocks the rest</a>; state is in memory on one machine (<a href="https://repo-explainer.pages.dev/spacetimedb">an explainer</a>; BitCraft runs as one module).</li>
+  <li>Gabriel Gambetta, <a href="https://gabrielgambetta.com/client-side-prediction-server-reconciliation.html">Client-side prediction and server reconciliation</a>.</li>
+  <li>Local-first and merging offline edits: <a href="https://kleppmann.com/2018/11/02/velocity-london.html">Kleppmann, What changes when we go offline-first?</a>; <a href="https://automerge.org/">Automerge</a>.</li>
+  <li>Rust in the browser with IndexedDB: <a href="https://docs.rs/crate/rexie/latest">rexie</a> (on wasm-bindgen and idb).</li>
+</ul>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+function diagram(svg, W, H, boxes, links, extra = "", under = "") {
+  const col = { core: ["var(--core)", "var(--core-soft)"], web: ["var(--web)", "var(--web-soft)"], srv: ["var(--srv)", "var(--srv-soft)"], dev: ["var(--dev)", "var(--dev-soft)"], gone: ["var(--gone)", "var(--gone-soft)"] };
+  let o = `<defs><marker id="m${svg.id}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--ink-2)"/></marker></defs>` + under;
+  const by = Object.fromEntries(boxes.map((b) => [b.id, b]));
+  const edge = (a, b) => { const ax = a.x + a.w / 2, ay = a.y + a.h / 2, bx = b.x + b.w / 2, by_ = b.y + b.h / 2, dx = bx - ax, dy = by_ - ay; const t = (r) => Math.min(Math.abs(dx) > 1e-6 ? r.w / 2 / Math.abs(dx) : Infinity, Math.abs(dy) > 1e-6 ? r.h / 2 / Math.abs(dy) : Infinity); return [ax + dx * t(a), ay + dy * t(a), bx - dx * t(b), by_ - dy * t(b)]; };
+  for (const [a, b, label, opts = {}] of links) {
+    const [x1, y1, x2, y2] = edge(by[a], by[b]);
+    o += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="var(--ink-2)" stroke-width="1.6" ${opts.dash ? 'stroke-dasharray="5 4"' : ""} marker-end="url(#m${svg.id})" ${opts.both ? `marker-start="url(#m${svg.id})"` : ""}/>`;
+    if (label) o += `<text x="${(x1 + x2) / 2 + (opts.dx ?? 0)}" y="${(y1 + y2) / 2 + (opts.dy ?? -6)}" text-anchor="${opts.anchor ?? "middle"}" font-size="11.5" fill="var(--ink-2)">${label}</text>`;
+  }
+  for (const b of boxes) {
+    const [stroke, fill] = col[b.k];
+    o += `<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="10" fill="${fill}" stroke="${stroke}" stroke-width="1.6" ${b.k === "gone" ? 'stroke-dasharray="4 3"' : ""}/>`;
+    const lines = b.sub ? b.sub.split("\n") : [];
+    const top = b.y + b.h / 2 - (lines.length * 13) / 2 + 2;
+    o += `<text x="${b.x + b.w / 2}" y="${top}" text-anchor="middle" font-size="13.5" font-weight="650" fill="var(--ink)">${b.t}</text>`;
+    lines.forEach((l, i) => (o += `<text x="${b.x + b.w / 2}" y="${top + 16 + i * 13}" text-anchor="middle" font-size="11.5" fill="var(--ink-2)">${l}</text>`));
+  }
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.innerHTML = o + extra;
+}
+const zone = (x, y, w, h, t, c, fill = "none") => `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="14" fill="${fill}" stroke="var(${c})" stroke-width="1.3" stroke-dasharray="3 5"/><text x="${x + 12}" y="${y + 20}" font-size="12.5" font-weight="650" fill="var(${c})">${t}</text>`;
+
+// The end state: the engine in the middle, a host on each side.
+diagram($("endState"), 900, 470, [
+  { id: "gen", t: "Level generation", sub: "board, island, goals", x: 330, y: 100, w: 240, h: 46, k: "core" },
+  { id: "store", t: "Board storage", sub: "chunk index · one interface", x: 330, y: 156, w: 240, h: 46, k: "core" },
+  { id: "move", t: "Moving", sub: "interaction → next board", x: 330, y: 212, w: 240, h: 46, k: "core" },
+  { id: "view", t: "View", sub: "location + viewport → blocks", x: 330, y: 268, w: 240, h: 46, k: "core" },
+  { id: "mp", t: "Multiplayer · offline · features", sub: "players, handover, island merge", x: 330, y: 324, w: 240, h: 46, k: "core" },
+  { id: "checks", t: "Assertions + tests", sub: "old Referee, Judge, Auditor", x: 330, y: 380, w: 240, h: 46, k: "core" },
+  { id: "input", t: "Player input", sub: "taps and drags", x: 30, y: 100, w: 220, h: 50, k: "web" },
+  { id: "wasm", t: "Engine as WASM", sub: "wasm-bindgen", x: 30, y: 190, w: 220, h: 46, k: "web" },
+  { id: "idb", t: "IndexedDB", sub: "board + interaction log", x: 30, y: 280, w: 220, h: 46, k: "web" },
+  { id: "render", t: "Renderer", sub: "canvas; draws what View sends", x: 30, y: 370, w: 220, h: 50, k: "web" },
+  { id: "mod", t: "SpacetimeDB module", sub: "engine as reducers", x: 650, y: 100, w: 220, h: 50, k: "srv" },
+  { id: "tables", t: "Tables", sub: "board, players, goals", x: 650, y: 190, w: 220, h: 46, k: "srv" },
+  { id: "subs", t: "Subscriptions", sub: "each player's area, pushed", x: 650, y: 280, w: 220, h: 46, k: "srv" },
+  { id: "social", t: "Chat · presence", sub: "who is where", x: 650, y: 370, w: 220, h: 50, k: "srv" },
+], [
+  ["input", "wasm"], ["wasm", "idb", "offline", { dx: 6, anchor: "start", dy: 2 }],
+  ["mod", "tables", "", {}], ["tables", "subs", "", {}],
+], zone(310, 60, 280, 384, "ONE ENGINE (RUST CRATE)", "--core") + zone(15, 60, 250, 384, "BROWSER", "--web") + zone(635, 60, 250, 384, "SERVER", "--srv") +
+`<path d="M30 213 H22 V395 H26" fill="none" stroke="var(--ink-2)" stroke-width="1.6" marker-end="url(#mendState)"/>
+<line x1="265" y1="213" x2="310" y2="213" stroke="var(--core)" stroke-width="2.2"/><line x1="590" y1="125" x2="635" y2="125" stroke="var(--core)" stroke-width="2.2"/>
+<text x="287" y="206" text-anchor="middle" font-size="11" fill="var(--core)">same</text><text x="612" y="118" text-anchor="middle" font-size="11" fill="var(--core)">same</text>
+<path d="M140 444 V462 H760 V444" fill="none" stroke="var(--ink-2)" stroke-width="1.6" stroke-dasharray="5 4" marker-start="url(#mendState)" marker-end="url(#mendState)"/>
+<text x="450" y="458" text-anchor="middle" font-size="11.5" fill="var(--ink-2)">online: interactions up, subscribed changes down</text>`);
+
+// Offline flow.
+diagram($("offline"), 900, 120, [
+  { id: "in", t: "Tap / drag", x: 20, y: 35, w: 140, h: 50, k: "web" },
+  { id: "eng", t: "Engine (WASM)", sub: "moves, asserts", x: 210, y: 35, w: 170, h: 50, k: "core" },
+  { id: "idb", t: "IndexedDB", sub: "board + log", x: 430, y: 35, w: 160, h: 50, k: "web" },
+  { id: "view", t: "View", sub: "blocks in sight", x: 640, y: 35, w: 110, h: 50, k: "core" },
+  { id: "draw", t: "Draw", x: 790, y: 35, w: 90, h: 50, k: "web" },
+], [["in", "eng"], ["eng", "idb", "store"], ["idb", "view"], ["view", "draw"]]);
+
+// Online flow as a sequence: client, server, other players.
+(function () {
+  const W = 900, H = 330, cols = { me: 110, eng: 330, srv: 590, other: 800 };
+  let o = `<defs><marker id="mo" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--ink-2)"/></marker></defs>`;
+  const head = (x, t, c) => `<rect x="${x - 90}" y="10" width="180" height="34" rx="9" fill="var(${c}-soft)" stroke="var(${c})" stroke-width="1.5"/><text x="${x}" y="32" text-anchor="middle" font-size="13" font-weight="650" fill="var(--ink)">${t}</text><line x1="${x}" y1="44" x2="${x}" y2="${H - 10}" stroke="var(--line)" stroke-width="2"/>`;
+  o += head(cols.me, "Player's input", "--web") + head(cols.eng, "Engine in the browser", "--core") + head(cols.srv, "SpacetimeDB module", "--srv") + head(cols.other, "Other players", "--web");
+  const msg = (y, a, b, t, dash) => `<line x1="${cols[a]}" y1="${y}" x2="${cols[b] + (cols[b] > cols[a] ? -4 : 4)}" y2="${y}" stroke="var(--ink-2)" stroke-width="1.6" ${dash ? 'stroke-dasharray="5 4"' : ""} marker-end="url(#mo)"/><text x="${(cols[a] + cols[b]) / 2}" y="${y - 6}" text-anchor="middle" font-size="11.5" fill="var(--ink-2)">${t}</text>`;
+  const note = (y, x, t) => `<text x="${x}" y="${y}" text-anchor="middle" font-size="11.5" fill="var(--ink)">${t}</text>`;
+  o += msg(78, "me", "eng", "move #12");
+  o += note(100, cols.eng, "applies #12 at once (predicted)");
+  o += msg(128, "eng", "srv", "#12 (a reducer call)");
+  o += note(150, cols.srv, "same engine: legal? apply, store");
+  o += msg(182, "srv", "other", "subscription: block moved");
+  o += msg(212, "srv", "eng", "confirmed board, up to #12", true);
+  o += note(236, cols.eng, "rebuild: confirmed board + unconfirmed #13, #14");
+  o += msg(270, "srv", "eng", "or: #12 rejected (someone moved first)", true);
+  o += note(294, cols.eng, "snap back to the server's board, replay the rest");
+  $("online").setAttribute("viewBox", `0 0 ${W} ${H}`);
+  $("online").innerHTML = o;
+})();
+
+// Offline to online.
+diagram($("handover"), 900, 130, [
+  { id: "log", t: "Offline log", sub: "sent on reconnect", x: 20, y: 40, w: 170, h: 54, k: "web" },
+  { id: "replay", t: "Server replays", sub: "each through the engine", x: 250, y: 40, w: 190, h: 54, k: "srv" },
+  { id: "ok", t: "Still legal", sub: "applied, shared", x: 510, y: 10, w: 160, h: 50, k: "srv" },
+  { id: "no", t: "No longer fits", sub: "rejected, reported", x: 510, y: 74, w: 160, h: 50, k: "srv" },
+  { id: "client", t: "Client", sub: "rebuilds from server", x: 730, y: 40, w: 150, h: 54, k: "web" },
+], [["log", "replay"], ["replay", "ok"], ["replay", "no"], ["ok", "client"], ["no", "client"]]);
+
+// Phases as a timeline.
+(function () {
+  const W = 900, H = 150, ph = [["1", "Goal spec (now)", "hill-climb the maker", "--dev"], ["2", "Features settle", "multiplayer, offline, island", "--web"], ["3", "Rust engine", "port; TS is the oracle", "--core"], ["4", "Online", "SpacetimeDB, prediction", "--srv"], ["5", "Fold in", "no contract; optimise whole", "--core"]];
+  let o = `<line x1="40" y1="70" x2="${W - 40}" y2="70" stroke="var(--line)" stroke-width="3"/>`;
+  ph.forEach(([n, t, s, c], i) => {
+    const x = 90 + i * 180;
+    o += `<circle cx="${x}" cy="70" r="20" fill="var(${c}-soft)" stroke="var(${c})" stroke-width="2"/><text x="${x}" y="75" text-anchor="middle" font-size="14" font-weight="700" fill="var(--ink)">${n}</text>`;
+    o += `<text x="${x}" y="114" text-anchor="middle" font-size="13.5" font-weight="650" fill="var(--ink)">${t}</text><text x="${x}" y="132" text-anchor="middle" font-size="11.5" fill="var(--ink-2)">${s}</text>`;
+  });
+  o += `<text x="${(90 + 270) / 2}" y="30" font-size="11.5" fill="var(--dev)" text-anchor="middle">contract and TypeScript checks</text><text x="${(630 + 810) / 2}" y="30" font-size="11.5" fill="var(--core)" text-anchor="middle">one engine, no contract</text>`;
+  $("phases").setAttribute("viewBox", `0 0 ${W} ${H}`);
+  $("phases").innerHTML = o;
+})();
+
+// The goal spec's parts and what they become.
+(function () {
+  const rows = [
+    ["Contract (Request, Goal)", "an internal function, same shape"],
+    ["Referee", "assertions in the move engine; on goals in debug builds"],
+    ["Judge", "the maker's hardcoded objective"],
+    ["Auditor", "a development test binary"],
+    ["Bench + Records", "cargo bench + fixture files"],
+    ["Gate", "a CI check on the bench"],
+    ["Tuner", "unchanged: a subagent, now on the whole engine"],
+    ["TypeScript engine", "deleted after the port (the oracle until then)"],
+  ];
+  const W = 900, rh = 40, H = rows.length * rh + 20;
+  let o = `<defs><marker id="mf" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--ink-2)"/></marker></defs>`;
+  rows.forEach(([a, b], i) => {
+    const y = 10 + i * rh;
+    o += `<rect x="20" y="${y}" width="260" height="${rh - 8}" rx="8" fill="var(--dev-soft)" stroke="var(--dev)" stroke-width="1.4"/><text x="150" y="${y + 21}" text-anchor="middle" font-size="13" font-weight="650" fill="var(--ink)">${a}</text>`;
+    o += `<line x1="284" y1="${y + 16}" x2="350" y2="${y + 16}" stroke="var(--ink-2)" stroke-width="1.6" marker-end="url(#mf)"/>`;
+    o += `<rect x="356" y="${y}" width="524" height="${rh - 8}" rx="8" fill="var(--core-soft)" stroke="var(--core)" stroke-width="1.4"/><text x="372" y="${y + 21}" font-size="13" fill="var(--ink)">${b}</text>`;
+  });
+  o += ``;
+  $("fold").setAttribute("viewBox", `0 0 ${W} ${H}`);
+  $("fold").innerHTML = o;
+})();
+</script>
+</body></html>
