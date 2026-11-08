@@ -2,6 +2,7 @@
 // done (made in src/goal-search.ts).
 import type { Point, Rect } from "./camera";
 import type { Difficulty } from "./difficulty";
+import type { Terms } from "./judge";
 import { medalWon } from "./stars";
 import { UNIT, type Block } from "./layout";
 import type { Move } from "./rules";
@@ -20,6 +21,8 @@ export type Goal = {
   difficulty?: Difficulty;
   /** Choices a move along its solution (src/choices.ts). */
   choices?: number;
+  /** The Judge's terms and fitness (src/judge.ts), for a goal from the maker. */
+  judged?: Terms;
   /** The density it was made at, for its stars. */
   tries?: number;
   /** How many moves had been made (the undo history's length) when it was shown, and how

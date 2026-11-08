@@ -832,6 +832,70 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
   check((await page.evaluate(() => unblock.scene.camera.scale)) > 1.5, "wheel zooms in");
 }
 
+// --- Goals checked: every goal the maker sends is checked by the Referee and scored by the
+// Judge (src/referee.ts, src/judge.ts), both logged. World goals played by dragging their
+// solutions' moves; then a goal tampered with in the page is rejected, logged and taken as
+// none found, and the next one asked for is fine.
+{
+  const page = await clocked(await browser.newPage({ viewport: { width: 1280, height: 800 } }));
+  await page.goto(url);
+  await page.evaluate(() => { unblock.forget(); localStorage.setItem("unblock-me:v13:seed", "20261108"); });
+  await page.goto(url);
+  await frame(page);
+  await page.evaluate(() => unblock.goalReady());
+  // Each move dragged with the view centred between its ends.
+  async function drag(m) {
+    const b = await page.evaluate((id) => unblock.scene.layout.byId(id), m.id);
+    const mid = { x: (m.from.x + m.to.x + b.w) / 2, y: (m.from.y + m.to.y + b.h) / 2 };
+    await page.evaluate(([mid, UNIT]) => { unblock.scene.camera = { scale: 1, offsetX: 640 - mid.x * UNIT, offsetY: 400 - mid.y * UNIT }; unblock.redraw(); }, [mid, UNIT]);
+    await frame(page);
+    const at = (p) => [640 + (p.x + b.w / 2 - mid.x) * UNIT, 400 + (p.y + b.h / 2 - mid.y) * UNIT];
+    await page.mouse.move(...at(m.from));
+    await page.mouse.down();
+    await page.mouse.move(...at(m.to), { steps: 10 });
+    await page.mouse.up();
+    await pass(page, 400);
+  }
+  const GOALS = 4;
+  let reached = 0, stuck = "";
+  for (let k = 0; k < GOALS; k++) {
+    const g = await page.evaluate(() => unblock.scene.goal);
+    if (!g) break;
+    for (const m of g.solution) await drag(m);
+    const at = await block(page, g.id);
+    if (!at || at.x !== g.target.x || at.y !== g.target.y) {
+      stuck = `${g.id} at ${at?.x},${at?.y}, target ${g.target.x},${g.target.y}`;
+      break;
+    }
+    reached++;
+    // The next goal shows once made (made ahead, or asked for the quick way after the finish).
+    for (let t = 0; t < 40 && !(await page.evaluate((id) => unblock.scene.goal && unblock.scene.goal.id !== id, g.id)); t++) await pass(page, 500);
+    await pass(page, 8000); // the finish, the soul's flight and the view's glide over
+  }
+  check(reached === GOALS && !stuck, `${reached} world goals played by their solutions${stuck ? ` (stuck: ${stuck})` : ""}`);
+  const events = await page.evaluate(() => unblock.playLog.filter((e) => e.e === "goal" || e.e === "rejected"));
+  const goals = events.filter((e) => e.e === "goal");
+  const terms = ["moves", "decisions", "distance", "track", "aimOff", "reach", "clashes", "difficulty", "balance", "fitness"];
+  check(goals.length === GOALS + 1 && !events.some((e) => e.e === "rejected"), `every goal received passed the Referee (${goals.length} goals, ${events.length - goals.length} rejected)`);
+  check(goals.every((e) => e.judge && terms.every((t) => typeof e.judge[t] === "number") && e.judge.moves === e.solution && e.judge.fitness > 0), `and each goal's Judge terms are in the play log (${goals.map((e) => `${e.judge?.moves} moves, ${e.judge?.decisions} decisions, fitness ${e.judge?.fitness.toFixed(2)}`).join("; ")})`);
+  // A goal tampered with (its last move dropped, so red stops short): rejected, logged with its
+  // Request, and no goal shown.
+  const near = await page.evaluate(() => unblock.scene.goal.target);
+  const logged = await page.evaluate(() => unblock.playLog.length);
+  await page.evaluate((near) => { unblock.tamper((g) => g.solution.pop()); unblock.requestGoal(near); }, near);
+  await page.waitForFunction((n) => unblock.playLog.slice(n).some((e) => e.e === "rejected" || e.e === "goal"), logged, { timeout: 10000 }).catch(() => {});
+  const rejected = await page.evaluate(() => unblock.playLog.at(-1));
+  check(rejected.e === "rejected" && rejected.rule === 3 && rejected.request?.world?.seed === (await page.evaluate(() => unblock.seed())) && rejected.request.history.length === GOALS && rejected.level === 0, `a tampered goal is rejected and logged with its Request (${rejected.e}, rule ${rejected.rule}: ${rejected.why})`);
+  check((await page.evaluate(() => unblock.scene.goal)) === null, "and taken as none found");
+  await page.evaluate((near) => unblock.requestGoal(near), near);
+  await page.evaluate(() => unblock.goalReady());
+  const after = await page.evaluate(() => ({ goal: unblock.scene.goal, last: unblock.playLog.at(-1), rejected: unblock.playLog.filter((e) => e.e === "rejected").length }));
+  check(after.goal && after.last.e === "goal" && after.last.judge?.fitness > 0 && after.rejected === 1, `asked again, the game gets a goal the Referee takes (${after.goal?.id}, ${after.last.judge?.moves} moves)`);
+  // (Kept for replaying: test/experiments/replay-rejected.ts.)
+  await writeFile(shots + "rejected.json", JSON.stringify(rejected));
+  await page.close();
+}
+
 // --- The island: a fresh start opens on its first square; its goals come in turn, the
 // first unrated (no score track while it is played).
 {
