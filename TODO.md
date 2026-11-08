@@ -4,7 +4,7 @@
 
 In approximate priority order, highest first; the middle ones are not ordered among themselves.
 
-- In play, a goal the Referee rejects counts as none found (the game is left without a goal); the spec asks the maker again with the next seed; waits on a maker that takes a seed.
+- In play, a goal the Referee rejects is asked for again once at another effort level (rejected again, none found); the spec asks the maker again with the next seed; waits on a maker that takes a seed.
 - The Gate's time is measured on the VM, the spec's is on a mid phone; waits on timing the maker on a phone.
 - The Reference is shallow (breadth first, about 5 moves at most), so it loses wherever a longer goal wins (ramp aims over 6, none); a deeper plain search; waits on the Tuner runs showing whether the records need it.
 - Tuner runs: subagents improve the goal maker against the Bench; waits on goal spec phase 1.

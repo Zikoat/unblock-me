@@ -264,16 +264,16 @@ if (localStorage.getItem(SEED_KEY) === null) save();
 
 /** What a goal maker (a worker) is doing, for the debug text under the fps counter: idle,
  * making a goal (at an effort level, since when), or how the last goal it sent came out. */
-type Making = { is: "idle" } | { is: "working"; level: number; since: number } | { is: "ready"; moves: number; fitness: number } | { is: "none" } | { is: "rejected"; rule: number };
+type Making = { is: "idle" } | { is: "working"; level: number; since: number; again?: number } | { is: "ready"; moves: number; fitness: number } | { is: "none" } | { is: "rejected"; rule: number };
 /** The maker of goals waited for (0) and the one making the next goal ahead (1): what each is
  * doing, and how many requests it has yet to answer. */
 const makers = [0, 1].map(() => ({ making: { is: "idle" } as Making, pending: 0 }));
 const makerRows = [...document.querySelectorAll<HTMLElement>("#makers > div")];
-/** A maker was asked for a goal. */
-function asking(k: number, to: Worker, request: GoalRequest): void {
+/** A maker was asked for a goal (`again`: after one that broke this rule). */
+function asking(k: number, to: Worker, request: GoalRequest, again?: number): void {
   to.postMessage(request);
   makers[k]!.pending++;
-  setMaking(k, { is: "working", level: request.level ?? 1, since: performance.now() });
+  setMaking(k, { is: "working", level: request.level ?? 1, since: performance.now(), again });
 }
 /** A maker answered: with how its goal came out, or none if the answer was stale (it goes
  * on to the next request, if it has one). */
@@ -297,7 +297,7 @@ function showMaking(): void {
   makers.forEach(({ making: m }, k) => {
     const [square, text] = makerRows[k]!.children as unknown as [HTMLElement, HTMLElement];
     const said = `${k ? "Ahead" : "Maker"}: ${
-      m.is === "working" ? `making, effort ${m.level}, ${Math.floor((performance.now() - m.since) / 1000)}s`
+      m.is === "working" ? `${m.again === undefined ? "making" : `again (rule ${m.again})`}, effort ${m.level}, ${Math.floor((performance.now() - m.since) / 1000)}s`
       : m.is === "ready" ? `ready, ${m.moves} moves, fitness ${m.fitness.toFixed(2)}`
       : m.is === "rejected" ? `rejected (rule ${m.rule})`
       : m.is === "none" ? "none found"
@@ -333,29 +333,34 @@ function requestGoal(near: Point = viewCentre(scene.camera, scene.width, scene.h
   // island was played: no wait.
   const key = boardKey(scene.moved, exclude, near);
   const first = withIsland && worldGoals() === 0 ? boardKey(worldMoved(scene.moved), exclude, near) : null;
-  if (ahead.ready && (ahead.ready.key === key || ahead.ready.key === first)) {
-    if (ahead.ready.key === first) log({ e: "prefetched" });
-    showGoal(ahead.ready.goal);
+  const madeAhead = ahead.ready && (ahead.ready.key === key || ahead.ready.key === first);
+  if (madeAhead && !ahead.ready!.rejected) {
+    if (ahead.ready!.key === first) log({ e: "prefetched" });
+    showGoal(ahead.ready!.goal);
     return;
   }
+  // (One made ahead that the Referee rejected is asked for again, the quick way, below.)
   // Still being made ahead, and a finish to play meanwhile: it shows as soon as it is made,
   // or the finish's end asks the quick way.
-  if (patient && (ahead.asked === key || ahead.asked === first)) {
+  if (patient && !madeAhead && (ahead.asked === key || ahead.asked === first)) {
     ahead.wanted = ahead.asked;
     return;
   }
   const request: GoalRequest = { job: ++job, seed, tries, ui: shownUi, placed, near, moved: [...scene.moved], level: 0, exclude, avoid: targetsOf(scene.done), target: rampTarget(worldGoals()) };
+  sent = request;
   asked = { request: asRequest(request, scene.done), near, level: 0 };
   asking(0, worker, request);
 }
+/** The request the worker was last sent, to ask again if its goal is rejected. */
+let sent: GoalRequest | null = null;
 /** What a worker was last asked, as the goal contract has it (src/contract.ts), so the goal
  * that comes back can be checked against it. */
 type Asked = { request: contract.Request; near: Point; level: number };
 let asked: Asked | null = null;
 const asRequest = (r: GoalRequest, done: readonly { id: string; target: Point }[]) =>
   contract.gameRequest({ seed: r.seed, tries: r.tries, ui: r.ui, placed: r.placed, moved: new Map(r.moved), done, rampAim: r.target });
-/** For tests: a change made to the next goal a worker sends, before it is checked. */
-let tamper: ((goal: Goal) => void) | null = null;
+/** For tests: a change made to the next goals a worker sends (this many), before they are checked. */
+let tamper: { change: (goal: Goal) => void; times: number } | null = null;
 /** A goal from a worker, checked by the Referee (an assertion: a rejected goal is a bug,
  * logged with its Request, and counts as none found, with the rule it broke) and scored by
  * the Judge. */
@@ -363,8 +368,8 @@ type Checked = { goal: Goal | null; rule?: number };
 function checked(goal: Goal | null, by: Asked | null): Checked {
   if (!goal || !by) return { goal };
   if (tamper) {
-    tamper(goal);
-    tamper = null;
+    tamper.change(goal);
+    if (--tamper.times <= 0) tamper = null;
   }
   const made = contract.contractGoal(goal), board = contract.requestBoard(by.request);
   const verdict = referee(by.request, made, board);
@@ -384,6 +389,14 @@ worker.onmessage = (event: MessageEvent<Reply>) => {
   if (event.data.job !== job) return answered(0, null);
   const made = checked(event.data.goal, asked);
   answered(0, madeAs(made));
+  // A rejected goal is asked for again once, at the next effort level, so another goal can
+  // come (the maker takes no seed: asked the same way it would make the same goal). Rejected
+  // again, it counts as none found.
+  if (made.rule !== undefined && sent && asked && asked.level === 0) {
+    sent = { ...sent, job: ++job, level: 1 };
+    asked = { ...asked, level: 1 };
+    return asking(0, worker, sent, made.rule);
+  }
   showGoal(made.goal);
 };
 /** A goal's difficulty arrived: it belongs to whichever goal it was measured for. */
@@ -440,7 +453,7 @@ const ahead = {
   asked: "",
   /** The goal being waited for (its board's key), made ahead. */
   wanted: "",
-  ready: null as { key: string; goal: Goal | null } | null,
+  ready: null as { key: string; goal: Goal | null; rejected?: boolean } | null,
   /** What it was last asked (see checked). */
   contract: null as Asked | null,
 };
@@ -500,7 +513,7 @@ ahead.worker.onmessage = (event: MessageEvent<Reply>) => {
   if (event.data.job !== ahead.job) return answered(1, null);
   const made = checked(event.data.goal, ahead.contract);
   answered(1, madeAs(made));
-  ahead.ready = { key: ahead.asked, goal: made.goal };
+  ahead.ready = { key: ahead.asked, goal: made.goal, rejected: made.rule !== undefined };
   if (ahead.wanted && ahead.wanted === ahead.asked) requestGoal(finish?.next);
 };
 if (testbed) {
@@ -819,9 +832,9 @@ Object.assign(window, {
     playLog,
     /** Frames drawn while recording: when, and where the sliding block was drawn. */
     frames: null as { t: number; x: number; y: number }[] | null,
-    /** Change the next goal a worker sends before the Referee sees it (for tests). */
-    tamper: (change: (goal: Goal) => void) => {
-      tamper = change;
+    /** Change the next goal a worker sends (or the next `times`) before the Referee sees it (for tests). */
+    tamper: (change: (goal: Goal) => void, times = 1) => {
+      tamper = { change, times };
     },
     /** Ask the worker for a goal near a lattice point, as reaching a goal does. */
     requestGoal: (near: Point) => requestGoal(near),

@@ -834,8 +834,9 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
 
 // --- Goals checked: every goal the maker sends is checked by the Referee and scored by the
 // Judge (src/referee.ts, src/judge.ts), both logged. World goals played by dragging their
-// solutions' moves; then a goal tampered with in the page is rejected, logged and taken as
-// none found, and the next one asked for is fine.
+// solutions' moves; then a goal tampered with in the page is rejected, logged and asked for
+// again once (rejected again, taken as none found), and one made ahead that is rejected is
+// asked for the quick way.
 {
   const page = await clocked(await browser.newPage({ viewport: { width: 1280, height: 800 } }));
   await page.goto(url);
@@ -879,20 +880,46 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
   check(goals.length === GOALS + 1 && !events.some((e) => e.e === "rejected"), `every goal received passed the Referee (${goals.length} goals, ${events.length - goals.length} rejected)`);
   check(goals.every((e) => e.judge && terms.every((t) => typeof e.judge[t] === "number") && e.judge.moves === e.solution && e.judge.fitness > 0), `and each goal's Judge terms are in the play log (${goals.map((e) => `${e.judge?.moves} moves, ${e.judge?.decisions} decisions, fitness ${e.judge?.fitness.toFixed(2)}`).join("; ")})`);
   // A goal tampered with (its last move dropped, so red stops short): rejected, logged with its
-  // Request, and no goal shown.
+  // Request, and asked for again once at the next effort level, which gives a goal.
+  // (Each goal request a worker is sent is counted, by its effort level.)
+  await page.evaluate(() => {
+    const post = Worker.prototype.postMessage;
+    window.sent = [];
+    Worker.prototype.postMessage = function (m, ...rest) {
+      if (m && "level" in m) window.sent.push(m.level);
+      return post.call(this, m, ...rest);
+    };
+  });
   const near = await page.evaluate(() => unblock.scene.goal.target);
-  const logged = await page.evaluate(() => unblock.playLog.length);
+  const since = async (n, e) => (await page.evaluate((n) => unblock.playLog.slice(n), n)).filter((x) => x.e === e);
+  // (In real time: the workers' searches are.)
+  const until = async (ok) => { for (let t = 0; t < 120 && !(await ok()); t++) await Promise.all([pass(page, 250), page.waitForTimeout(250)]); };
+  let logged = await page.evaluate(() => unblock.playLog.length);
   await page.evaluate((near) => { unblock.tamper((g) => g.solution.pop()); unblock.requestGoal(near); }, near);
-  await page.waitForFunction((n) => unblock.playLog.slice(n).some((e) => e.e === "rejected" || e.e === "goal"), logged, { timeout: 10000 }).catch(() => {});
-  const rejected = await page.evaluate(() => unblock.playLog.at(-1));
-  check(rejected.e === "rejected" && rejected.rule === 3 && rejected.request?.world?.seed === (await page.evaluate(() => unblock.seed())) && rejected.request.history.length === GOALS && rejected.level === 0, `a tampered goal is rejected and logged with its Request (${rejected.e}, rule ${rejected.rule}: ${rejected.why})`);
-  check((await page.evaluate(() => unblock.scene.goal)) === null, "and taken as none found");
-  await page.evaluate((near) => unblock.requestGoal(near), near);
-  await page.evaluate(() => unblock.goalReady());
-  const after = await page.evaluate(() => ({ goal: unblock.scene.goal, last: unblock.playLog.at(-1), rejected: unblock.playLog.filter((e) => e.e === "rejected").length }));
-  check(after.goal && after.last.e === "goal" && after.last.judge?.fitness > 0 && after.rejected === 1, `asked again, the game gets a goal the Referee takes (${after.goal?.id}, ${after.last.judge?.moves} moves)`);
+  await until(async () => (await since(logged, "goal")).length > 0);
+  const [rejected] = await since(logged, "rejected");
+  check(rejected?.rule === 3 && rejected.request?.world?.seed === (await page.evaluate(() => unblock.seed())) && rejected.request.history.length === GOALS && rejected.level === 0, `a tampered goal is rejected and logged with its Request (rule ${rejected?.rule}: ${rejected?.why})`);
+  let after = await page.evaluate(() => ({ goal: unblock.scene.goal, last: unblock.playLog.at(-1), sent: window.sent }));
+  check(after.goal && after.last.e === "goal" && after.last.judge?.fitness > 0 && (await since(logged, "rejected")).length === 1 && after.sent.join() === "0,1", `and asked for again once at the next effort level, the game gets a goal the Referee takes (${after.goal?.id}, ${after.last.judge?.moves} moves; requests at efforts ${after.sent})`);
   // (Kept for replaying: test/experiments/replay-rejected.ts.)
   await writeFile(shots + "rejected.json", JSON.stringify(rejected));
+  // Rejected again too: none found, and nothing more is asked.
+  logged = await page.evaluate(() => { window.sent = []; return unblock.playLog.length; });
+  await page.evaluate((near) => { unblock.tamper((g) => g.solution.pop(), 2); unblock.requestGoal(near); }, near);
+  await until(async () => (await since(logged, "rejected")).length >= 2);
+  await pass(page, 3000);
+  after = await page.evaluate(() => ({ goal: unblock.scene.goal, sent: window.sent, maker: document.querySelector("#makers").textContent }));
+  check(after.goal === null && after.sent.join() === "0,1" && (await since(logged, "rejected")).length === 2 && after.maker.includes("Maker: rejected (rule 3)"), `rejected again, it is taken as none found and not asked for a third time (requests at efforts ${after.sent})`);
+  // In play: the next goal, made ahead, is rejected; reaching the goal asks for it the quick way.
+  await page.evaluate((near) => unblock.requestGoal(near), near);
+  await page.evaluate(() => unblock.goalReady());
+  const g = await page.evaluate(() => unblock.scene.goal);
+  logged = await page.evaluate(() => { window.sent = []; return unblock.playLog.length; });
+  await page.evaluate(() => unblock.tamper((g) => g.solution.pop()));
+  for (const m of g.solution) await drag(m);
+  await until(() => page.evaluate((id) => unblock.scene.goal && unblock.scene.goal.id !== id, g.id));
+  const ahead = await since(logged, "rejected"), next = await page.evaluate(() => unblock.scene.goal);
+  check(ahead.length === 1 && ahead[0].level === 2 && next && next.id !== g.id && (await since(logged, "goal")).length === 1 && (await page.evaluate(() => window.sent.join())) === "2,0", `a goal made ahead that is rejected is asked for the quick way once the goal is reached (${next?.id}; requests at efforts ${await page.evaluate(() => window.sent)})`);
   await page.close();
 }
 
