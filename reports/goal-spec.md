@@ -36,7 +36,7 @@ Everything a maker may look at; nothing else (no clock, no global state).
 - **world**: the seed, the density and the generator's version. Every cell of the endless board follows from them.
 - **moved**: the blocks the player has moved, and where they are now, indexed by chunk (4×4 cells) so that finding who is on a cell stays fast however long the session. It can hold hundreds of blocks; passing it should not copy them (a shared, read-only index).
 - **history**: earlier goals, oldest first, each its red block and target. The last one's red block, standing on its target, is where the player is.
-- **aim**: the fewest moves wanted (the ramp), or none.
+- **ramp aim**: the fewest moves wanted while the first world goals ramp up (4, rising to 10 over the first 30), or none after.
 - **wishes**: the Judge's weights (below), so they can be tuned without changing makers.
 - **seed**: for any choice a maker wants to make at random.
 
@@ -75,13 +75,14 @@ Measured from the Request and the Goal alone, never from how the maker found it:
 | **decisions** | the forks a person meets working out the solution (below) |
 | **distance** | cells red travels from start to target |
 | **track blocks** | blocks lying the same way in red's lane between start and target: pushed ahead of it, tedious rather than hard |
+| **ramp aim** | how far the fewest moves are from the ramp aim: each move off halves the fitness, so a goal a little off but much better can still win |
 | **reach** | cells from the last red block (where the player is) to the new one |
 | **clashes** | earlier targets the target overlaps, and earlier red blocks whose track red shares |
 
 ```
 difficulty = fewest moves + 2 × decisions
 balance    = difficulty / distance^0.6 × ½^track blocks
-fitness    = balance × ½^|fewest moves − aim| × 0.8^(reach beyond 4) × ½^clashes
+fitness    = balance × ½^|fewest moves − ramp aim| × 0.8^(reach beyond 4) × ½^clashes
 ```
 
 Every number is a weight in `wishes`; none is a rule. Today's hard rules (red within the 8×8 box round the last target, no shared track, no overlapping target) become the reach and clash factors, so a far better goal can still win. The weight of a decision (2 moves) is a placeholder: it is fitted to play data, so that the extra moves players need rise with it.
@@ -103,7 +104,7 @@ The Judge takes the move count on trust, so a maker could pad a solution to look
 
 ## Bench, Records and the Gate
 
-- **Cases**: a few hundred fixed Requests across densities, ramp stages (aims 4 to 10, and none), long sessions (many moved blocks) and the island's edge.
+- **Cases**: a few hundred fixed Requests across densities, ramp stages (ramp aims 4 to 10, and none), long sessions (many moved blocks) and the island's edge.
 - **Records**: per case, the best audited fitness any maker has found, from the Reference with many seeds, and from every Contender ever run.
 - **Scores** for a maker:
   - **legal**: share of Goals the Referee accepts;
@@ -135,7 +136,3 @@ The spec does not ask a maker for:
 - the solution with the fewest moves (the Auditor measures it; padding costs fitness);
 - red near the last red block, a near target, no blocks on red's track, no shared track, no overlap: all wishes in the Judge, not rules;
 - speed in itself: time is measured by the Bench, not part of the contract.
-
-## To settle
-
-1. The aim: a factor in the fitness (above), or first in a lexicographic order (as now).

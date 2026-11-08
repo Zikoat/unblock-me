@@ -178,8 +178,8 @@ $("request").innerHTML = [
   field("world", `{ seed: ${EX.seed}, density: ${EX.tries}, version: 1 }`, "every cell follows from it"),
   field("moved", "{ chunk → blocks }", "the player's moved blocks, indexed; none here"),
   field("history", `[…, { red: "${prev.id}", target: ${prev.x},${prev.y} }]`, "the last is where the player is"),
-  field("aim", EX.aim, "the ramp, or none"),
-  field("wishes", "{ decision: 2, distance: 0.6, track: ½, aim: ½, reach: 0.8 beyond 4, clash: ½ }", "the Judge's weights"),
+  field("ramp aim", EX.aim, "fewest moves wanted early on, or none"),
+  field("wishes", "{ decision: 2, distance: 0.6, track: ½, ramp aim: ½, reach: 0.8 beyond 4, clash: ½ }", "the Judge's weights"),
   field("seed", 1, "for random choices"),
 ].join("");
 $("goal").innerHTML = [
@@ -335,14 +335,14 @@ const mt = (t) => `<mtext>${t}</mtext>`, mn = (n) => `<mn>${n}</mn>`, mo = (o) =
 const pow = (b, e) => `<msup>${b}${e}</msup>`, half = `<mrow>${mo("(")}<mfrac>${mn(1)}${mn(2)}</mfrac>${mo(")")}</mrow>`;
 const bal = (m, k, d, t, tail = "") => `<mrow>${mt("balance")}${mo("=")}<mfrac><mrow>${m}${mo("+")}${mn(2)}${mo("×")}${k}</mrow>${pow(d, mn("0.6"))}</mfrac>${mo("×")}${pow(half, t)}${tail}</mrow>`;
 const fit = (b, aimOff, r, cl, tail = "") => `<mrow>${mt("fitness")}${mo("=")}${b}${mo("×")}${pow(half, aimOff)}${mo("×")}${pow(mn("0.8"), r)}${mo("×")}${pow(half, cl)}${tail}</mrow>`;
-$("named").innerHTML = `<mtable columnalign="left" rowspacing="0.9em"><mtr><mtd>${bal(mt("fewest moves"), mt("decisions"), mt("distance"), mt("track blocks"))}</mtd></mtr><mtr><mtd>${fit(mt("balance"), `<mrow>${mo("|")}${mt("fewest moves − aim")}${mo("|")}</mrow>`, mt("reach beyond 4"), mt("clashes"))}</mtd></mtr></mtable>`;
+$("named").innerHTML = `<mtable columnalign="left" rowspacing="0.9em"><mtr><mtd>${bal(mt("fewest moves"), mt("decisions"), mt("distance"), mt("track blocks"))}</mtd></mtr><mtr><mtd>${fit(mt("balance"), `<mrow>${mo("|")}${mt("fewest moves − ramp aim")}${mo("|")}</mrow>`, mt("reach beyond 4"), mt("clashes"))}</mtd></mtr></mtable>`;
 $("filled").innerHTML = `<mtable columnalign="left" rowspacing="0.9em"><mtr><mtd>${bal(mn(M), mn(decisions), mn(distance), mn(track.size), `${mo("=")}${mn(balance.toFixed(1))}`)}</mtd></mtr><mtr><mtd>${fit(mn(balance.toFixed(1)), mn(Math.abs(M - EX.aim)), mn(Math.max(0, reach - 4)), mn(0), `${mo("=")}<mn mathvariant="bold">${fitness.toFixed(1)}</mn>`)}</mtd></mtr></mtable>`;
 $("terms").innerHTML = `<tr><th>Term</th><th>Here</th><th>How it is measured</th></tr>` + [
   ["fewest moves", M, "the Goal's moves (the Auditor checks none shorter exists)"],
   ["decisions", decisions, "blocks in the clearing chain that could plausibly go either way (below)"],
   ["distance", distance, "cells red travels"],
   ["track blocks", track.size, "blocks lying the same way in red's lane, start to target"],
-  ["aim", EX.aim, `the ramp's; off by ${Math.abs(M - EX.aim)}`],
+  ["ramp aim", EX.aim, `fewest moves wanted for the 16th world goal; off by ${Math.abs(M - EX.aim)}`],
   ["reach", reach, "cells from the last red block to this one; free up to 4"],
   ["clashes", 0, "earlier targets overlapped, earlier tracks shared"],
 ].map(([a, b, c]) => `<tr><td>${a}</td><td>${b}</td><td>${c}</td></tr>`).join("");
