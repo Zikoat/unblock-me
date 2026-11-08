@@ -49,7 +49,7 @@
     <dt>5</dt><dd><b>Multiplayer</b>: several players and locations, their interactions on one board, who sees what.</dd>
     <dt>6</dt><dd><b>Islands and offline</b>: the home island, stamped beside the world once online; finishing a goal offline, then the offline island; the outbox replayed on reconnecting.</dd>
     <dt>7</dt><dd><b>Game features</b> still to come (new block kinds, immovable blocks, goals ending at a place…).</dd>
-    <dt>8</dt><dd><b>Its own checks</b>: assertions and unit tests in place of the Referee, Judge and Auditor; the benchmark as a binary in the same crate.</dd>
+    <dt>8</dt><dd><b>Its own checks</b>: cheap assertions that ship (in place of the Referee). Beside it, in the same language but never shipped: the test suite, the benchmarks, and the Records (the fewest moves known for each benchmark goal, to compare against).</dd>
   </dl></div>
 </div>
 
@@ -67,7 +67,7 @@
 <h3>Offline</h3>
 <div class="card"><svg id="offline" role="img" aria-label="Offline: interactions go to the engine in the browser and its IndexedDB store"></svg></div>
 <h3>Online, with the client predicting</h3>
-<p class="sub">The interaction goes to the server, which decides. The client applies it at once with the same engine, so the game feels instant through lag, and replays its unconfirmed moves on top of each confirmed state when it arrives (client-side prediction and server reconciliation).</p>
+<p class="sub">The server is the authority. The client applies a move at once with the same engine, so the game feels instant through lag. The result comes back the way everyone gets it, through the subscription, the player who moved included; the client then replays its unconfirmed moves on top (client-side prediction and server reconciliation). When the server's board differs, or several moves land at once, one animation moves the blocks to where the server has them; anything else shown (rewards, later) snaps to the server's too.</p>
 <div class="card"><svg id="online" role="img" aria-label="Online: predict locally, the server decides, subscriptions update every player"></svg></div>
 <h3>Islands, offline and back (your design, from TODO.md)</h3>
 <div class="card"><svg id="handover" role="img" aria-label="The home island, the shared world, the offline island"></svg></div>
@@ -97,12 +97,13 @@
   <tr><th>Phase</th><th>What happens</th><th>Done when</th></tr>
   <tr><td>1 · Goal spec</td><td>As the goal spec says: the Bench and Records, the Referee and Judge in TypeScript, a simpler Reference; Tuner subagents hill-climb makers against it, in any language (a Rust one compiled to WASM, checked by the TypeScript Referee).</td><td>The maker stops improving: new Contenders rarely beat the Records.</td></tr>
   <tr><td>2 · Features settle</td><td>Keep building the game in TypeScript: multiplayer rules, offline, the home and offline islands, new block kinds. Each new rule lands in the spec and the Reference first.</td><td>No big feature planned that changes the board's shape.</td></tr>
-  <tr><td>3 · Rust engine</td><td>Port the engine (generation, storage, moves, view, maker) to one Rust crate. The browser calls it through WASM; the TypeScript engine is the oracle: both play the Bench cases and recorded sessions, and must agree. Then the TypeScript engine is deleted.</td><td>The game runs on the Rust engine only, offline, with IndexedDB storage.</td></tr>
+  <tr><td>3 · Rust engine</td><td>Port the engine (generation, storage, moves, view, maker) to one Rust crate. The browser calls it through WASM; the TypeScript engine is the oracle: both play the Bench cases and recorded sessions, and must agree. Then the comparison and the TypeScript engine are deleted, so the Rust code can evolve freely.</td><td>The game runs on the Rust engine only, offline, with IndexedDB storage.</td></tr>
   <tr><td>4 · Online</td><td>The same crate inside a SpacetimeDB module: tables for the board, players and goals; reducers for interactions; subscriptions to each player's area; chat and presence. The client predicts and reconciles; offline sessions hand over by replay.</td><td>Two players on one board, one dropping offline and back, with no divergence in a long simulated session.</td></tr>
   <tr><td>5 · Fold in</td><td>The Referee becomes assertions in the move engine; the Judge becomes the maker's hardcoded objective; the Auditor and Bench become a test binary; the contract becomes an internal function. Optimise the engine as a whole.</td><td>One crate, one language, no contract.</td></tr>
 </table>
 
 <h2>What becomes of the goal spec's parts</h2>
+<p class="sub">A suggestion only: where each part ends up may change during implementation.</p>
 <div class="card"><svg id="fold" role="img" aria-label="Each goal-spec subsystem and what it becomes"></svg></div>
 
 <h2>Where this disagrees with the goal spec, and how to settle it</h2>
@@ -113,19 +114,23 @@
   <tr><td>Wishes come in the Request, so they can be tuned without changing makers.</td><td>Wishes hardcoded.</td><td>Tunable while tuning (phases 1–2), then frozen as constants, so the maker can be optimised for exactly today's wishes. Changing them later means a re-tune.</td></tr>
   <tr><td>The engine, Referee and Judge are TypeScript, and check makers in other languages.</td><td>Everything in one language, Rust.</td><td>TypeScript is the reference until the port is proven by differential tests (phase 3); then it is deleted, and the checks move to Rust with it.</td></tr>
   <tr><td>The Request carries the world (seed, density) and a read-only chunk index of moved blocks.</td><td>The maker reads board storage directly: IndexedDB offline, SpacetimeDB tables online.</td><td>The chunk index becomes the storage interface itself; the maker reads through it, so it works on either backend. No copying either way.</td></tr>
-  <tr><td>Goals are made in the browser, within 300 ms on a mid phone.</td><td>Online, goals are made on the server.</td><td>Two budgets: the browser one for offline, and a server one. SpacetimeDB runs reducers one after another, so a slow maker in a reducer holds up everyone. Make goals ahead, in a scheduled job, before the player needs them, or keep the maker well under a few ms of server time.</td></tr>
+  <tr><td>Goals are made in the browser, within 300 ms on a mid phone.</td><td>Online, goals are made on the server.</td><td>Two budgets: the browser one for offline, and a server one. Make the next goal the moment the player pushes the red block onto its target, in the same blocking reducer: a few ms of search plus about 50 ms of network is shorter than the push's animation. Others wait those few ms, which avoids a whole class of consistency problems.</td></tr>
   <tr><td>One player: the history, reach from the last red block, clashes with earlier goals.</td><td>Many players on one board.</td><td>Goals stay per player, but clashes widen to other players' goals and tracks. New: another player can move a block a goal's solution needs. Re-check a goal when a block in its play area moves (an assertion of the old Referee rules, run on someone else's move), and make a new one if it can't be solved any more.</td></tr>
   <tr><td>Determinism: the same Request and seed give the same Goal; no clock.</td><td>Reducers on the server, the engine in the browser.</td><td>Agrees: SpacetimeDB gives reducers a seeded random source and a fixed timestamp for this. Keep the engine's own maths in integers where it decides anything, so the browser's and the server's WASM agree to the bit.</td></tr>
 </table>
 
-<h2>Risks and open questions</h2>
+<h2>Decided</h2>
 <ul>
-  <li><b>Server time.</b> Reducers run in turn; a long goal search blocks every other player. SpacetimeDB procedures can run longer outside a transaction, but they are still beta. Making goals ahead in scheduled jobs avoids depending on them.</li>
-  <li><b>One machine.</b> A SpacetimeDB module keeps its state in memory on one machine. The board grows with play; how big does a world get, and when does it need splitting?</li>
-  <li><b>Prediction can still miss.</b> Even with a deterministic engine, the client's guess differs when another player's move arrives first; the client must snap back cleanly, and visibly enough that it isn't confusing.</li>
-  <li><b>Rolling back.</b> When a goal finished offline conflicts with others' moves, the world rolls back there but the rewards stay: how does the player see what changed?</li>
-  <li><b>The port itself.</b> Phase 3 is a rewrite of everything at once; the differential tests (same cases, same recorded sessions, same boards) are what make it safe.</li>
-  <li><b>Stamping islands.</b> Where each home island goes beside the world as players join: a free spot that fits its shape, near the world's edge, never over another's.</li>
+  <li><b>Server time.</b> The next goal is made in the blocking reducer, as the player pushes the red block onto its target (a few ms; the push animation hides it and the network). Other players wait those few ms, in exchange for no consistency issues.</li>
+  <li><b>Memory.</b> It grows with the number of players. The board is a table like everything else in SpacetimeDB, which manages memory and storage; the rule is to use SpacetimeDB the intended way.</li>
+  <li><b>The server is the authority.</b> A missed prediction, or several moves landing at once (a lag spike, a replayed outbox), uses one animation to the server's board; rewards snap to the server's too.</li>
+  <li><b>Testable all the way.</b> The default path, prediction, failures, replays and their animations, in deterministic simulation tests (TODO.md: a seeded simulated network and clock).</li>
+  <li><b>The port.</b> Checked against today's implementation while porting, then the comparison goes.</li>
+</ul>
+<h2>Open</h2>
+<ul>
+  <li><b>Online to offline and back.</b> The one place the player jumps (a long way, or a fade). To design.</li>
+  <li><b>Stamping islands.</b> Where each home island goes beside the world. To design together, when it is built.</li>
 </ul>
 
 <h2>Sources</h2>
@@ -163,13 +168,16 @@ function diagram(svg, W, H, boxes, links, extra = "", under = "") {
 const zone = (x, y, w, h, t, c, fill = "none") => `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="14" fill="${fill}" stroke="var(${c})" stroke-width="1.3" stroke-dasharray="3 5"/><text x="${x + 12}" y="${y + 20}" font-size="12.5" font-weight="650" fill="var(${c})">${t}</text>`;
 
 // The end state: the engine in the middle, a host on each side.
-diagram($("endState"), 900, 470, [
+diagram($("endState"), 900, 590, [
   { id: "gen", t: "Level generation", sub: "board, island, goals", x: 330, y: 100, w: 240, h: 46, k: "core" },
   { id: "store", t: "Board storage", sub: "chunk index · one interface", x: 330, y: 156, w: 240, h: 46, k: "core" },
   { id: "move", t: "Moving", sub: "interaction → next board", x: 330, y: 212, w: 240, h: 46, k: "core" },
   { id: "view", t: "View", sub: "location + viewport → blocks", x: 330, y: 268, w: 240, h: 46, k: "core" },
   { id: "mp", t: "Multiplayer · offline · features", sub: "players, islands, outbox", x: 330, y: 324, w: 240, h: 46, k: "core" },
-  { id: "checks", t: "Assertions + tests", sub: "old Referee, Judge, Auditor", x: 330, y: 380, w: 240, h: 46, k: "core" },
+  { id: "checks", t: "Assertions", sub: "cheap; ship with it", x: 330, y: 380, w: 240, h: 46, k: "core" },
+  { id: "tests", t: "Test suite", sub: "down to the animations", x: 150, y: 512, w: 190, h: 50, k: "dev" },
+  { id: "bench", t: "Benchmarks", sub: "goal cases, timing", x: 355, y: 512, w: 190, h: 50, k: "dev" },
+  { id: "records", t: "Records", sub: "fewest moves per goal", x: 560, y: 512, w: 190, h: 50, k: "dev" },
   { id: "input", t: "Player input", sub: "taps and drags", x: 30, y: 100, w: 220, h: 50, k: "web" },
   { id: "wasm", t: "Engine as WASM", sub: "wasm-bindgen", x: 30, y: 190, w: 220, h: 46, k: "web" },
   { id: "idb", t: "IndexedDB", sub: "board + interaction log", x: 30, y: 280, w: 220, h: 46, k: "web" },
@@ -181,7 +189,7 @@ diagram($("endState"), 900, 470, [
 ], [
   ["input", "wasm"], ["wasm", "idb", "offline", { dx: 6, anchor: "start", dy: 2 }],
   ["mod", "tables", "", {}], ["tables", "subs", "", {}],
-], zone(310, 60, 280, 384, "ONE ENGINE (RUST CRATE)", "--core") + zone(15, 60, 250, 384, "BROWSER", "--web") + zone(635, 60, 250, 384, "SERVER", "--srv") +
+], zone(310, 60, 280, 384, "ONE ENGINE (RUST CRATE)", "--core") + zone(15, 60, 250, 384, "BROWSER", "--web") + zone(635, 60, 250, 384, "SERVER", "--srv") + zone(135, 480, 630, 98, "DEVELOPMENT ONLY · SAME LANGUAGE · NEVER SHIPPED", "--dev") +
 `<path d="M30 213 H22 V395 H26" fill="none" stroke="var(--ink-2)" stroke-width="1.6" marker-end="url(#mendState)"/>
 <line x1="265" y1="213" x2="310" y2="213" stroke="var(--core)" stroke-width="2.2"/><line x1="590" y1="125" x2="635" y2="125" stroke="var(--core)" stroke-width="2.2"/>
 <text x="287" y="206" text-anchor="middle" font-size="11" fill="var(--core)">same</text><text x="612" y="118" text-anchor="middle" font-size="11" fill="var(--core)">same</text>
@@ -210,10 +218,10 @@ diagram($("offline"), 900, 120, [
   o += msg(128, "eng", "srv", "#12 (a reducer call)");
   o += note(150, cols.srv, "same engine: legal? apply, store");
   o += msg(182, "srv", "other", "subscription: block moved");
-  o += msg(212, "srv", "eng", "confirmed board, up to #12", true);
-  o += note(236, cols.eng, "rebuild: confirmed board + unconfirmed #13, #14");
-  o += msg(270, "srv", "eng", "or: #12 rejected (someone moved first)", true);
-  o += note(294, cols.eng, "snap back to the server's board, replay the rest");
+  o += msg(212, "srv", "eng", "the same subscription update", true);
+  o += note(236, cols.eng, "#12 confirmed: replay pending #13, #14 on top");
+  o += msg(270, "srv", "eng", "or: #12 failed (someone moved first)", true);
+  o += note(294, cols.eng, "animate to the subscribed board, replay the rest");
   $("online").setAttribute("viewBox", `0 0 ${W} ${H}`);
   $("online").innerHTML = o;
 })();
