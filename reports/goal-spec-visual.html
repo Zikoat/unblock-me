@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Goal spec, drawn</title>
-<meta name="date" content="2026-11-06">
+<meta name="date" content="2026-11-08">
 <style>
   :root { color-scheme: light dark; --bg: #f9f9f7; --card: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --line: #e1e0d9;
     --block: #c9c7bf; --wall: #5d5c58; --red: #d64545; --hi: #2a78d6; --dev: #b97c0c; --ok: #2f8a4c; --bad: #c43d3d; --shared: #6b6a65;
@@ -29,6 +29,8 @@
   .rules { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
   .rules figure { margin: 0; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px; }
   .rules figcaption { font-size: 13px; margin-top: 6px; } .rules figcaption b { color: var(--bad); }
+  ul.tree, ul.tree ul { list-style: none; margin: 0; padding-left: 18px; border-left: 1px solid var(--line); font-size: 13.5px; }
+  ul.tree { padding-left: 0; border: 0; } ul.tree li { margin: 3px 0; }
   .big-math { font-size: 20px; margin: 8px 0; overflow-x: auto; }
   table { border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
   th, td { padding: 5px 12px; border-bottom: 1px solid var(--line); text-align: left; }
@@ -41,9 +43,8 @@
 <p class="sub">The <a href="goal-spec.html">goal spec</a> as pictures, with one real goal (seed 11, density 12) worked through. A draft for discussion.</p>
 
 <h2>The map</h2>
-<p class="sub">Grey runs everywhere; blue is what runs while people play; amber only while we develop.</p>
-<div class="card"><svg id="map" role="img" aria-label="The subsystems and how they connect"></svg></div>
-<div class="legend"><span><i style="background:var(--shared)"></i>Everywhere</span><span><i style="background:var(--hi)"></i>In play</span><span><i style="background:var(--dev)"></i>In development</span></div>
+<p class="sub">Two journeys. Top: one goal while someone plays. Bottom: a new maker earning its place. Grey parts are the same single implementation in both.</p>
+<div class="card"><svg id="map" role="img" aria-label="Two journeys: making a goal in play, and testing a maker"></svg></div>
 
 <h2>The contract</h2>
 <p class="sub">A Request in, a Goal out: nothing else crosses the line. Values from the example below.</p>
@@ -54,7 +55,7 @@
 
 <h2>The example</h2>
 <div class="two">
-  <figure class="card" style="margin:0"><svg id="exRequest"></svg><figcaption class="sub" style="margin:8px 0 0">The Request: the board as data, the last target (cross). Which block, and to where, is up to the maker.</figcaption></figure>
+  <figure class="card" style="margin:0"><svg id="exRequest"></svg><figcaption class="sub" style="margin:8px 0 0">The Request: the world (seed, density, moved blocks) and the history; the last red block (outlined; picked for the example) is where the player is. Which block, and to where, is up to the maker.</figcaption></figure>
   <figure class="card" style="margin:0"><svg id="exGoal"></svg><figcaption class="sub" style="margin:8px 0 0">The Goal: red, its target (dashed) and the moves, numbered. The arrows: each block makes way for the next.</figcaption></figure>
 </div>
 <h3>The Referee replays it</h3>
@@ -65,6 +66,12 @@
   <math display="block" class="big-math" id="filled"></math>
   <div style="overflow-x:auto"><table id="terms"></table></div>
 </div>
+
+<h2>Decisions: the Judge's way of counting choices</h2>
+<p class="sub">How a person works it out: push red towards the target; whatever is in the way must move first, either way along its axis, by the least that frees the cells. A way is <b>out</b> at the edge, a wall, or a block already in the chain (a cycle). A <b>decision</b> (◆) is a block with two ways still in. Both get explored: a dead end costs thinking too.</p>
+<div class="two" id="decisionExamples"></div>
+<h3>The example goal</h3>
+<div class="card"><div id="exTree"></div></div>
 
 <h2>The Referee's rules</h2>
 <p class="sub">Each broken on a tiny board. Any one makes the Goal illegal.</p>
@@ -77,7 +84,7 @@
   <div class="card"><b style="font-size:14px">The Gate</b><table style="margin-top:6px"><tr><th>Score</th><th>To ship</th></tr>
     <tr><td>legal</td><td>100%</td></tr><tr><td>deterministic</td><td>100%</td></tr>
     <tr><td>quality (fitness / record)</td><td>median ≥ 0.95, worst 5% ≥ 0.8</td></tr>
-    <tr><td>time, slowest 5%</td><td>≤ 300 ms waiting, ≤ 1 s ahead</td></tr>
+    <tr><td>time, slowest 5%</td><td>≤ 300 ms on a mid phone</td></tr>
     <tr><td>against the shipping one</td><td>no worse at the same time</td></tr></table></div>
   <div class="card"><b style="font-size:14px">Performance profile (a sketch)</b><svg id="profile" role="img" aria-label="Quality against time, sketched"></svg></div>
 </div>
@@ -124,6 +131,8 @@ const solves = (moves) => { const p = replay(moves); return !!p && (p.get(EX.red
 const states = [new Map()];
 for (const [id, , to] of EX.moves) { const m = new Map(states.at(-1)); m.set(id, to); states.push(m); }
 const red = blocks.get(EX.red), start = [red.x, red.y];
+const used = new Set(EX.moves.map((m) => m[0]));
+const prev = [...blocks.values()].filter((b) => !b.fixed && !used.has(b.id) && b.w > b.h).sort((a, b) => Math.hypot(a.x - EX.last[0], a.y - EX.last[1]) - Math.hypot(b.x - EX.last[0], b.y - EX.last[1]))[0];
 
 // ---- The Judge's terms ----
 const swept = [];
@@ -144,7 +153,6 @@ function legalMoves(pos) {
   return n;
 }
 const M = EX.moves.length;
-const choices = states.slice(0, M).reduce((s, p) => s + legalMoves(p), 0) / M;
 const horizontal = red.w > red.h, distance = Math.abs(horizontal ? EX.target[0] - start[0] : EX.target[1] - start[1]);
 const occ0 = occupancy(new Map()), track = new Set();
 for (let q = Math.min(start[0], EX.target[0]); q < Math.max(start[0], EX.target[0]) + red.w; q++) {
@@ -152,8 +160,14 @@ for (let q = Math.min(start[0], EX.target[0]); q < Math.max(start[0], EX.target[
   if (o && o !== red.id && blocks.get(o).w > blocks.get(o).h && blocks.get(o).y === start[1]) track.add(o);
 }
 let reach = Infinity;
-for (let i = 0; i < red.w; i++) for (let j = 0; j < red.h; j++) reach = Math.min(reach, Math.abs(start[0] + i - EX.last[0]) + Math.abs(start[1] + j - EX.last[1]));
-const difficulty = M * Math.log2(choices), balance = (difficulty / Math.pow(distance, 0.6)) * Math.pow(0.5, track.size);
+for (let i = 0; i < red.w; i++) for (let j = 0; j < red.h; j++) for (let k = 0; k < prev.w; k++) for (let l = 0; l < prev.h; l++) reach = Math.min(reach, Math.abs(start[0] + i - prev.x - k) + Math.abs(start[1] + j - prev.y - l));
+// Decisions, stage by stage along the replay (before each of red's moves).
+const exBoard = (pos) => ({ blocks, at: (x, y) => { if (!inRegion(x, y)) return "#"; const o = occupancy(pos).get(`${x},${y}`) ?? null; return o && blocks.get(o).fixed ? "#" : o; }, posOf: (id) => pos.get(id) ?? [blocks.get(id).x, blocks.get(id).y] });
+// At the start, and after each of red's moves that leaves it short of the target.
+const exStages = [decisionTree(exBoard(states[0]), EX.red, EX.target)];
+EX.moves.forEach((m, i) => { if (m[0] === EX.red && m[2].join() !== EX.target.join()) exStages.push(decisionTree(exBoard(states[i + 1]), EX.red, EX.target)); });
+const decisions = exStages.reduce((n, t) => n + t.decisions, 0);
+const difficulty = M + 2 * decisions, balance = (difficulty / Math.pow(distance, 0.6)) * Math.pow(0.5, track.size);
 const aimF = Math.pow(0.5, Math.abs(M - EX.aim)), reachF = Math.pow(0.8, Math.max(0, reach - 4)), clashF = 1;
 const fitness = balance * aimF * reachF * clashF;
 
@@ -161,21 +175,113 @@ const fitness = balance * aimF * reachF * clashF;
 const field = (k, v, note) => `<div><b>${k}</b><span><code>${v}</code>${note ? ` · ${note}` : ""}</span></div>`;
 const sliding = EX.blocks.filter((b) => !b[5]).length;
 $("request").innerHTML = [
-  field("board", `${R.w}×${R.h} cells, ${EX.blocks.length} blocks`, "as data; outside is wall"),
-  field("last target", EX.last.join(", "), "where the player is"),
-  field("history", "[]", "earlier reds and targets"),
+  field("world", `{ seed: ${EX.seed}, density: ${EX.tries}, version: 1 }`, "every cell follows from it"),
+  field("moved", "{ chunk → blocks }", "the player's moved blocks, indexed; none here"),
+  field("history", `[…, { red: "${prev.id}", target: ${prev.x},${prev.y} }]`, "the last is where the player is"),
   field("aim", EX.aim, "the ramp, or none"),
-  field("wishes", "{ distance: 0.6, track: ½, aim: ½, reach: 0.8 after 4, clash: ½ }", "the Judge's weights"),
-  field("effort", 2, "0 to 3; never the clock"),
+  field("wishes", "{ decision: 2, distance: 0.6, track: ½, aim: ½, reach: 0.8 beyond 4, clash: ½ }", "the Judge's weights"),
   field("seed", 1, "for random choices"),
 ].join("");
 $("goal").innerHTML = [
-  field("red", `"${EX.red}"`),
-  field("start", start.join(", ")),
+  field("red", `"${EX.red}"`, `starts where the board has it (${start.join(", ")})`),
   field("target", EX.target.join(", ")),
   field("moves", `${M} × { block, from, to }`, `e.g. { "${EX.moves[0][0]}", ${EX.moves[0][1].join(",")} → ${EX.moves[0][2].join(",")} }`),
-  field("notes", "{ steps: … }", "optional; the Judge ignores it"),
 ].join("") + `<p class="sub" style="margin:10px 0 0;font-size:13px">Or <b>none</b>: nothing found (a loss on the Bench).</p>`;
+
+// ---- Decisions: the chain of blocks to clear, back from red's path ----
+/** The clearing tree for red's path to `target` on board `B` ({ blocks, at(x, y) → id, null or "#", posOf(id) }):
+ * each block in the way, each way it could go, and the blocks those ways need moved in turn. */
+function decisionTree(B, redId, target) {
+  const key = (c) => `${c[0]},${c[1]}`;
+  const shape = (id) => { const b = B.blocks.get(id), p = B.posOf(id); return { x: p[0], y: p[1], w: b.w, h: b.h, hz: b.w > b.h }; };
+  const r = shape(redId), path = [];
+  const lo = r.hz ? Math.min(r.x, target[0]) : Math.min(r.y, target[1]), hi = (r.hz ? Math.max(r.x, target[0]) + r.w : Math.max(r.y, target[1]) + r.h);
+  for (let q = lo; q < hi; q++) { const c = r.hz ? [q, r.y] : [r.x, q]; if (B.at(...c) !== redId) path.push(c); }
+  let nodes = 0;
+  const forks = new Set(); // a block counts once a stage, however many branches meet it
+  const blockersIn = (cells, self) => [...new Set(cells.map((c) => B.at(...c)).filter((o) => o && o !== self))];
+  function clear(id, region, chain, depth) {
+    const b = shape(id), node = { id, ways: [] };
+    nodes++;
+    for (const dir of [-1, 1]) {
+      const sweep = [];
+      let why = null, s = 0;
+      for (;;) {
+        s++;
+        const lead = b.hz ? [dir > 0 ? b.x + b.w - 1 + s : b.x - s, b.y] : [b.x, dir > 0 ? b.y + b.h - 1 + s : b.y - s];
+        if (B.at(...lead) === "#") { why = "edge or wall"; break; }
+        sweep.push(lead);
+        const cells = [];
+        for (let i = 0; i < b.w; i++) for (let j = 0; j < b.h; j++) cells.push(b.hz ? [b.x + dir * s + i, b.y + j] : [b.x + i, b.y + dir * s + j]);
+        if (!cells.some((c) => region.has(key(c)))) break;
+        if (s > 12) { why = "too far"; break; }
+      }
+      const way = { dir, s, why, needs: [] };
+      if (!why) {
+        const blockers = blockersIn(sweep, id), cyc = blockers.find((o) => chain.has(o));
+        if (cyc) way.why = `cycle (${cyc === redId ? "red" : label(B, cyc)})`;
+        else if (depth >= 6 || nodes >= 300) way.why = "too deep";
+        else way.needs = blockers.map((o) => clear(o, new Set(sweep.map(key)), new Set([...chain, id]), depth + 1));
+      }
+      way.ok = !way.why && way.needs.every((n) => n.ok);
+      node.ways.push(way);
+    }
+    node.decision = node.ways.filter((w) => !w.why).length === 2;
+    if (node.decision) forks.add(id);
+    node.ok = node.ways.some((w) => w.ok);
+    return node;
+  }
+  const roots = blockersIn(path, redId).map((o) => clear(o, new Set(path.map(key)), new Set([redId]), 1));
+  return { roots, decisions: forks.size };
+}
+function label(B, id) { const b = B.blocks.get(id), p = B.posOf(id); return `${b.letter ?? (b.w > b.h ? "b" : "d")}@${p[0]},${p[1]}`; }
+function treeHtml(B, t, redName = "red") {
+  const arrow = (b, dir) => (b.w > b.h ? (dir > 0 ? "→" : "←") : dir > 0 ? "↓" : "↑");
+  const node = (n) => {
+    const b = B.blocks.get(n.id);
+    const ways = n.ways.map((w) => `<li>${arrow(b, w.dir)}${w.why ? "" : w.s} ${w.why ? `<span style="color:var(--bad)">✗ ${w.why}</span>` : w.needs.length ? `needs ${w.needs.map((c) => `<b>${label(B, c.id)}</b>`).join(" and ")} cleared` : `<span style="color:var(--ok)">✓ free</span>`}${w.needs.length ? `<ul>${w.needs.map(node).join("")}</ul>` : ""}</li>`).join("");
+    return `<li><b>${label(B, n.id)}</b>${n.decision ? ` <span style="color:var(--dev);font-weight:700">◆ decision</span>` : ""}<ul>${ways}</ul></li>`;
+  };
+  return t.roots.length ? `<ul class="tree"><li>${redName} → target, blocked by ${t.roots.map((n) => `<b>${label(B, n.id)}</b>`).join(" and ")}<ul>${t.roots.map(node).join("")}</ul></li></ul>` : `<p class="sub" style="margin:0">${redName} → target: nothing in the way.</p>`;
+}
+/** A board from text: R r red, g target, b horizontal, d vertical, # wall, . empty; outside is the edge. */
+function asciiBoard(rows) {
+  const bl = new Map(), used = new Set(), W = Math.max(...rows.map((r) => r.length)), H = rows.length;
+  const ch = (x, y) => rows[y]?.[x] ?? "#";
+  let redId = null, target = null;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const c = ch(x, y), k = `${x},${y}`;
+    if (used.has(k)) continue;
+    if (c === "R") { redId = `red`; bl.set(redId, { id: redId, x, y, w: 2, h: 1, letter: "R" }); used.add(k).add(`${x + 1},${y}`); }
+    else if (c === "b") { const id = `b${x},${y}`; bl.set(id, { id, x, y, w: 2, h: 1, letter: "b" }); used.add(k).add(`${x + 1},${y}`); }
+    else if (c === "d") { const id = `d${x},${y}`; bl.set(id, { id, x, y, w: 1, h: 2, letter: "d" }); used.add(k).add(`${x},${y + 1}`); }
+    else if (c === "g" && !target) target = [x, y];
+  }
+  const at = (x, y) => { if (x < 0 || y < 0 || x >= W || y >= H || ch(x, y) === "#") return "#"; for (const b of bl.values()) if (x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h) return b.id; return null; };
+  return { B: { blocks: bl, at, posOf: (id) => [bl.get(id).x, bl.get(id).y] }, redId, target, W, H };
+}
+function asciiSvg({ B, redId, target, W, H }) {
+  const s = 30, g = 2.5;
+  let o = `<rect width="${W * s}" height="${H * s}" rx="6" fill="var(--bg)" stroke="var(--line)"/>`;
+  o += `<rect x="${target[0] * s + g}" y="${target[1] * s + g}" width="${2 * s - 2 * g}" height="${s - 2 * g}" rx="6" fill="none" stroke="var(--red)" stroke-width="2" stroke-dasharray="5 4"/>`;
+  for (const b of B.blocks.values()) {
+    o += `<rect x="${b.x * s + g}" y="${b.y * s + g}" width="${b.w * s - 2 * g}" height="${b.h * s - 2 * g}" rx="6" fill="${b.id === redId ? "var(--red)" : "var(--block)"}"/>`;
+    if (b.id !== redId) o += `<text x="${(b.x + b.w / 2) * s}" y="${(b.y + b.h / 2) * s + 4}" text-anchor="middle" font-size="10.5" fill="var(--ink)">${label(B, b.id).replace(/^[bd]@/, "")}</text>`;
+  }
+  return `<svg viewBox="0 0 ${W * s} ${H * s}" style="max-width:${W * s}px">${o}</svg>`;
+}
+const EXAMPLES = [
+  { rows: ["Rr..gg"], note: "Nothing in the way: 0." },
+  { rows: [".dbbd...", ".dd.d...", "Rrd..gg.", "..bb...."], note: "d@2,1 can only go up (down runs off the board), so no decision there; b@2,0 can go left or right." },
+  { rows: [".ddbb...", ".dd.d...", "..Rrd.gg", "..bb...."], note: "After red's first step: d@4,1 only up; b@3,0 left or right." },
+];
+$("decisionExamples").innerHTML = EXAMPLES.map((e) => {
+  const a = asciiBoard(e.rows), t = decisionTree(a.B, a.redId, a.target);
+  return `<div class="card">${asciiSvg(a)}<p style="margin:8px 0 4px"><b>${t.decisions} decision${t.decisions === 1 ? "" : "s"}.</b> <span class="sub">${e.note}</span></p>${treeHtml(a.B, t)}</div>`;
+}).join("");
+const exB = exBoard(new Map());
+for (const b of blocks.values()) b.letter = b.w > b.h ? "b" : "d";
+$("exTree").innerHTML = `<p style="margin:0 0 6px"><b>${decisions} decision${decisions === 1 ? "" : "s"}</b> <span class="sub">(red moves once, at the end, so one stage: the start board; a block met in several branches counts once)</span></p><details><summary style="cursor:pointer;font-size:14px">The whole tree</summary>` + exStages.map((t) => treeHtml(exB, t)).join("") + `</details>`;
 
 // ---- Board drawing ----
 const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
@@ -199,7 +305,7 @@ function boardSvg(svg, { pos = new Map(), view = { x: R.x, y: R.y, w: R.w, h: R.
 }
 const centre = (id, pos, X, Y, s) => { const b = blocks.get(id), p = pos.get(id) ?? [b.x, b.y]; return [X(p[0]) + (b.w * s) / 2, Y(p[1]) + (b.h * s) / 2]; };
 
-boardSvg($("exRequest"), { cross: EX.last });
+boardSvg($("exRequest"), { extra: (() => { const s = 28, g = s * 0.08; return `<rect x="${(prev.x - R.x) * s + g}" y="${(prev.y - R.y) * s + g}" width="${prev.w * s - 2 * g}" height="${prev.h * s - 2 * g}" rx="${s * 0.2}" fill="none" stroke="var(--ink)" stroke-width="3"/>`; })() });
 // Which later move each move makes way for (the first to sweep a cell it vacated).
 const sweptCells = ([id, from, to]) => { const b = blocks.get(id), h = b.w > b.h, out = new Set(); const lo = h ? Math.min(from[0], to[0]) : Math.min(from[1], to[1]), hi = (h ? Math.max(from[0], to[0]) : Math.max(from[1], to[1])) + (h ? b.w : b.h); for (let q = lo; q < hi; q++) out.add(h ? `${q},${from[1]}` : `${from[0]},${q}`); return out; };
 const cellsOf = (id, at) => { const b = blocks.get(id), out = []; for (let i = 0; i < b.w; i++) for (let j = 0; j < b.h; j++) out.push(`${at[0] + i},${at[1] + j}`); return out; };
@@ -227,17 +333,17 @@ $("checks").innerHTML = [
 // ---- The Judge, named and filled in ----
 const mt = (t) => `<mtext>${t}</mtext>`, mn = (n) => `<mn>${n}</mn>`, mo = (o) => `<mo>${o}</mo>`;
 const pow = (b, e) => `<msup>${b}${e}</msup>`, half = `<mrow>${mo("(")}<mfrac>${mn(1)}${mn(2)}</mfrac>${mo(")")}</mrow>`;
-const bal = (m, c, d, t, tail = "") => `<mrow>${mt("balance")}${mo("=")}<mfrac><mrow>${m}${mo("×")}<msub><mi>log</mi>${mn(2)}</msub>${mo("(")}${c}${mo(")")}</mrow>${pow(d, mn("0.6"))}</mfrac>${mo("×")}${pow(half, t)}${tail}</mrow>`;
+const bal = (m, k, d, t, tail = "") => `<mrow>${mt("balance")}${mo("=")}<mfrac><mrow>${m}${mo("+")}${mn(2)}${mo("×")}${k}</mrow>${pow(d, mn("0.6"))}</mfrac>${mo("×")}${pow(half, t)}${tail}</mrow>`;
 const fit = (b, aimOff, r, cl, tail = "") => `<mrow>${mt("fitness")}${mo("=")}${b}${mo("×")}${pow(half, aimOff)}${mo("×")}${pow(mn("0.8"), r)}${mo("×")}${pow(half, cl)}${tail}</mrow>`;
-$("named").innerHTML = `<mtable columnalign="left" rowspacing="0.9em"><mtr><mtd>${bal(mt("fewest moves"), mt("choices"), mt("distance"), mt("track blocks"))}</mtd></mtr><mtr><mtd>${fit(mt("balance"), `<mrow>${mo("|")}${mt("fewest moves − aim")}${mo("|")}</mrow>`, mt("reach beyond 4"), mt("clashes"))}</mtd></mtr></mtable>`;
-$("filled").innerHTML = `<mtable columnalign="left" rowspacing="0.9em"><mtr><mtd>${bal(mn(M), mn(choices.toFixed(1)), mn(distance), mn(track.size), `${mo("=")}${mn(balance.toFixed(1))}`)}</mtd></mtr><mtr><mtd>${fit(mn(balance.toFixed(1)), mn(Math.abs(M - EX.aim)), mn(Math.max(0, reach - 4)), mn(0), `${mo("=")}<mn mathvariant="bold">${fitness.toFixed(1)}</mn>`)}</mtd></mtr></mtable>`;
+$("named").innerHTML = `<mtable columnalign="left" rowspacing="0.9em"><mtr><mtd>${bal(mt("fewest moves"), mt("decisions"), mt("distance"), mt("track blocks"))}</mtd></mtr><mtr><mtd>${fit(mt("balance"), `<mrow>${mo("|")}${mt("fewest moves − aim")}${mo("|")}</mrow>`, mt("reach beyond 4"), mt("clashes"))}</mtd></mtr></mtable>`;
+$("filled").innerHTML = `<mtable columnalign="left" rowspacing="0.9em"><mtr><mtd>${bal(mn(M), mn(decisions), mn(distance), mn(track.size), `${mo("=")}${mn(balance.toFixed(1))}`)}</mtd></mtr><mtr><mtd>${fit(mn(balance.toFixed(1)), mn(Math.abs(M - EX.aim)), mn(Math.max(0, reach - 4)), mn(0), `${mo("=")}<mn mathvariant="bold">${fitness.toFixed(1)}</mn>`)}</mtd></mtr></mtable>`;
 $("terms").innerHTML = `<tr><th>Term</th><th>Here</th><th>How it is measured</th></tr>` + [
   ["fewest moves", M, "the Goal's moves (the Auditor checks none shorter exists)"],
-  ["choices", choices.toFixed(1), `legal moves on an average board along the replay, blocks in the play area (${crop.w}×${crop.h})`],
+  ["decisions", decisions, "blocks in the clearing chain that could plausibly go either way (below)"],
   ["distance", distance, "cells red travels"],
   ["track blocks", track.size, "blocks lying the same way in red's lane, start to target"],
   ["aim", EX.aim, `the ramp's; off by ${Math.abs(M - EX.aim)}`],
-  ["reach", reach, "cells from the last target to red; free up to 4"],
+  ["reach", reach, "cells from the last red block to this one; free up to 4"],
   ["clashes", 0, "earlier targets overlapped, earlier tracks shared"],
 ].map(([a, b, c]) => `<tr><td>${a}</td><td>${b}</td><td>${c}</td></tr>`).join("");
 
@@ -284,26 +390,22 @@ function diagram(svg, W, H, boxes, links, extra = "") {
   svg.innerHTML = o;
 }
 const lane = (x, y, w, h, t, k) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="14" fill="none" stroke="var(${k})" stroke-width="1.2" stroke-dasharray="3 5"/><text x="${x + 12}" y="${y + 20}" font-size="12.5" font-weight="650" fill="var(${k})">${t}</text>`;
-diagram($("map"), 900, 470, [
-  { id: "engine", t: "Engine", sub: "board, slides, replay", x: 30, y: 40, w: 190, h: 52, k: "s" },
-  { id: "contract", t: "Contract", sub: "Request → Goal", x: 250, y: 40, w: 190, h: 52, k: "s" },
-  { id: "referee", t: "Referee", sub: "legal? yes / no", x: 470, y: 40, w: 190, h: 52, k: "s" },
-  { id: "judge", t: "Judge", sub: "how good? fitness", x: 690, y: 40, w: 180, h: 52, k: "s" },
-  { id: "game", t: "Game", sub: "sends a Request", x: 30, y: 170, w: 160, h: 50, k: "p" },
-  { id: "contender", t: "Contender", sub: "the shipped maker", x: 30, y: 270, w: 160, h: 50, k: "p" },
-  { id: "pref", t: "Referee", x: 240, y: 270, w: 120, h: 50, k: "p" },
-  { id: "player", t: "Player", sub: "gets the Goal", x: 240, y: 170, w: 120, h: 50, k: "p" },
-  { id: "fallback", t: "Retry, then Reference", sub: "next seed; effort 0", x: 30, y: 380, w: 200, h: 50, k: "p" },
-  { id: "bench", t: "Bench", sub: "fixed cases", x: 490, y: 170, w: 150, h: 50, k: "d" },
-  { id: "makers", t: "Makers", sub: "Reference + Contenders", x: 690, y: 170, w: 180, h: 50, k: "d" },
-  { id: "dref", t: "Referee + Judge", sub: "+ Auditor re-counts", x: 690, y: 270, w: 180, h: 50, k: "d" },
-  { id: "records", t: "Records", sub: "best ever per case", x: 490, y: 270, w: 150, h: 50, k: "d" },
-  { id: "gate", t: "Gate", sub: "ship or not", x: 490, y: 380, w: 150, h: 50, k: "d" },
-  { id: "tuner", t: "Tuner", sub: "a subagent", x: 690, y: 380, w: 180, h: 50, k: "d" },
-], [
-  ["game", "contender", "Request"], ["contender", "pref", "Goal"], ["pref", "player", "legal"], ["pref", "fallback", "illegal"],
-  ["bench", "makers", "cases"], ["makers", "dref", "Goals"], ["dref", "records", "fitness"], ["records", "gate", ""], ["gate", "contender", "ships", true],
-], `<path d="M870 405 H884 V195 H878" fill="none" stroke="var(--ink-2)" stroke-width="1.6" marker-end="url(#mmap)"/><text x="876" y="354" text-anchor="end" font-size="11.5" fill="var(--ink-2)">writes</text>` + lane(15, 125, 400, 330, "IN PLAY", "--hi") + lane(470, 125, 415, 330, "IN DEVELOPMENT", "--dev") + `<text x="30" y="24" font-size="12.5" font-weight="650" fill="var(--shared)">EVERYWHERE</text>`);
+diagram($("map"), 900, 330, [
+  { id: "req", t: "Request", sub: "world, moved, history", x: 20, y: 50, w: 150, h: 54, k: "p" },
+  { id: "maker", t: "Maker", sub: "the shipped one", x: 200, y: 50, w: 130, h: 54, k: "p" },
+  { id: "goal", t: "Goal", sub: "red, target, moves", x: 360, y: 50, w: 140, h: 54, k: "p" },
+  { id: "ref", t: "Referee", sub: "legal?", x: 530, y: 50, w: 120, h: 54, k: "s" },
+  { id: "player", t: "Player", sub: "plays it", x: 690, y: 50, w: 190, h: 54, k: "p" },
+  { id: "cases", t: "Bench cases", sub: "fixed Requests", x: 20, y: 230, w: 150, h: 54, k: "d" },
+  { id: "new", t: "New maker", sub: "written by the Tuner", x: 200, y: 230, w: 160, h: 54, k: "d" },
+  { id: "rj", t: "Referee + Judge", sub: "+ Auditor", x: 390, y: 230, w: 160, h: 54, k: "s" },
+  { id: "rec", t: "Records", sub: "best ever", x: 580, y: 230, w: 110, h: 54, k: "d" },
+  { id: "gate", t: "Gate", sub: "ships it?", x: 720, y: 230, w: 160, h: 54, k: "d" },
+], [["req", "maker"], ["maker", "goal"], ["goal", "ref"], ["ref", "player", "yes"], ["cases", "new"], ["new", "rj"], ["rj", "rec"], ["rec", "gate"]],
+`<text x="20" y="30" font-size="12.5" font-weight="650" fill="var(--hi)">IN PLAY: ONE GOAL</text>
+<text x="20" y="210" font-size="12.5" font-weight="650" fill="var(--dev)">IN DEVELOPMENT: A NEW MAKER EARNS ITS PLACE</text>
+<path d="M590 104 V140 H265 V110" fill="none" stroke="var(--ink-2)" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#mmap)"/><text x="428" y="134" text-anchor="middle" font-size="11.5" fill="var(--ink-2)">no: next seed, then the Reference</text>
+<path d="M800 230 V180 H265 V108" fill="none" stroke="var(--dev)" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#mmap)"/><text x="790" y="194" text-anchor="end" font-size="11.5" fill="var(--dev)">yes: it becomes the shipped maker</text>`);
 
 diagram($("bench"), 900, 210, [
   { id: "cases", t: "Cases", sub: "Requests as data", x: 20, y: 80, w: 140, h: 54, k: "d" },
@@ -331,7 +433,7 @@ diagram($("tuner"), 900, 170, [
   let s = "";
   for (const q of [0, 0.5, 0.8, 0.95, 1]) s += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(q)}" y2="${y(q)}" stroke="var(--line)"/><text x="${m.l - 6}" y="${y(q) + 4}" text-anchor="end" font-size="11" fill="var(--ink-2)">${q}</text>`;
   for (const t of [10, 100, 1000, 10000]) s += `<text x="${x(t)}" y="${H - m.b + 16}" text-anchor="middle" font-size="11" fill="var(--ink-2)">${t >= 1000 ? t / 1000 + " s" : t + " ms"}</text>`;
-  s += `<line x1="${x(300)}" x2="${x(300)}" y1="${m.t}" y2="${H - m.b}" stroke="var(--hi)" stroke-dasharray="4 4"/><text x="${x(300) + 4}" y="${y(0.3)}" font-size="11" fill="var(--hi)">budget (waiting)</text>`;
+  s += `<line x1="${x(300)}" x2="${x(300)}" y1="${m.t}" y2="${H - m.b}" stroke="var(--hi)" stroke-dasharray="4 4"/><text x="${x(300) + 4}" y="${y(0.3)}" font-size="11" fill="var(--hi)">budget</text>`;
   s += `<polyline fill="none" stroke="var(--ink-2)" stroke-width="2" points="${curve((t) => 1 - Math.exp(-t / 2500))}"/><text x="${x(4000)}" y="${y(0.6)}" font-size="11" fill="var(--ink-2)">Reference</text>`;
   s += `<polyline fill="none" stroke="var(--dev)" stroke-width="2.5" points="${curve((t) => 1 - 0.9 * Math.exp(-t / 90))}"/><text x="${x(60)}" y="${y(0.9)}" font-size="11" fill="var(--dev)">Contender</text>`;
   s += `<text x="${(W + m.l) / 2}" y="${H - 4}" text-anchor="middle" font-size="11" fill="var(--ink-2)">time per goal</text><text transform="translate(12 ${H / 2}) rotate(-90)" text-anchor="middle" font-size="11" fill="var(--ink-2)">quality (fitness / record)</text>`;
