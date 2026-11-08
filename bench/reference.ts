@@ -44,14 +44,17 @@ export function referenceMaker(options: Partial<ReferenceOptions> = {}): Maker {
 export function reference(request: Request, options: ReferenceOptions = REFERENCE): Goal | null {
   const board = requestBoard(request);
   let best: { goal: Goal; fitness: number; tie: number } | null = null;
-  for (const red of candidates(request, board, options)) {
-    for (const levels of options.levels) for (const goal of reachable(board, red, levels, options)) {
-      const fitness = judge(request, goal, { board }).fitness;
-      const tie = hash(`${request.seed} ${goal.red} ${goal.target.x},${goal.target.y}`);
-      if (!best || fitness > best.fitness || (fitness === best.fitness && tie < best.tie)) best = { goal, fitness, tie };
-    }
+  for (const goal of referenceGoals(request, board, options)) {
+    const fitness = judge(request, goal, { board }).fitness;
+    const tie = hash(`${request.seed} ${goal.red} ${goal.target.x},${goal.target.y}`);
+    if (!best || fitness > best.fitness || (fitness === best.fitness && tie < best.tie)) best = { goal, fitness, tie };
   }
   return best?.goal ?? null;
+}
+
+/** Every goal the Reference weighs (steps 1 and 2), before the Judge picks one. */
+export function* referenceGoals(request: Request, board: Board, options: ReferenceOptions = REFERENCE): Generator<Goal> {
+  for (const red of candidates(request, board, options)) for (const levels of options.levels) yield* reachable(board, red, levels, options);
 }
 
 /** The sliding blocks (not the island's) within `radius` cells of the player, nearest first. */
