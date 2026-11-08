@@ -2,16 +2,28 @@
 
 ## Later
 
-- Special goals styled as a flame or a glint that unlock those souls (src/main.ts SOUL_UNLOCK: for now they unlock after 7 world goals); waits on deciding how special goals look and are placed.
-- Walls in generated boards (dead ends to plan around); waits on a difficulty measure to tune them against.
+In approximate priority order, highest first; the middle ones are not ordered among themselves.
+
+- Goal spec phase 1 (reports/goal-spec.html): the Bench and Records, the Referee and Judge (with decisions), and a new, simpler Reference written to the spec; makes goal making measurable; waits on nothing.
+- Tuner runs: subagents improve the goal maker against the Bench; waits on goal spec phase 1.
+- Fit the Judge's decision weight to play data (players' extra moves against fewest moves and decisions); waits on goal spec phase 1.
+- Island squares that teach tap-push and a half-way drag (a tap-push can't solve it; none turned up in a 5x5 search, a tap stops the red block on its target), and squares with several goals that are rated (the card scores only the last goal); subject a and b never learnt one or the other; waits on you playing the teaching squares.
+- Walls in generated boards (dead ends to plan around); waits on a difficulty measure to tune them against (the Judge).
 - Density × walls report graph; waits on walls in generated boards.
+- Taps that move a block when the player meant to pan (subject b): fast swipes as pans, or similar; the log now has the data; waits on you picking it.
+- Playing far zoomed out (subject a, play data: phones at scale 0.2-0.6): cap the zoom, disable moves far out, or show it; waits on you picking it.
+- Stars: many 1-star results (a zen mode, stars shown only after a while, or hidden at 1 star); waits on a brainstorm.
+- "Why is it green?": rethink a moved block's colour (or tint every block slightly differently); waits on you picking it.
 - Log each goal's proof and measured difficulty, and page hides; waits on you picking it.
 - Undo a reached goal: rewind to where its moves started counting and replay it for a better score; waits on you picking it.
 - Undo during a goal (or undoing the goal) loses the medal (shown faded) and is stored with the goal; waits on you picking it.
-- Hovering a reached goal highlights the blocks its solution needed, and differently those moved without need; waits on you picking it.
 - Progress is lost when moving between browsers (Telegram's in-app one, phone, computer: separate storage); intended fix: on entry redirect to a URL with a temporary user id whose progress lives on the server, so the same link in another browser continues it, carried until a later login; waits on the server (and login).
-- Island squares that teach a half-way drag (a tap-push can't solve it; none turned up in a 5x5 search, a tap stops the red block on its target), and squares with several goals that are rated (the card scores only the last goal); waits on you playing the teaching squares.
+- The multiplayer server, the home and offline islands (reports/one-engine.html); waits on the features settling.
 - Group picture puzzles in Telegram (your idea): a picture made of 2x1 blocks, scrambled by legal moves, solved together by a group, everyone seeing each other; waits on the multiplayer server and a Telegram mini app.
+- A block exactly on the goal rarer early on (subject b thought it impossible); mostly superseded by the teaching squares; waits on them.
+- Hovering a reached goal highlights the blocks its solution needed, and differently those moved without need; waits on you picking it.
+- Special goals styled as a flame or a glint that unlock those souls (src/main.ts SOUL_UNLOCK: for now they unlock after 7 world goals); waits on deciding how special goals look and are placed.
+- Daily board: the same seed for everyone, ranked by moves, a Wordle-style share; waits on you picking it.
 
 ## User testing
 
