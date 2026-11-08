@@ -63,7 +63,7 @@ A Goal is legal only if all of these hold:
 5. **It is bounded.** At most 100 moves.
 6. **It is deterministic.** The same Request gives the same Goal (the Bench asks twice).
 
-In play, a rejected Goal is retried once with the next seed, then the Reference is asked.
+In play the Referee is an assertion: a rejected Goal is a bug, so it is logged (with its Request, to replay) and the maker is asked again with the next seed. It should almost never happen; a simulator playing many sessions would catch these cases before players do.
 
 ## Judge: the soft wishes
 
@@ -84,7 +84,7 @@ balance    = difficulty / distance^0.6 × ½^track blocks
 fitness    = balance × ½^|fewest moves − aim| × 0.8^(reach beyond 4) × ½^clashes
 ```
 
-Every number is a weight in `wishes`; none is a rule. Today's hard rules (red within the 8×8 box round the last target, no shared track, no overlapping target) become the reach and clash factors, so a far better goal can still win. The weight of a decision (2 moves) is a first guess, to be fitted to play: the extra moves players need should rise with it.
+Every number is a weight in `wishes`; none is a rule. Today's hard rules (red within the 8×8 box round the last target, no shared track, no overlapping target) become the reach and clash factors, so a far better goal can still win. The weight of a decision (2 moves) is a placeholder: it is fitted to play data, so that the extra moves players need rise with it.
 
 ### Decisions
 
@@ -92,7 +92,7 @@ How a person works a goal out: try to move red towards the target; whatever is i
 
 1. **Stages.** Replay the solution. Before each of red's moves (at the start, and after each red move that leaves it short of the target), look at the cells between red and its target. Each block there has to be cleared.
 2. **Clearing a block** from some cells: it can go either way along its axis, by the least that frees the cells. A way is **out** if it runs into the edge or a wall, or into a block already in this chain (a cycle: red itself, or a block waiting on this one). Otherwise it is **plausible**, and the blocks it would sweep into must be cleared in turn, from the cells it sweeps.
-3. **A decision** is a block with two plausible ways. Both are explored, even if one turns out a dead end further on: a person has to try it to find out.
+3. **A decision** is a block with two plausible ways. Both are explored, and a way that dead-ends further on still counts: a person has to try it to find out.
 4. **decisions** is how many blocks are decisions, each counted once a stage however many branches meet it, summed over the stages. (Explored at most 6 blocks deep and 300 blocks in all.)
 
 `Rr..gg` (red, then the target) has none. A blocker that can only go one way adds none, however long the chain behind it. A blocker free both ways adds one.
@@ -139,5 +139,3 @@ The spec does not ask a maker for:
 ## To settle
 
 1. The aim: a factor in the fitness (above), or first in a lexicographic order (as now).
-2. A decision's weight, and whether a dead-end way should count less than one that works.
-3. When the Referee rejects a Goal in play.
