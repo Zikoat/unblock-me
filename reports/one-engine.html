@@ -74,7 +74,7 @@
 <ul class="note">
   <li>A player starts on a <b>home island</b> on the server, cut off from everyone.</li>
   <li>After some progress, and only while online, it is <b>stamped beside the shared world</b>: an area of any shape (the cells the player touched, plus a margin) that overrides generation there. Online only, so the server places islands so they never overlap.</li>
-  <li>Going offline in the world, the player <b>finishes the current goal</b>; its moves wait in an outbox. Then they carry on on an <b>offline island</b>, with its own seed, which is never merged.</li>
+  <li>Going offline in the world, the player <b>finishes the current goal</b>; its moves wait in an outbox. Then they carry on on the <b>offline island</b>: in fact a whole endless world with its own seed, called an island because it exists only on the player's device and never touches the online one.</li>
   <li>Back online, the server replays the outbox through the same engine: the goal's <b>rewards are kept</b>, and the world is <b>rolled back where the moves conflict</b> with what others did meanwhile. The next goal is in the shared world again.</li>
   <li>Offline play never writes into the shared world beyond one goal, so there is no general merge. (Block positions couldn't be merged freely anyway: a CRDT would give overlapping blocks.)</li>
 </ul>
@@ -129,7 +129,7 @@
 </ul>
 <h2>Open</h2>
 <ul>
-  <li><b>Online to offline and back.</b> The one place the player jumps (a long way, or a fade). To design.</li>
+  <li><b>Online to offline and back.</b> The one place the player jumps. The direction: while the last online goal is played (the player already offline), zooming out still shows the whole online world; when that goal is finished, the camera pans to the offline world, its blocks turning from online to offline blocks on the way; landed and zoomed out, the whole endless world is the offline one. Back online, the same the other way. The details are found by building it, not specified ahead.</li>
   <li><b>Stamping islands.</b> Where each home island goes beside the world. To design together, when it is built.</li>
 </ul>
 
@@ -232,7 +232,7 @@ diagram($("handover"), 900, 350, [
   { id: "stamp", t: "Stamped beside the world", sub: "online, after some progress\nany shape: touched cells + margin", x: 300, y: 30, w: 240, h: 60, k: "srv" },
   { id: "world", t: "Shared world", sub: "with other players", x: 600, y: 30, w: 270, h: 60, k: "srv" },
   { id: "finish", t: "Offline: finish the goal", sub: "its moves wait in the outbox", x: 600, y: 160, w: 270, h: 60, k: "web" },
-  { id: "isle", t: "Offline island", sub: "own seed, never merged", x: 300, y: 160, w: 240, h: 60, k: "web" },
+  { id: "isle", t: "Offline island", sub: "a whole world, on the device only", x: 300, y: 160, w: 240, h: 60, k: "web" },
   { id: "back", t: "Back online", sub: "outbox replayed: rewards kept,\nworld rolled back where it conflicts", x: 600, y: 270, w: 270, h: 64, k: "srv" },
 ], [["home", "stamp"], ["stamp", "world"], ["world", "finish", "goes offline", { dx: 6, anchor: "start" }], ["finish", "isle", "goal done"], ["finish", "back", "reconnects", { dx: 6, anchor: "start" }], ["isle", "back", "reconnects", { dy: 16 }]],
 `<path d="M870 302 H888 V60 H876" fill="none" stroke="var(--ink-2)" stroke-width="1.6" marker-end="url(#mhandover)"/><text x="884" y="182" text-anchor="end" font-size="11.5" fill="var(--ink-2)" transform="rotate(-90 884 182)">next goal</text>`);
