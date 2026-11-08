@@ -4,7 +4,8 @@ import { describe, expect, test } from "bun:test";
 import { gameRequest, type Goal, type Move } from "../../src/contract";
 import { referee } from "../../src/referee";
 import type { Placed } from "../../src/layout";
-import { audit } from "../../bench/auditor";
+import { AUDIT_REACH, audit } from "../../bench/auditor";
+import { LEVELS_OF_EFFORT } from "../../src/goal-search";
 import { gate, percentile, type Scores } from "../../bench/gate";
 import { keepRecord, type Records } from "../../bench/run";
 
@@ -32,7 +33,14 @@ describe("auditor", () => {
     expect(a).toEqual({ fewest: 2, exact: true, padding: 0 });
   });
 
-  test("a shorter way just past the game's window is found", () => {
+  test("it reaches at least as far as the game's furthest", () => {
+    for (const e of LEVELS_OF_EFFORT) {
+      expect(AUDIT_REACH.depth).toBeGreaterThanOrEqual(e.reach?.depth ?? 0);
+      expect(AUDIT_REACH.most).toBeGreaterThanOrEqual(e.reach?.most ?? 0);
+    }
+  });
+
+  test("a shorter way just past the game's old window is found", () => {
     // r has to get past v. Up, v needs u moved left (right is walled), and u needs t moved
     // left: 4 moves. Down, v needs z (rows 2 and 3) moved down by one, into row 4: 3 moves,
     // but row 4 is past the game's window (2 rows round red's run), which saw only the 4.

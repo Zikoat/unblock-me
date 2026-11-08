@@ -19,7 +19,7 @@
 // "good" slides and blocks: those after which the rest still takes the fewest moves.
 import { Board } from "../../src/board";
 import type { Point } from "../../src/camera";
-import { MARGIN, LEVELS, measure } from "../../src/difficulty";
+import { NEAR as MARGIN, LEVELS, measure } from "../../src/difficulty";
 import { randomLayout } from "../../src/layout";
 import type { Move } from "../../src/rules";
 import { Pool, runWindow, Window } from "../../src/window";

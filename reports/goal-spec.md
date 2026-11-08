@@ -100,7 +100,7 @@ How a person works a goal out: try to move red towards the target; whatever is i
 
 ## Auditor: keeping the Judge honest
 
-The Judge takes the move count on trust, so a maker could pad a solution to look harder. On the Bench, the Auditor searches each Goal for a shorter solution, with a large budget and a wider window than the game's (5 cells round red's run, not 2: a maker searching a narrow window can miss a shorter way just past it, and count a near goal as needing more moves than it does). The Bench scores each Goal with the audited count and reports **padding**: how often, and by how much, a maker's count was beaten. It never runs in play.
+The Judge takes the move count on trust, so a maker could pad a solution to look harder. On the Bench, the Auditor searches each Goal for a shorter solution, with a large budget, reaching at least as far as the game's (boxes 5 and 8 cells round red's run, and the blocks that matter: those in red's way, in theirs, and so on, the shortest counting; the game looks further with its effort, past its near window of 2 cells to the blocks that matter for every goal but the one the player waits for: a maker searching a narrow window can miss a shorter way just past it, and count a goal as needing more moves than it does, so a player beats the game's fewest with a bogus medal). The Bench scores each Goal with the audited count and reports **padding**: how often, and by how much, a maker's count was beaten. It never runs in play.
 
 ## Bench, Records and the Gate
 

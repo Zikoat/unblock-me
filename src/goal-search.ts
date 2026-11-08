@@ -14,7 +14,7 @@
 //   measure finds one, replaces the push's: it is the shortest within the window.
 import { Board } from "./board";
 import type { Point } from "./camera";
-import { measure, type Difficulty } from "./difficulty";
+import { measure, NEAR, type Difficulty, type Reach } from "./difficulty";
 import type { Goal, GoalOptions } from "./goal";
 import { candidatesNear, pushes, simplifyFast, type Tuning } from "./goal-fast";
 import { intersects, type Layout } from "./layout";
@@ -99,6 +99,11 @@ export type TournamentOptions = GoalOptions & {
    * finalists. */
   rough?: number;
   exact?: number;
+  /** How far the finalists' measure looks for the blocks that matter past the near window
+   * (src/difficulty.ts, Reach; null: not). The rough measure searches the near window only:
+   * it ranks the candidates, and ranks them alike either way (the measure's branching is the
+   * near window's), while the finalists' fewest is the one the player sees. */
+  reach?: Reach | null;
   /** How many candidates get the exact measure. */
   finalists?: number;
   /** Cells of each push that become candidates: every one, or only every `stride`th and
@@ -115,13 +120,17 @@ export type Ranked = Goal & { difficulty: Difficulty; distance: number; train?: 
 
 /** Tournament settings by effort level: 0 for a goal the player is waiting for (a few
  * hundred ms), 1 for one made ahead (about a second), 2 and 3 for more time (several
- * seconds): more candidates, and more boards to measure the finalists on. A pushed cell
- * costs the boards its rough measure may take, so the ticks bound the whole search. */
+ * seconds): more candidates, more boards to measure the finalists on, and further to look
+ * for the blocks that matter (the reach: a solution through blocks the measure leaves
+ * standing is missed, and its fewest overstated, so a player beating it wins a medal the
+ * game should not give; at effort 0 the overstated ones on the Bench were all the budget's,
+ * not the window's, and the reach cost a third more time, so it keeps the near window). A pushed cell costs the boards its rough measure may take, so the
+ * ticks bound the whole search. */
 export const LEVELS_OF_EFFORT: TournamentOptions[] = [
-  { rough: 300, exact: 5_000, finalists: 2, stride: 2, tuning: { prune: true, lookahead: true, goalBudget: 40_000, cellCost: 150, candidates: 6 } },
-  { rough: 300, exact: 20_000, finalists: 3, tuning: { prune: true, lookahead: true, goalBudget: 100_000, cellCost: 300, candidates: 6 } },
-  { rough: 1_000, exact: 50_000, finalists: 4, tuning: { prune: true, lookahead: true, goalBudget: 400_000, cellCost: 1_000, candidates: 12 } },
-  { rough: 3_000, exact: 100_000, finalists: 6, perCell: 8, tuning: { prune: true, lookahead: true, goalBudget: 1_000_000, cellCost: 3_000, candidates: 12 } },
+  { rough: 300, exact: 5_000, reach: null, finalists: 2, stride: 2, tuning: { prune: true, lookahead: true, goalBudget: 40_000, cellCost: 150, candidates: 6 } },
+  { rough: 300, exact: 20_000, reach: { depth: 6, most: 40 }, finalists: 3, tuning: { prune: true, lookahead: true, goalBudget: 100_000, cellCost: 300, candidates: 6 } },
+  { rough: 1_000, exact: 50_000, reach: { depth: 8, most: 60 }, finalists: 4, tuning: { prune: true, lookahead: true, goalBudget: 400_000, cellCost: 1_000, candidates: 12 } },
+  { rough: 3_000, exact: 100_000, reach: { depth: 12, most: 120 }, finalists: 6, perCell: 8, tuning: { prune: true, lookahead: true, goalBudget: 1_000_000, cellCost: 3_000, candidates: 12 } },
 ];
 
 /** A hard goal near `near` at an effort level (LEVELS_OF_EFFORT). */
@@ -155,7 +164,7 @@ export function onTrack(board: Board, id: string, target: Point): number {
 
 /** The push search's targets, ranked by the difficulty measure. */
 export function makeGoalTournament(layout: Layout, near: Point, options: TournamentOptions = {}): Ranked | null {
-  const { moved = new Map(), avoid = [], rough = 3_000, exact = 50_000, finalists = 4, stride = 1, tuning = { prune: true, lookahead: true, goalBudget: 50_000 }, target } = options;
+  const { moved = new Map(), avoid = [], rough = 3_000, exact = 50_000, reach = null, finalists = 4, stride = 1, tuning = { prune: true, lookahead: true, goalBudget: 50_000 }, target } = options;
   const board = new Board(layout, moved);
   const all = pushes(board, layout, near, { ...options, perCell: options.perCell ?? 6 }, tuning);
   // Every cell of every push is a candidate, measured roughly; each notes the blocks on its
@@ -169,7 +178,7 @@ export function makeGoalTournament(layout: Layout, near: Point, options: Tournam
       if (avoid.some((a) => intersects({ ...step.at, w: red.w, h: red.h }, a))) continue;
       const solution = simplifyFast(board, p.raw.slice(0, step.moves));
       const goal = { id: p.id, target: step.at, solution };
-      const d = measure(board, goal, { limit: rough });
+      const d = measure(board, goal, { limit: rough, margin: NEAR, reach: null });
       candidates.push({ ...goal, difficulty: d, distance: k + 1, train: onTrack(board, p.id, step.at) });
     }
   }
@@ -182,7 +191,7 @@ export function makeGoalTournament(layout: Layout, near: Point, options: Tournam
   candidates.sort(rank);
   const top = candidates.slice(0, finalists);
   for (const c of top) {
-    c.difficulty = measure(board, c, { limit: exact });
+    c.difficulty = measure(board, c, { limit: exact, reach });
     if (c.difficulty.solution && c.difficulty.solution.length < c.solution.length) c.solution = c.difficulty.solution;
   }
   top.sort(rank);
