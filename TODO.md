@@ -5,15 +5,11 @@
 - Special goals styled as a flame or a glint that unlock those souls (src/main.ts SOUL_UNLOCK: for now they unlock after 7 world goals); waits on deciding how special goals look and are placed.
 - Walls in generated boards (dead ends to plan around); waits on a difficulty measure to tune them against.
 - Density × walls report graph; waits on walls in generated boards.
-- Faster `Window.lower` (half the measure's time: array scans, allocations per call); waits on tournament levels 2-3 being too slow in play.
-- Difficulty's branching counts slides, not blocks (choices a move now counts chain blocks, but the score doesn't); waits on playtesting whether the score tracks felt hardness.
-- A* cap per density (a larger cap finds a shorter solution in under 5% of goals, the rest medal chances): the 30 Oct tuning agent stopped before its full run (scripts in test/experiments/cap-*.ts, uncommitted); matters for later, harder world goals (the ramp keeps early ones short); waits on late-game medals feeling wrong.
-- Log each goal's proof and measured difficulty, and page hides; widen the measure window (goal #37: 8 in the window, player did 6); waits on you picking it.
+- Log each goal's proof and measured difficulty, and page hides; waits on you picking it.
 - Undo a reached goal: rewind to where its moves started counting and replay it for a better score; waits on you picking it.
 - Undo during a goal (or undoing the goal) loses the medal (shown faded) and is stored with the goal; waits on you picking it.
 - Hovering a reached goal highlights the blocks its solution needed, and differently those moved without need; waits on you picking it.
 - Progress is lost when moving between browsers (Telegram's in-app one, phone, computer: separate storage); intended fix: on entry redirect to a URL with a temporary user id whose progress lives on the server, so the same link in another browser continues it, carried until a later login; waits on the server (and login).
-- A way to make goals hard without blocks on the red block's track (since the penalty, goals made ahead need about 11 fewest moves instead of 17, reports/blocks-on-track.html); waits on you picking it.
 - Island squares that teach a half-way drag (a tap-push can't solve it; none turned up in a 5x5 search, a tap stops the red block on its target), and squares with several goals that are rated (the card scores only the last goal); waits on you playing the teaching squares.
 - Group picture puzzles in Telegram (your idea): a picture made of 2x1 blocks, scrambled by legal moves, solved together by a group, everyone seeing each other; waits on the multiplayer server and a Telegram mini app.
 
