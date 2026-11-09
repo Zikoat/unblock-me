@@ -8,3 +8,4 @@ public.old/
 .publish.lock
 public.next.*
 bench/results/
+data/
