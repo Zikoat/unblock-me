@@ -1,5 +1,6 @@
 // The Referee (reports/goal-spec.md): is a Goal legal for its Request? Yes, or the hard rule
-// it breaks and why. Cheap: one replay, and one more per move for the tidy rule. Rule 6
+// it breaks and why. Cheap: one replay, and one more per move, and per pair of moves of one
+// block, for the tidy rule. Rule 6
 // (the same Request gives the same Goal) needs the maker asked twice, so the Bench checks
 // it, not this.
 import { isFixed, type Board } from "./board";
@@ -42,6 +43,14 @@ export function referee(request: Request, goal: Goal, board: Board = requestBoar
   }
   for (let i = 0; i < goal.moves.length; i++) {
     if (solves(board, goal, goal.moves.filter((_, k) => k !== i))) return fail(4, `it still solves without move ${i + 1}`);
+  }
+  // Nor two moves of one block (out of the way and back): padding that would count as extra
+  // moves (the Judge's). A shortest solution has none either.
+  for (let i = 0; i < goal.moves.length; i++) {
+    for (let j = i + 2; j < goal.moves.length; j++) {
+      if (goal.moves[j]!.block !== goal.moves[i]!.block) continue;
+      if (solves(board, goal, goal.moves.filter((_, k) => k !== i && k !== j))) return fail(4, `it still solves without moves ${i + 1} and ${j + 1} (both ${goal.moves[i]!.block})`);
+    }
   }
   return { ok: true };
 }

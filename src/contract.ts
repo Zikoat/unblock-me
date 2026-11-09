@@ -74,8 +74,12 @@ export type Wishes = {
   reachFree: number;
   /** The factor per clash. */
   clash: number;
+  /** The power of 1 + extra moves / fewest moves (judge.ts extraMoves): their share, not their
+   * count, so a longer goal is not better for having more. Absent in Requests made before it:
+   * then WISHES's. */
+  extra?: number;
 };
-export const WISHES: Wishes = { decision: 1, distance: 0.4, track: 0.5, aim: 0.5, reach: 0.8, reachFree: 4, clash: 0.5 };
+export const WISHES: Wishes = { decision: 1, distance: 0.4, track: 0.5, aim: 0.5, reach: 0.8, reachFree: 4, clash: 0.5, extra: 4 };
 
 const chunkOf = (x: number, y: number) => `${Math.floor(x / CHUNK)},${Math.floor(y / CHUNK)}`;
 

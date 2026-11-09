@@ -167,7 +167,9 @@ const exBoard = (pos) => ({ blocks, at: (x, y) => { if (!inRegion(x, y)) return 
 const exStages = [decisionTree(exBoard(states[0]), EX.red, EX.target)];
 EX.moves.forEach((m, i) => { if (m[0] === EX.red && m[2].join() !== EX.target.join()) exStages.push(decisionTree(exBoard(states[i + 1]), EX.red, EX.target)); });
 const decisions = exStages.reduce((n, t) => n + t.decisions, 0);
-const difficulty = M + decisions, balance = (difficulty / Math.pow(distance, 0.4)) * Math.pow(0.5, track.size);
+// Extra moves: the moves less the blocks moved (red counting).
+const extra = M - new Set(EX.moves.map((m) => m[0])).size;
+const difficulty = M + decisions, balance = (difficulty / Math.pow(distance, 0.4)) * Math.pow(0.5, track.size) * Math.pow(1 + extra / M, 4);
 const aimF = Math.pow(0.5, Math.abs(M - EX.aim)), reachF = Math.pow(0.8, Math.max(0, reach - 4)), clashF = 1;
 const fitness = balance * aimF * reachF * clashF;
 
@@ -179,7 +181,7 @@ $("request").innerHTML = [
   field("moved", "{ chunk → blocks }", "the player's moved blocks, indexed; none here"),
   field("history", `[…, { red: "${prev.id}", target: ${prev.x},${prev.y} }]`, "the last is where the player is"),
   field("ramp aim", EX.aim, "fewest moves wanted early on, or none"),
-  field("wishes", "{ decision: 1, distance: 0.4, track: ½, ramp aim: ½, reach: 0.8 beyond 4, clash: ½ }", "the Judge's weights"),
+  field("wishes", "{ decision: 1, distance: 0.4, track: ½, extra: 4, ramp aim: ½, reach: 0.8 beyond 4, clash: ½ }", "the Judge's weights"),
   field("seed", 1, "for random choices"),
 ].join("");
 $("goal").innerHTML = [
@@ -333,12 +335,13 @@ boardSvg($("exGoal"), {
 $("replay").innerHTML = states.map((_, i) => `<figure><svg id="st${i}"></svg><figcaption>${i === 0 ? "start" : `${i}. ${EX.moves[i - 1][0]} ${EX.moves[i - 1][1].join(",")} → ${EX.moves[i - 1][2].join(",")}`}</figcaption></figure>`).join("");
 states.forEach((pos, i) => boardSvg($(`st${i}`), { pos, view: crop, s: 22, redId: EX.red, hi: i ? EX.moves[i - 1][0] : null, target: EX.target }));
 const droppable = EX.moves.filter((_, i) => solves(EX.moves.filter((__, k) => k !== i))).length;
+const pairs = EX.moves.flatMap((m, i) => EX.moves.map((n, j) => j > i + 1 && n[0] === m[0] && solves(EX.moves.filter((__, k) => k !== i && k !== j)))).filter(Boolean).length;
 const merged = EX.moves.some((m, i) => i && EX.moves[i - 1][0] === m[0]);
 $("checks").innerHTML = [
   `1 · ${EX.red} is a sliding block at ${start.join(", ")}`,
   `2 · all ${M} moves are slides: block at <i>from</i>, on its axis, path empty`,
   `3 · after the last move ${EX.red} is on ${EX.target.join(", ")}`,
-  `4 · tidy: ${merged ? "✗" : "no block moves twice in a row"}; dropping any one move breaks it (${droppable} could be dropped)`,
+  `4 · tidy: ${merged ? "✗" : "no block moves twice in a row"}; dropping any one move, or two of one block, breaks it (${droppable + pairs} could be dropped)`,
   `5 · ${M} moves ≤ 100`,
   `6 · deterministic: the Bench asks twice`,
 ].map((t) => `<li>${t}</li>`).join("");
@@ -346,15 +349,16 @@ $("checks").innerHTML = [
 // ---- The Judge, named and filled in ----
 const mt = (t) => `<mtext>${t}</mtext>`, mn = (n) => `<mn>${n}</mn>`, mo = (o) => `<mo>${o}</mo>`;
 const pow = (b, e) => `<msup>${b}${e}</msup>`, half = `<mrow>${mo("(")}<mfrac>${mn(1)}${mn(2)}</mfrac>${mo(")")}</mrow>`;
-const bal = (m, k, d, t, tail = "") => `<mrow>${mt("balance")}${mo("=")}<mfrac><mrow>${m}${mo("+")}${k}</mrow>${pow(d, mn("0.4"))}</mfrac>${mo("×")}${pow(half, t)}${tail}</mrow>`;
+const bal = (m, k, d, t, e, f, tail = "") => `<mrow>${mt("balance")}${mo("=")}<mfrac><mrow>${m}${mo("+")}${k}</mrow>${pow(d, mn("0.4"))}</mfrac>${mo("×")}${pow(half, t)}${mo("×")}${pow(`<mrow>${mo("(")}${mn(1)}${mo("+")}<mfrac>${e}${f}</mfrac>${mo(")")}</mrow>`, mn(4))}${tail}</mrow>`;
 const fit = (b, aimOff, r, cl, tail = "") => `<mrow>${mt("fitness")}${mo("=")}${b}${mo("×")}${pow(half, aimOff)}${mo("×")}${pow(mn("0.8"), r)}${mo("×")}${pow(half, cl)}${tail}</mrow>`;
-$("named").innerHTML = `<mtable columnalign="left" rowspacing="0.9em"><mtr><mtd>${bal(mt("fewest moves"), mt("decisions"), mt("distance"), mt("track blocks"))}</mtd></mtr><mtr><mtd>${fit(mt("balance"), `<mrow>${mo("|")}${mt("fewest moves − ramp aim")}${mo("|")}</mrow>`, mt("reach beyond 4"), mt("clashes"))}</mtd></mtr></mtable>`;
-$("filled").innerHTML = `<mtable columnalign="left" rowspacing="0.9em"><mtr><mtd>${bal(mn(M), mn(decisions), mn(distance), mn(track.size), `${mo("=")}${mn(balance.toFixed(1))}`)}</mtd></mtr><mtr><mtd>${fit(mn(balance.toFixed(1)), mn(Math.abs(M - EX.aim)), mn(Math.max(0, reach - 4)), mn(0), `${mo("=")}<mn mathvariant="bold">${fitness.toFixed(1)}</mn>`)}</mtd></mtr></mtable>`;
+$("named").innerHTML = `<mtable columnalign="left" rowspacing="0.9em"><mtr><mtd>${bal(mt("fewest moves"), mt("decisions"), mt("distance"), mt("track blocks"), mt("extra moves"), mt("fewest moves"))}</mtd></mtr><mtr><mtd>${fit(mt("balance"), `<mrow>${mo("|")}${mt("fewest moves − ramp aim")}${mo("|")}</mrow>`, mt("reach beyond 4"), mt("clashes"))}</mtd></mtr></mtable>`;
+$("filled").innerHTML = `<mtable columnalign="left" rowspacing="0.9em"><mtr><mtd>${bal(mn(M), mn(decisions), mn(distance), mn(track.size), mn(extra), mn(M), `${mo("=")}${mn(balance.toFixed(1))}`)}</mtd></mtr><mtr><mtd>${fit(mn(balance.toFixed(1)), mn(Math.abs(M - EX.aim)), mn(Math.max(0, reach - 4)), mn(0), `${mo("=")}<mn mathvariant="bold">${fitness.toFixed(1)}</mn>`)}</mtd></mtr></mtable>`;
 $("terms").innerHTML = `<tr><th>Term</th><th>Here</th><th>How it is measured</th></tr>` + [
   ["fewest moves", M, "the Goal's moves (the Auditor checks none shorter exists)"],
   ["decisions", decisions, "blocks in the clearing chain that could plausibly go either way (below)"],
   ["distance", distance, "cells red travels"],
   ["track blocks", track.size, "blocks lying the same way in red's lane, start to target"],
+  ["extra moves", extra, "blocks that move again, red included: the moves less the blocks moved"],
   ["ramp aim", EX.aim, `fewest moves wanted for the 16th world goal; off by ${Math.abs(M - EX.aim)}`],
   ["reach", reach, "cells from the last red block to this one; free up to 4"],
   ["clashes", 0, "earlier targets overlapped, earlier tracks shared"],

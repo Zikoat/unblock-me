@@ -1,6 +1,6 @@
 # Goal spec (draft)
 
-Date: 2026-11-08
+Date: 2026-11-09
 
 What a goal is, how one is judged, and how goal makers compete, without saying how a goal is made. The drawn version, with examples, is [Goal spec, drawn](goal-spec-visual.html). A draft for discussion: nothing here is built yet, and where it differs from today's code (src/goal-search.ts) the spec wins.
 
@@ -37,7 +37,7 @@ Everything a maker may look at; nothing else (no clock, no global state).
 - **moved**: the blocks the player has moved, and where they are now, indexed by chunk (4×4 cells) so that finding who is on a cell stays fast however long the session. It can hold hundreds of blocks; passing it should not copy them (a shared, read-only index).
 - **history**: earlier goals, oldest first, each its red block and target. The last one's red block, standing on its target, is where the player is.
 - **ramp aim**: the fewest moves wanted while the first world goals ramp up (4, rising to 10 over the first 30), or none after.
-- **wishes**: the Judge's weights (below), so they can be tuned without changing makers.
+- **wishes**: the Judge's weights (below), so they can be tuned without changing makers. A weight added later (the extra moves') is the Judge's default in Requests made before it.
 - **seed**: for any choice a maker wants to make at random.
 
 A maker may look at any cell, near or far. It may use the Engine, or rebuild the World its own way (faster, or in another language), as long as it gives the same board.
@@ -59,7 +59,7 @@ A Goal is legal only if all of these hold:
 1. **Red is real.** A sliding block with that id exists.
 2. **Every move is a slide.** Its block is at `from`, `to` is on the block's own axis and not `from`, and every cell it sweeps through is empty when it moves.
 3. **It ends on the target.** After replaying every move, red is on `target`, and `target` is not where red started.
-4. **It is tidy.** No two moves in a row of one block (they are one slide), and no single move can be dropped with the rest still solving it. A cheap guard against padding; it does not prove the solution is the shortest.
+4. **It is tidy.** No two moves in a row of one block (they are one slide), and no single move, nor two moves of one block (out of the way and back), can be dropped with the rest still solving it. A cheap guard against padding, which would also add extra moves (the Judge's); it does not prove the solution is the shortest.
 5. **It is bounded.** At most 100 moves.
 6. **It is deterministic.** The same Request gives the same Goal (the Bench asks twice).
 
@@ -75,17 +75,20 @@ Measured from the Request and the Goal alone, never from how the maker found it:
 | **decisions** | the forks a person meets working out the solution (below) |
 | **distance** | cells red travels from start to target |
 | **track blocks** | blocks lying the same way in red's lane between start and target: pushed ahead of it, tedious rather than hard |
+| **extra moves** | Σ over the blocks the solution moves of (times moved − 1), red counting: the moves less the blocks moved |
 | **ramp aim** | how far the fewest moves are from the ramp aim: each move off halves the fitness, so a goal a little off but much better can still win |
 | **reach** | cells from the last red block (where the player is) to the new one |
 | **clashes** | earlier targets the target overlaps, and earlier red blocks whose track red shares |
 
 ```
 difficulty = fewest moves + decisions
-balance    = difficulty / distance^0.4 × ½^track blocks
+balance    = difficulty / distance^0.4 × ½^track blocks × (1 + extra moves / fewest moves)^4
 fitness    = balance × ½^|fewest moves − ramp aim| × 0.8^(reach beyond 4) × ½^clashes
 ```
 
 Every number is a weight in `wishes`; none is a rule. Today's hard rules (red within the 8×8 box round the last target, no shared track, no overlapping target) become the reach and clash factors, so a far better goal can still win. The weight of a decision (1 move) and the distance's power (0.4) come from test/experiments/decisions-variants.ts. In play (384 goals players reached, mostly from three players), the extra moves players needed follow nothing measured here, but their time does: with the fewest moves held, a decision costs about as much time as 0.7 of a move (90% interval 0.35 to 1.5), so 2 was too much. A near goal may win, but only by needing as many moves: with the distance to the power 0.6, goals with no ramp aim were won by 3-move goals one cell away; at 0.4 the winners need many moves, and the few near goals that need as many still win.
+
+**Extra moves** (reports/extra-moves.html): each is a block that has to move again after others moved, so the solution is not a chain to follow back from the target, one block at a time. In blind pairs at the same fewest moves the high side was preferred at 12 and 16 moves ("lost track of which blocks I had moved"), and the low one at 16 was an easy chain. They count as a share of the moves, not their number: extra moves come with long solutions, so a count would favour long goals for being long. At the power 4, 3 extra moves in 12 (×2.4) outweigh a move off the ramp aim (×½) but not two (×¼). They are counted on the Goal's moves, or on the Auditor's shorter solution when it finds one, and only when the Auditor proved its count the fewest (on the Bench; in play the Goal's moves are taken as they are); every shortest solution has nearly the same. A solution longer than the fewest can move blocks again that a shortest one would not: six goals whose proofs had 3 to 8 extra moves, searched to 1.5 million boards, each had a shortest solution 2 to 10 moves shorter with none (reports/extra-maker.html). So a maker should count only what it can vouch for: today's counts a proof's extra moves only where its measure proved it shortest, or as far as the fewest it is known to need allows (src/goal-search.ts extraOf).
 
 ### Decisions
 

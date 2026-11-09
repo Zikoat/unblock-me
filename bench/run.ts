@@ -60,7 +60,7 @@ export function runCase(name: string, maker: Maker, c: Case, auditLimit?: number
   const verdict = referee(c.request, goal);
   if (!verdict.ok) return { name, goal, verdict, same, ms };
   const a = audit(c.request, goal, auditLimit);
-  return { name, goal, verdict, same, ms, audit: a, terms: judge(c.request, goal, { fewest: a.fewest }) };
+  return { name, goal, verdict, same, ms, audit: a, terms: judge(c.request, goal, { fewest: a.fewest, shorter: a.shorter?.moves, proved: a.exact }) };
 }
 
 /** Update `records` with a result that beats its case's record (or sets the first); true if it did. */

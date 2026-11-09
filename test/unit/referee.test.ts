@@ -4,7 +4,7 @@ import { describe, expect, test } from "bun:test";
 import { Board } from "../../src/board";
 import type { Point } from "../../src/camera";
 import { gameRequest, movedIndex, movedMap, type Goal, type Move, type Request } from "../../src/contract";
-import { judge } from "../../src/judge";
+import { extraMoves, judge } from "../../src/judge";
 import { fixedLayout, type Placed } from "../../src/layout";
 import { referee } from "../../src/referee";
 import { current } from "../../bench/current";
@@ -27,6 +27,13 @@ const placed = [W(-1, 0), H("r", 0, 0), V("v", 3, 0), H("u", 3, -1), W(3, 3), W(
 const request = (rampAim?: number, done: { id: string; target: Point }[] = []): Request => gameRequest({ seed: 0, tries: 0, ui: {}, placed, moved: new Map(), done, rampAim });
 const goal = (moves: Move[], target: Point = { x: 4, y: 0 }, red = "r"): Goal => ({ red, target, moves });
 const SHORT = [mv("v", [3, 0], [3, 1]), mv("r", [0, 0], [4, 0])];
+// A second board: a blocks r and can only go up (a wall below it), where c could get in its way.
+//   y -2  . . . . c c
+//   y  0  r r . a . .
+//   y  1  . . . a . .
+//   y  2  . . . # . .
+const padRequest = gameRequest({ seed: 0, tries: 0, ui: {}, placed: [H("r", 0, 0), V("a", 3, 0), W(3, 2), H("c", 4, -2)], moved: new Map(), done: [] });
+const PAD: Goal = { red: "r", target: { x: 4, y: 0 }, moves: [mv("a", [3, 0], [3, -2]), mv("r", [0, 0], [4, 0])] };
 
 describe("referee", () => {
   test("a goal that keeps every rule", () => {
@@ -48,11 +55,14 @@ describe("referee", () => {
     ["the target is where red starts", goal([], { x: 0, y: 0 }), 3],
     ["two moves in a row of one block", goal([mv("v", [3, 0], [3, 1]), mv("r", [0, 0], [2, 0]), mv("r", [2, 0], [4, 0])]), 4],
     ["a move that can be dropped", goal([mv("v", [3, 0], [3, 1]), mv("u", [3, -1], [1, -1]), mv("r", [0, 0], [4, 0])]), 4],
+    // (On PAD's board: c goes left into a's way up and back, r stepping on between, which drops
+    // as a pair, not alone.)
+    ["two moves of one block that can be dropped together", { ...PAD, moves: [mv("c", [4, -2], [2, -2]), mv("r", [0, 0], [1, 0]), mv("c", [2, -2], [4, -2]), mv("a", [3, 0], [3, -2]), mv("r", [1, 0], [4, 0])] }, 4, /without moves 1 and 3 \(both c\)/],
     ["over 100 moves", goal(Array.from({ length: 101 }, (_, i) => (i % 2 ? mv("u", [1, -1], [3, -1]) : mv("u", [3, -1], [1, -1])))), 5],
   ];
   for (const [what, g, rule, why] of broken) {
     test(`rule ${rule}: ${what}`, () => {
-      const verdict = referee(request(), g);
+      const verdict = referee(g === PAD || g.moves[0]?.block === "c" ? padRequest : request(), g);
       expect(verdict.ok ? 0 : verdict.rule).toBe(rule);
       if (why && !verdict.ok) expect(verdict.why).toMatch(why);
     });
@@ -106,6 +116,23 @@ describe("judge", () => {
     expect(judge(request(), goal(SHORT))).toMatchObject({ reach: 0, clashes: 0, aimOff: 0 });
     // The Auditor's count replaces the Goal's.
     expect(judge(request(5), goal(SHORT), { fewest: 5 })).toMatchObject({ moves: 5, aimOff: 0, difficulty: 6 });
+  });
+
+  test("extra moves: Σ over the blocks moved of (times moved − 1), red counting, as a share of the moves", () => {
+    expect(extraMoves(["a", "b", "a", "r", "a", "r"])).toBe(3);
+    expect(extraMoves([])).toBe(0);
+    // u steps aside and back so v can go up and r through: u moves twice, 1 extra of 4 moves.
+    const g = goal([mv("u", [3, -1], [5, -1]), mv("v", [3, 0], [3, -2]), mv("u", [5, -1], [1, -1]), mv("r", [0, 0], [4, 0])]);
+    const t = judge(request(), g), plain = judge(request(), goal(SHORT));
+    expect(t.extra).toBe(1);
+    // The balance × (1 + 1/4)^4 = 2.4414 on top of what it would be without.
+    expect(t.balance / ((t.difficulty / Math.pow(t.distance, 0.4)) * Math.pow(0.5, t.track))).toBeCloseTo(Math.pow(1.25, 4), 6);
+    expect(plain.extra).toBe(0);
+    // The Auditor's shorter solution, when given, counts instead of the Goal's moves.
+    expect(judge(request(), g, { fewest: 2, shorter: SHORT }).extra).toBe(0);
+    // And none when the Auditor did not prove the fewest.
+    expect(judge(request(), g, { proved: false }).extra).toBe(0);
+    expect(judge(request(), g, { proved: true }).extra).toBe(1);
   });
 
   test("blocks on red's track count, those crossing it don't", () => {

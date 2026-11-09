@@ -18,7 +18,7 @@ for (const r of results) {
   const c = cases.find((c) => c.name === r.name)!;
   if (!r.goal || !r.verdict?.ok) continue;
   r.audit = audit(c.request, r.goal);
-  r.terms = judge(c.request, r.goal, { fewest: r.audit.fewest });
+  r.terms = judge(c.request, r.goal, { fewest: r.audit.fewest, shorter: r.audit.shorter?.moves, proved: r.audit.exact });
   if (keep) keepRecord(records, c, old.maker, r);
   const record = records[r.name];
   r.quality = record ? r.terms.fitness / record.fitness : 0;
