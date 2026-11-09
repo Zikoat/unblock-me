@@ -36,6 +36,8 @@ export type World = {
   seed: number;
   /** The layout's tries per chunk (layout.ts randomLayout). */
   density: number;
+  /** The share of cells that are walls (layout.ts randomLayout); none when absent. */
+  walls?: number;
   /** The UI blocks shown and the island: they change the layout. */
   ui: UiShown;
   version: number;
@@ -94,7 +96,7 @@ export function movedMap(moved: Moved): Map<string, Point> {
 
 /** The world's layout (blocks where they start). */
 export function worldLayout(world: World): Layout {
-  return world.placed ? fixedLayout(world.placed) : randomLayout(world.seed, { tries: world.density, ...world.ui });
+  return world.placed ? fixedLayout(world.placed) : randomLayout(world.seed, { tries: world.density, walls: world.walls ?? 0, ...world.ui });
 }
 
 /** The board a Request is about: the world with the player's moves. */

@@ -83,6 +83,9 @@ export const TRIES = 12;
 export const MIN_TRIES = 1;
 export const MAX_TRIES = 30;
 
+/** Mixed into the seed for the walls' own random stream. */
+const WALL_SALT = 0x5bd1e995;
+
 /** mulberry32. */
 function random(seed: number): () => number {
   let a = seed >>> 0;
@@ -103,8 +106,11 @@ function chunkSeed(seed: number, cx: number, cy: number): number {
   return h ^ (h >>> 16);
 }
 
-/** Blocks everywhere, the same for the same seed, with the UI blocks in the middle. */
-export function randomLayout(seed: number, { tries = TRIES, ...shown }: { tries?: number } & UiShown = {}): Layout {
+/** Blocks everywhere, the same for the same seed, with the UI blocks in the middle. `walls`:
+ * the share of cells that are walls (1x1, fixed), placed at random before the blocks from a
+ * stream of their own, so with none the blocks are exactly as before and with some they are
+ * the same draws minus those that would cover a wall. */
+export function randomLayout(seed: number, { tries = TRIES, walls = 0, ...shown }: { tries?: number; walls?: number } & UiShown = {}): Layout {
   // The UI blocks and the island are fixed; the random blocks keep out of their areas.
   const ui = [...uiBlocks(shown), ...(shown.island ? islandBlocks() : [])].map((p) => toBlock(p, p.id!));
   const area = uiArea(shown), island = shown.island ? ISLAND_KEEP_OUT : [];
@@ -117,6 +123,18 @@ export function randomLayout(seed: number, { tries = TRIES, ...shown }: { tries?
     const next = random(chunkSeed(seed, cx, cy));
     const taken = new Set<string>();
     const blocks: Block[] = [];
+    if (walls > 0) {
+      const wall = random(chunkSeed(seed ^ WALL_SALT, cx, cy));
+      for (let y = cy * CHUNK; y < (cy + 1) * CHUNK; y++) {
+        for (let x = cx * CHUNK; x < (cx + 1) * CHUNK; x++) {
+          if (wall() >= walls) continue;
+          const candidate = toBlock({ x, y, w: 1, h: 1, wall: true }, `${cx},${cy},w${x - cx * CHUNK + CHUNK * (y - cy * CHUNK)}`);
+          if ((area && intersects(candidate, area)) || island.some((r) => intersects(candidate, r))) continue;
+          taken.add(`${x},${y}`);
+          blocks.push(candidate);
+        }
+      }
+    }
     for (let i = 0; i < tries; i++) {
       const horizontal = next() < 0.5;
       const w = horizontal ? 2 : 1;

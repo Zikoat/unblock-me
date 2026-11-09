@@ -119,6 +119,28 @@ describe("random layout", () => {
       expect(occupied(b, hi + 1)).toBe(true);
     }
   });
+
+  test("walls: none leaves the blocks as they were; some are 1x1 fixed cells at about their share, never under a block or a UI block", () => {
+    for (const seed of [1, 7, 123456]) {
+      expect(ids(randomLayout(seed, { walls: 0 }))).toEqual(ids(randomLayout(seed)));
+      const blocks = randomLayout(seed, { walls: 0.1 }).blocksIn(AREA);
+      const walls = blocks.filter((b) => b.wall);
+      expect(walls.every((w) => w.w === 1 && w.h === 1)).toBe(true);
+      expect(walls.length / (AREA.width * AREA.height)).toBeGreaterThan(0.08);
+      expect(walls.length / (AREA.width * AREA.height)).toBeLessThan(0.12);
+      const taken = new Set<string>();
+      for (const b of blocks) for (const c of cells(b)) {
+        expect(taken.has(c)).toBe(false);
+        taken.add(c);
+      }
+      expect(walls.some((w) => w.x === 1 && w.y === 0)).toBe(false); // the fullscreen block's cell
+      // The blocks are the same draws, less those a wall took.
+      const plain = new Set(ids(randomLayout(seed)));
+      expect(blocks.filter((b) => !b.wall && !plain.has(`${b.id}@${b.x},${b.y},${b.w}x${b.h}`)).length).toBeLessThan(blocks.length / 10);
+      const layout = randomLayout(seed, { walls: 0.1 });
+      for (const w of walls.slice(0, 20)) expect(layout.byId(w.id)).toEqual(w);
+    }
+  });
 });
 
 describe("culling", () => {
