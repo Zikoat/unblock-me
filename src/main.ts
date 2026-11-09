@@ -166,7 +166,10 @@ type LogEvent =
   | { e: "density"; from: number; to: number; goal: string | null }
   | { e: "walls"; from: number; to: number; goal: string | null };
 const LOG_MAX = 3000;
+// A trial keeps its own log, from empty and never stored: uploaded by itself, labelled with
+// the trial (trialData), apart from the player's progress and play log.
 const playLog: (LogEvent & { t: number })[] = (() => {
+  if (trial) return [];
   try {
     return JSON.parse(localStorage.getItem(LOG_KEY) ?? "[]");
   } catch {
@@ -174,16 +177,28 @@ const playLog: (LogEvent & { t: number })[] = (() => {
   }
 })();
 function log(event: LogEvent): void {
-  if (shared) return;
+  if (shared && !trial) return;
   playLog.push({ t: Date.now(), ...event });
   if (playLog.length > LOG_MAX) playLog.splice(0, playLog.length - LOG_MAX);
-  if (++unsent >= UPLOAD_EVERY) void upload();
+  if (++unsent >= (trial ? TRIAL_UPLOAD_EVERY : UPLOAD_EVERY) || (trial && event.e === "reached")) void upload();
 }
 // The play data goes to the VM by itself every UPLOAD_EVERY events, and when the page is
 // hidden with events not yet sent. Each upload replaces this browser's last one.
 const UPLOAD_EVERY = 25;
+/** A trial's log is short: sent every few events, and when its goal is reached. */
+const TRIAL_UPLOAD_EVERY = 5;
 let unsent = 0;
+/** This page's trial play (a reload starts the trial over, and a new file). */
+const trialSession = crypto.randomUUID().slice(0, 8);
 const device = (() => {
+  // A trial names the browser's device if it has one, storing nothing.
+  if (trial) {
+    try {
+      return localStorage.getItem(DEVICE_KEY) ?? "none";
+    } catch {
+      return "none";
+    }
+  }
   if (shared) return "";
   try {
     const id = localStorage.getItem(DEVICE_KEY) ?? crypto.randomUUID();
@@ -195,10 +210,12 @@ const device = (() => {
 })();
 function upload(): Promise<boolean> {
   unsent = 0;
-  return sendPlayData(true);
+  return trial ? sendTrialData() : sendPlayData(true);
 }
+const trialUrl = () => `play-data?device=${device}&trial=${trial!.label}&session=${trialSession}`;
 addEventListener("pagehide", () => {
-  if (unsent && !shared && !forgetting) navigator.sendBeacon(`play-data?device=${device}`, new Blob([JSON.stringify(playData())], { type: "application/json" }));
+  if (trial && unsent) navigator.sendBeacon(trialUrl(), new Blob([JSON.stringify(trialData())], { type: "application/json" }));
+  else if (unsent && !shared && !forgetting) navigator.sendBeacon(`play-data?device=${device}`, new Blob([JSON.stringify(playData())], { type: "application/json" }));
 });
 /** How the move a gesture is recording was made (see Gestures' onInput); logged with it. */
 let input: Input | null = null;
@@ -216,6 +233,7 @@ function logMoves(): void {
 }
 
 function save(): void {
+  if (trial) return logMoves(); // a trial's moves go to its own log, nothing stored
   if (shared || forgetting) return;
   logMoves();
   try {
@@ -885,6 +903,7 @@ Object.assign(window, {
 if (shared) {
   try {
     restart(scene, fixedLayout(JSON.parse(shared)));
+    logged = 0; // (a trial logs its moves from here)
   } catch {
     // A broken link: show the normal board.
   }
@@ -1267,6 +1286,19 @@ function playData() {
     }
   }
   return { sentAt: new Date().toISOString(), build: builtAt, commit: __COMMIT__, device, userAgent: navigator.userAgent, screen: { width: innerWidth, height: innerHeight, dpr: devicePixelRatio }, stored };
+}
+/** A trial's play (play-data/trial-<label>-<device>-<session>.json on the VM): its label, the
+ * goal and every move, undo and reach with its time, and nothing of the player's progress. */
+function trialData() {
+  return { sentAt: new Date().toISOString(), build: builtAt, commit: __COMMIT__, device, trial: trial!.label, session: trialSession, userAgent: navigator.userAgent, screen: { width: innerWidth, height: innerHeight, dpr: devicePixelRatio }, log: playLog };
+}
+async function sendTrialData(): Promise<boolean> {
+  logMoves();
+  try {
+    return (await fetch(trialUrl(), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(trialData()) })).ok;
+  } catch {
+    return false;
+  }
 }
 /** Send it; `quiet` (automatic) replaces this device's last upload and shows nothing. */
 async function sendPlayData(quiet = false): Promise<boolean> {

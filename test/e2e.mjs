@@ -853,7 +853,7 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
 }
 
 // --- A trial board (?trial=, src/trials.ts): its board and goal, its label on screen, the goal
-// reached by its proof's moves, and nothing stored.
+// reached by its proof's moves, nothing stored, and its play sent labelled with the trial.
 {
   const page = await clocked(await browser.newPage({ viewport: { width: 1280, height: 800 } }));
   await page.goto(url);
@@ -878,6 +878,11 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
   check(await page.evaluate(() => unblock.scene.done.length === 1), "its proof's moves reach the goal");
   const keys = await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("unblock-me:")));
   check(keys.length === 0, `and nothing is stored on a trial (${keys.join() || "nothing"})`);
+  await pass(page, 200);
+  const sent = uploads.filter((u) => u.url.includes("trial=8A")).at(-1)?.body;
+  const events = sent?.log ?? [];
+  check(sent?.trial === "8A" && !sent.stored && events.filter((e) => e.e === "move").length === g.solution.length && events.some((e) => e.e === "reached") && events.every((e) => e.t > 0),
+    `its play is sent apart, labelled 8A, every move and the reach timed (${events.map((e) => e.e).join(" ")})`);
   await page.close();
 }
 

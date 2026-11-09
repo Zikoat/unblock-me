@@ -19,7 +19,7 @@ MAX_TOTAL = 200_000_000  # bytes kept
 class Handler(http.server.SimpleHTTPRequestHandler):
     def do_POST(self) -> None:
         # The game's play data: automatic uploads name their device and replace its last
-        # upload; the upload block's each get a new file.
+        # upload; the upload block's each get a new file; a trial's name the trial too.
         path, _, query = self.path.partition("?")
         if path != "/play-data":
             self.send_error(404)
@@ -35,8 +35,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_error(400)
             return
         PLAY_DATA.mkdir(exist_ok=True)
-        device = urllib.parse.parse_qs(query).get("device", [""])[0]
-        if device and re.fullmatch(r"[A-Za-z0-9-]{1,40}", device):
+        params = urllib.parse.parse_qs(query)
+        device = params.get("device", [""])[0]
+        trial = params.get("trial", [""])[0]
+        session = params.get("session", [""])[0]
+        ok = lambda v, n: re.fullmatch(r"[A-Za-z0-9-]{1,%d}" % n, v)
+        if trial and ok(trial, 12) and ok(device, 40) and ok(session, 16):
+            # A trial's play (?trial=), one file per page load, apart from the device's own.
+            name = f"trial-{trial}-{device}-{session}.json"
+        elif device and ok(device, 40):
             name = f"device-{device}.json"
         else:
             name = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H-%M-%S-%fZ") + ".json"
