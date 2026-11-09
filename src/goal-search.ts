@@ -14,6 +14,8 @@
 //   measure finds one, replaces the push's: it is the shortest within the window.
 import { Board } from "./board";
 import type { Point } from "./camera";
+import { contractGoal, WISHES } from "./contract";
+import { decisionStages } from "./decisions";
 import { measure, NEAR, type Difficulty, type Reach } from "./difficulty";
 import type { Goal, GoalOptions } from "./goal";
 import { candidatesNear, pushes, simplifyFast, type Tuning } from "./goal-fast";
@@ -106,6 +108,9 @@ export type TournamentOptions = GoalOptions & {
   reach?: Reach | null;
   /** How many candidates get the exact measure. */
   finalists?: number;
+  /** Pick among the finalists by the Judge's fitness (moves plus decisions, the aim and the
+   * reach as it weighs them) instead of the rank that chose them. */
+  judged?: boolean;
   /** Cells of each push that become candidates: every one, or only every `stride`th and
    * the last. */
   stride?: number;
@@ -125,9 +130,11 @@ export type Ranked = Goal & { difficulty: Difficulty; distance: number; train?: 
  * standing is missed, and its fewest overstated, so a player beating it wins a medal the
  * game should not give; at effort 0 the overstated ones on the Bench were all the budget's,
  * not the window's, and the reach cost a third more time, so it keeps the near window). A pushed cell costs the boards its rough measure may take, so the
- * ticks bound the whole search. */
+ * ticks bound the whole search. Effort 0 tries 12 red blocks on the same ticks, and picks
+ * among 3 finalists as the Judge would (the Tuner's run: quick-set quality median 0.80 to 1.0,
+ * worst 5% 0.26 to 0.39, no slower; at effort 2 judging the finalists lowered the worst 5%). */
 export const LEVELS_OF_EFFORT: TournamentOptions[] = [
-  { rough: 300, exact: 5_000, reach: null, finalists: 2, stride: 2, tuning: { prune: true, lookahead: true, goalBudget: 40_000, cellCost: 150, candidates: 6 } },
+  { rough: 300, exact: 5_000, reach: null, finalists: 3, judged: true, stride: 2, tuning: { prune: true, lookahead: true, goalBudget: 40_000, cellCost: 150, candidates: 12 } },
   { rough: 300, exact: 20_000, reach: { depth: 6, most: 40 }, finalists: 3, tuning: { prune: true, lookahead: true, goalBudget: 100_000, cellCost: 300, candidates: 6 } },
   { rough: 1_000, exact: 50_000, reach: { depth: 8, most: 60 }, finalists: 4, tuning: { prune: true, lookahead: true, goalBudget: 400_000, cellCost: 1_000, candidates: 12 } },
   { rough: 3_000, exact: 100_000, reach: { depth: 12, most: 120 }, finalists: 6, perCell: 8, tuning: { prune: true, lookahead: true, goalBudget: 1_000_000, cellCost: 3_000, candidates: 12 } },
@@ -164,7 +171,7 @@ export function onTrack(board: Board, id: string, target: Point): number {
 
 /** The push search's targets, ranked by the difficulty measure. */
 export function makeGoalTournament(layout: Layout, near: Point, options: TournamentOptions = {}): Ranked | null {
-  const { moved = new Map(), avoid = [], rough = 3_000, exact = 50_000, reach = null, finalists = 4, stride = 1, tuning = { prune: true, lookahead: true, goalBudget: 50_000 }, target } = options;
+  const { moved = new Map(), avoid = [], rough = 3_000, exact = 50_000, reach = null, finalists = 4, judged = false, stride = 1, tuning = { prune: true, lookahead: true, goalBudget: 50_000 }, target } = options;
   const board = new Board(layout, moved);
   const all = pushes(board, layout, near, { ...options, perCell: options.perCell ?? 6 }, tuning);
   // Every cell of every push is a candidate, measured roughly; each notes the blocks on its
@@ -194,7 +201,20 @@ export function makeGoalTournament(layout: Layout, near: Point, options: Tournam
     c.difficulty = measure(board, c, { limit: exact, reach });
     if (c.difficulty.solution && c.difficulty.solution.length < c.solution.length) c.solution = c.difficulty.solution;
   }
-  top.sort(rank);
+  if (judged) {
+    // The finalists as the Judge weighs them (contract.ts WISHES): moves plus decisions, the
+    // aim's halving per move off rather than first, and the reach from `near`.
+    const w = WISHES, fit = new Map<Ranked, number>();
+    for (const c of top) {
+      const moves = c.difficulty.moves ?? c.solution.length;
+      const decisions = decisionStages(board, contractGoal(c)).reduce((a, b) => a + b, 0);
+      const off = target === undefined ? 0 : Math.abs(moves - target);
+      const red = board.block(c.id);
+      const reach = Math.max(0, red.x - near.x, near.x - (red.x + red.w - 1)) + Math.max(0, red.y - near.y, near.y - (red.y + red.h - 1));
+      fit.set(c, ((moves + w.decision * decisions) / Math.pow(c.distance, w.distance)) * Math.pow(w.track, c.train ?? 0) * Math.pow(w.aim, off) * Math.pow(w.reach, Math.max(0, reach - w.reachFree)));
+    }
+    top.sort((a, b) => fit.get(b)! - fit.get(a)! || rank(a, b));
+  } else top.sort(rank);
   const best = top[0] ?? null;
   if (best && !board.replays(best.solution)) throw new Error("goal search: solution does not replay");
   return best;
