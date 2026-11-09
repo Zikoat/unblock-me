@@ -3,7 +3,8 @@ import { describe, expect, test } from "bun:test";
 import { pinch, toScreen, toWorld, zoomAt } from "../../src/camera";
 import { Gestures } from "../../src/gestures";
 import { borderOnScreen, latticeRect, limits, newScene, visibleBlocks } from "../../src/scene";
-import { CHUNK, randomLayout, UNIT, type Block, type Layout } from "../../src/layout";
+import { ISLAND_KEEP_OUT } from "../../src/island";
+import { CHUNK, intersects, randomLayout, UNIT, type Block, type Layout } from "../../src/layout";
 import { blocksIn, slideRange } from "../../src/rules";
 
 const none = { moved: new Map() };
@@ -139,6 +140,14 @@ describe("random layout", () => {
       expect(blocks.filter((b) => !b.wall && !plain.has(`${b.id}@${b.x},${b.y},${b.w}x${b.h}`)).length).toBeLessThan(blocks.length / 10);
       const layout = randomLayout(seed, { walls: 0.1 });
       for (const w of walls.slice(0, 20)) expect(layout.byId(w.id)).toEqual(w);
+    }
+  });
+
+  test("walls keep a cell clear of the island all round, diagonals included", () => {
+    for (const seed of [1, 7, 123456]) {
+      const walls = randomLayout(seed, { walls: 0.2, island: true }).blocksIn({ x: -20, y: -30, width: 140, height: 60 }).filter((b) => b.wall && /,w\d+$/.test(b.id));
+      expect(walls.length).toBeGreaterThan(100);
+      for (const w of walls) expect(ISLAND_KEEP_OUT.some((r) => intersects({ x: w.x - 1, y: w.y - 1, w: 3, h: 3 }, r))).toBe(false);
     }
   });
 });

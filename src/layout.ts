@@ -116,7 +116,8 @@ function chunkSeed(seed: number, cx: number, cy: number): number {
 /** Blocks everywhere, the same for the same seed, with the UI blocks in the middle. `walls`:
  * the share of cells that are walls (1x1, fixed), placed at random before the blocks from a
  * stream of their own, so with none the blocks are exactly as before and with some they are
- * the same draws minus those that would cover a wall. */
+ * the same draws minus those that would cover a wall. None touch the island, even at a corner
+ * (its walls would join them into an odd shape). */
 export function randomLayout(seed: number, { tries = TRIES, walls = 0, ...shown }: { tries?: number; walls?: number } & UiShown = {}): Layout {
   // The UI blocks and the island are fixed; the random blocks keep out of their areas.
   const ui = [...uiBlocks(shown), ...(shown.island ? islandBlocks() : [])].map((p) => toBlock(p, p.id!));
@@ -136,7 +137,9 @@ export function randomLayout(seed: number, { tries = TRIES, walls = 0, ...shown 
         for (let x = cx * CHUNK; x < (cx + 1) * CHUNK; x++) {
           if (wall() >= walls) continue;
           const candidate = toBlock({ x, y, w: 1, h: 1, wall: true }, `${cx},${cy},w${x - cx * CHUNK + CHUNK * (y - cy * CHUNK)}`);
-          if ((area && intersects(candidate, area)) || island.some((r) => intersects(candidate, r))) continue;
+          // A cell clear of the island all round (diagonals too), so no wall joins its walls.
+          const round = { x: x - 1, y: y - 1, w: 3, h: 3 };
+          if ((area && intersects(candidate, area)) || island.some((r) => intersects(round, r))) continue;
           taken.add(`${x},${y}`);
           blocks.push(candidate);
         }

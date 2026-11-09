@@ -167,7 +167,7 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
   const seedBefore = await page.evaluate(() => unblock.seed());
   const blocksBefore = await blockIds(page);
   const movable = await page.evaluate(() => unblock.visibleBlocks().find((b) => {
-    if (b.ui) return false;
+    if (b.ui || b.wall) return false;
     const { lo, hi } = unblock.slideRange(b.id), pos = b.w > b.h ? b.x : b.y;
     const x = 170 + (b.x + b.w / 2) * 60, y = 370 + (b.y + b.h / 2) * 60;
     return hi > pos && x > 20 && x < 380 && y > 100 && y < 700;
