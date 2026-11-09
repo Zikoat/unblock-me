@@ -7,7 +7,7 @@ In approximate priority order, highest first; the middle ones are not ordered am
 - In play, a goal the Referee rejects is asked for again once at another effort level (rejected again, none found); the spec asks the maker again with the next seed; waits on a maker that takes a seed.
 - The Gate's time is measured on the VM, the spec's is on a mid phone; waits on timing the maker on a phone.
 - The Reference is shallow (breadth first, about 5 moves at most), so it loses wherever a longer goal wins (ramp aims over 6, none); a deeper plain search; waits on the Tuner runs showing whether the records need it.
-- Tuner runs: subagents improve the goal maker against the Bench; waits on goal spec phase 1.
+- Tuner runs: effort 0 is at quality worst 5% 0.3 to 0.4 (Gate 0.8; it misses goals only effort 2's wider search finds: aim off by one, track blocks, far reach), and effort 1 and 2 are untuned; waits on walls in the boards, which will change the tuning.
 - Medals on long goals: the measure stops at its board budget and the proof's length stands as the fewest, so a player who finds a shorter way wins a medal the game should not give (most medals in play, test/experiments/medals.ts); a deeper search, or shorter proofs; waits on you picking it.
 - Island squares that teach tap-push and a half-way drag (a tap-push can't solve it; none turned up in a 5x5 search, a tap stops the red block on its target), and squares with several goals that are rated (the card scores only the last goal); subject a and b never learnt one or the other; waits on you playing the teaching squares.
 - Walls in generated boards (dead ends to plan around); waits on a difficulty measure to tune them against (the Judge).
