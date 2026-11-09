@@ -4,255 +4,408 @@
 <meta name="date" content="2026-11-09">
 <style>
   :root { color-scheme: light dark; --bg: #f9f9f7; --card: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --line: #e1e0d9; --empty: #f0efec;
-    --s1: #86b6ef; --s2: #5598e7; --s3: #2a78d6; --s4: #1c5cab; --s5: #104281; --s6: #0d366b; }
+    --lo: #e3eefc; --hi: #0d366b; --hi-ink: #ffffff; --neg: #e34948; --mid: #f0efec;
+    --c1: #2a78d6; --c2: #eb6834; --c3: #1baf7a; --c4: #eda100; --c5: #e87ba4; --c6: #008300; --c7: #6250d6; --c8: #e34948; --c0: #a3a29b;
+    --o1: #86b6ef; --o2: #6da7ec; --o3: #5598e7; --o4: #3987e5; --o5: #2a78d6; --o6: #1c5cab; --o7: #104281; --o8: #0d366b; }
   @media (prefers-color-scheme: dark) { :root { --bg: #0d0d0d; --card: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --line: #2c2c2a; --empty: #383835;
-    --s1: #184f95; --s2: #1c5cab; --s3: #2a78d6; --s4: #3987e5; --s5: #6da7ec; --s6: #9ec5f4; } }
+    --lo: #1e2836; --hi: #9ec5f4; --hi-ink: #0b0b0b; --neg: #e66767; --mid: #383835;
+    --c1: #3987e5; --c2: #d95926; --c3: #199e70; --c4: #c98500; --c5: #d55181; --c6: #008300; --c7: #9085e9; --c8: #e66767; --c0: #6b6a64;
+    --o1: #184f95; --o2: #1c5cab; --o3: #256abf; --o4: #2a78d6; --o5: #3987e5; --o6: #5598e7; --o7: #86b6ef; --o8: #b7d3f6; } }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 system-ui, sans-serif; }
-  main { max-width: 960px; margin: 0 auto; padding: 24px 16px 56px; }
+  main { max-width: 1000px; margin: 0 auto; padding: 24px 16px 56px; }
   .back { color: var(--ink-2); text-decoration: none; font-size: 14px; }
-  h1 { font-size: 24px; margin: 10px 0 4px; } h2 { font-size: 18px; margin: 28px 0 8px; } h3 { font-size: 15px; margin: 0 0 4px; }
-  .sub { color: var(--ink-2); margin: 0 0 12px; max-width: 76ch; }
+  h1 { font-size: 24px; margin: 10px 0 4px; } h2 { font-size: 19px; margin: 34px 0 8px; } h3 { font-size: 15px; margin: 18px 0 2px; }
+  .sub { color: var(--ink-2); margin: 0 0 10px; max-width: 80ch; }
   .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
   .tile { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
   .tile .big { font-size: 28px; font-weight: 650; font-variant-numeric: tabular-nums; }
   .tile .what { font-size: 13px; color: var(--ink-2); }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; overflow-x: auto; }
-  .legend { display: flex; flex-wrap: wrap; gap: 16px; font-size: 13px; color: var(--ink-2); margin-bottom: 6px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; overflow-x: auto; margin-bottom: 10px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--ink-2); margin: 2px 0 6px; }
   .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
-  .filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; font-size: 13px; color: var(--ink-2); align-items: center; }
+  .filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; font-size: 13px; color: var(--ink-2); align-items: center; }
   .filters button { font: inherit; border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 8px; padding: 2px 10px; cursor: pointer; }
   .filters button.on { border-color: var(--ink-2); font-weight: 600; }
-  .maps { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 10px; }
+  .maps { display: grid; grid-template-columns: repeat(auto-fill, minmax(440px, 1fr)); gap: 10px; }
+  .maps .card { margin: 0; }
+  .what { font-size: 13px; color: var(--ink-2); margin: 0 0 4px; }
   svg { display: block; width: 100%; height: auto; }
   svg text { fill: var(--ink-2); font-size: 11px; }
-  svg text.v { font-size: 12px; font-variant-numeric: tabular-nums; }
+  svg text.t { fill: var(--ink); font-size: 12px; font-weight: 600; }
+  svg text.v { font-size: 11px; font-variant-numeric: tabular-nums; }
   table { border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
   th, td { padding: 4px 9px; border-bottom: 1px solid var(--line); text-align: right; }
   th { color: var(--ink-2); font-weight: 600; }
   details { margin-top: 10px; } summary { cursor: pointer; color: var(--ink-2); }
-  ul { padding-left: 20px; } li { max-width: 76ch; margin: 4px 0; }
-  #tip { position: fixed; pointer-events: none; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; font-size: 13px; display: none; max-width: 280px; box-shadow: 0 2px 8px #0002; }
+  ul { padding-left: 20px; } li { max-width: 80ch; margin: 4px 0; }
+  #tip { position: fixed; pointer-events: none; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; font-size: 13px; display: none; max-width: 300px; box-shadow: 0 2px 8px #0002; z-index: 2; }
 </style></head><body><main>
 <a class="back" href="./">← All reports</a>
 <h1>Walls and repeated moves</h1>
-<p class="sub">Does a good goal need blocks moved more than once, and do walls (fixed cells) in the generated world make that more common? Fresh boards swept over the share of cells that are walls × the block density (the layout's tries per 4×4 chunk; the game's is 12), today's maker asked for a goal round the origin as for the world's first, at effort <span id="effort"></span>, no ramp aim. Every number comes from the maker's own proof: no other search for a shorter one. <span id="count"></span></p>
+<p class="sub">Does a good goal need blocks moved more than once, and do walls (fixed 1×1 cells) in the generated world make that more common? Fresh boards are swept over two things: the <b>wall share</b> (the share of cells that are walls) and the <b>block density</b> (the layout's tries per 4×4 chunk; the game uses 12). Today's maker is asked for a goal round the origin, as for the world's first, at effort <span id="effort"></span>, with no ramp aim. Every number comes from the maker's own proof: no other search for a shorter one. <span id="count"></span></p>
 <div class="tiles" id="tiles"></div>
 
 <h2>What it shows</h2>
-<ul id="shows">
-<li>The gut feeling holds for long goals and not for walls. Blocks moved twice or more come with long proofs: in about 90% of proofs over 15 moves, a third of those of 11-15, under 10% of shorter ones, whatever the walls. Block density is what makes proofs long: at no walls the share with a re-moved block goes from 4% (density 6) to 64% (16).</li>
-<li>Random walls make re-moved blocks rarer, not more common: from 35% of goals with none to 10% at 15% walls (all densities), a directed blocker cycle from 10% to 4%. The goals the maker finds get shorter as walls go up (12.6 moves at the mean with none, 6.7 at 15%), with fewer decisions and a shorter run for red. Its push search stops at a wall, so it finds shallower goals, and walls take cells from blocks (at 15% walls a density-16 board has the block fill of density 8 without).</li>
-<li>At the same proof length walls do not lower the share; if anything they raise it a little (proofs of 7-10 moves: 4% with none, 7-9% from 6% walls; at effort 2, proofs of 11-15: 6% to 17-23%, few goals). So a wall makes a goal of a given length more order-bound, but today's maker trades that for shorter goals.</li>
-<li>Effort 2 (more candidates, wider measures; 60 boards a cell at 4 wall shares × densities 8, 12, 16) shows the same trend with walls, so it is not effort 0's narrow search alone.</li>
-<li>Every board gave a legal goal, at every wall share and density.</li>
-<li>Up to about 4% walls little changes at the game's density (moves, re-moved blocks, found rate as without): the game's walls slider starts there.</li>
-<li>Smarter wall placement (walls that make dead ends red has to plan round, rather than walls anywhere) and a maker that looks for long goals on walled boards are what could make walls raise it; the Judge does not value re-moved blocks today.</li>
+<ul>
+<li>The gut feeling holds for long goals, not for walls. Blocks moved twice or more come with long proofs: about 90% of proofs over 15 moves have one, about a third of those of 11-15, under 10% of shorter ones, whatever the walls. Block density is what makes proofs long: with no walls the share of goals with a re-moved block goes from 4% at density 6 to 64% at 16.</li>
+<li>Random walls make re-moved blocks rarer: from 35% of goals with no walls to 10% at 15% walls (all densities), and goals with a directed blocker cycle from 10% to 4%. The goals get shorter (12.6 moves at the mean to 6.7), with fewer decisions and a shorter run for red.</li>
+<li>Not because of the selection. Among all the candidates the maker weighs, 11% have a re-moved block with no walls; among its 3 finalists 28%; among the goals it picks 43%. The same rise holds at every wall share (15% walls: 4%, 8%, 12%). At the same proof length, candidates with a re-moved block reach the finals up to 5 times as often as the rest (about as often for long candidates at 8-15% walls), the Judge's fitness for them is 1.2 to 2 times higher (one exception: 16+ moves at 15% walls, with only 5 candidates on the other side), and their decision count is about the same (−0.8 to +0.7). The rank and the Judge favour them or are even; neither the decision count's stopping rule nor any other term holds them back.</li>
+<li>It is the pool. Walls shrink what the push search can find, since a push stops at a wall: 131 candidates a board with no walls, 41 at 15%; the mean candidate goes from 7.4 to 4.1 moves, each board's longest from 21 to 12, and candidates of 11 or more moves from 23% to 5%. The pick still takes the long ones (62% of chosen goals have 11+ moves with no walls, 11% at 15%), but there are fewer to take.</li>
+<li>At the same proof length walls do not lower the share; if anything they raise it a little (proofs of 7-10 moves: 4% with none, 7-9% from 6% walls; candidates of 11-15 moves: 31% with none, 48% at 15%). So a wall makes a goal of a given length more order-bound, but walls placed at random cut the long goals out of reach.</li>
+<li>Effort 2 (more candidates, wider measures; 60 boards a cell at 4 wall shares × densities 8, 12, 16) shows the same trend, so it is not effort 0's narrow search alone.</li>
+<li>Every board gave a legal goal, at every wall share and density. Up to about 4% walls little changes at the game's density, so the game's walls slider starts there.</li>
+<li>Time: the maker is 99% of it, and the measure's lower bound (window.ts) is 61-66% of the maker, the rest of A* 16-18%; by step, the rough measure of every candidate takes about two thirds. Walls make all of it cheaper (212 ms a board with none, 32 at 15%).</li>
 </ul>
 
 <h2>How many times each block is moved</h2>
-<p class="sub">Every block a proof moves, by how many times it moves in it (one move: one slide, however far; the red block included), as a share of the blocks moved, per wall share. Pick a block density, or all pooled.</p>
+<p class="sub">One histogram per sweep cell: rows are the wall share, columns the block density. In each, a bar per number of times a block moves in the proof (one move is one slide, however far; the red block included), as a share of all the blocks the cell's proofs move. The number in each panel's corner is the share of goals with a block moved 2 or more times. Every panel uses the same y scale.</p>
 <div class="card">
-  <div class="filters" id="histFilter">Block density:</div>
-  <div class="legend" id="histLegend"></div>
-  <svg id="hist" role="img" aria-label="Share of moved blocks by times moved, per wall share"></svg>
+  <div class="filters" id="histFilter">Bar for blocks moved once: <button data-one="0" class="on">Hidden (it is 93-97% everywhere)</button><button data-one="1">Shown</button></div>
+  <svg id="hist" role="img" aria-label="Histograms of times each block is moved, by wall share and block density"></svg>
 </div>
-<h3 style="margin-top:14px">Goals with a block moved twice or more</h3>
-<p class="sub">Share of goals where at least one block (red included) moves 2 or more times, by wall share, a line per block density.</p>
-<div class="card"><div class="legend" id="lineLegend"></div><svg id="repeatLine" role="img" aria-label="Share of goals with a repeated block by wall share"></svg></div>
 
-<h3 style="margin-top:14px">At the same proof length</h3>
-<p class="sub">Goals with a block moved 2+ times, by the proof's length (rows) and the wall share (columns), all densities pooled: whether walls change how often blocks are re-moved, or only how long the goals are.</p>
+<h3>Goals with a block moved twice or more</h3>
+<p class="what">x: the wall share (% of cells that are walls). y: the share of goals whose proof moves at least one block 2 or more times. A line per block density.</p>
+<div class="card"><div class="legend" id="repeatLegend"></div><svg id="repeatLine" role="img" aria-label="Share of goals with a re-moved block by wall share, a line per block density"></svg></div>
+
+<h3>At the same proof length</h3>
+<p class="what">Each cell: the share of goals with a block moved 2+ times, among proofs of that many moves (row) at that wall share (column), all densities pooled; the count of goals is under it. Walls barely change it at a given length.</p>
 <div class="card" id="byLength"></div>
 
 <h2>Over the sweep</h2>
-<p class="sub">Each map: wall share down, block density across (with the cells' actual fill under the labels: blocks, walls, round the origin). Darker is more; the number is the cell's value. Hover a cell for its counts.</p>
+<p class="sub">Each map: wall share down (% of cells), block density across (tries per 4×4 chunk, with the block fill round the origin under it). The number in a cell is its value; the colour follows the scale under each map (darker is more). Hover a cell for its counts.</p>
 <div class="maps" id="maps"></div>
+
+<h2>A harder-working maker</h2>
+<p class="sub">The same boards at effort 2 (more candidates, wider measures) next to effort 0, on block densities <span id="sharedD"></span> pooled: whether the trend is the maker's narrow search or the boards'.</p>
+<div class="maps" id="effortCharts"></div>
+
+<h2>Candidates or selection?</h2>
+<p class="sub">Do re-moved blocks get rarer with walls because the maker's selection (its rank, then the Judge's fitness among its finalists) passes them over, or because walls leave fewer of them among the goals it can find at all? Every candidate the maker weighs was recorded with its proof and the Judge's terms (walls-candidates.ts: <span id="candN"></span> boards at block density <span id="candD"></span>). The maker measures every candidate roughly, ranks them, measures the best 3 (its finalists) exactly, and picks one by the Judge's fitness.</p>
+<div id="candidates"></div>
+
+<h2>Where the time goes</h2>
+<p class="sub">First the whole sweep, per board: the maker against everything else the experiment runs. Then inside the maker, from a CPU profile of the candidate runs (each sample counted for the deepest function on its stack that names a part; the experiment's own Judge calls on every candidate are kept apart).</p>
+<div id="time"></div>
 
 <h2>The derived numbers</h2>
 <ul>
-  <li><b>Repeated block</b>: a block moves 2 or more times in the proof. Exact for the proof; another shortest solution might move blocks fewer times (not searched).</li>
+  <li><b>Re-moved block</b>: a block moves 2 or more times in the proof. Exact for the proof; another shortest solution might move blocks fewer times (not searched).</li>
   <li><b>Back-and-forth</b>: the proof returns to a block it already left (with back-to-back slides of one block merged, every repeat is a return); <i>reversal</i>: a block slides back the way it came at some point. Both from the proof alone.</li>
   <li><b>Blocker graph</b> (approximation): an edge A → B when B's slide sweeps a cell A was the last block to leave, from the proof's order alone (not from which blocks truly had to move: a block that left a cell for some other reason still counts). Cyclomatic complexity = edges − nodes + components over the blocks moved, directed edges counted once each (A → B and B → A both count, so a pair that must take turns gives 1). <i>Directed cycle</i>: some block is, through the chain, in its own way.</li>
   <li><b>Detour</b>: the proof's moves per cell of red's straight distance (start to target), median.</li>
-  <li><b>Fewest moves</b> is the proof's length (the Judge's moves term with no Auditor): the maker's window measure finds it exact for the share shown as "exact"; elsewhere it is an upper bound.</li>
+  <li><b>Fewest moves</b> is the proof's length (the Judge's moves term, no Auditor): the maker's window measure finds it exact for the share shown as "exact"; elsewhere it is an upper bound.</li>
   <li>Decisions and fitness are the Judge's (src/judge.ts) on the proof's length; maker time is the median of one process each, on the VM (2 processes on 2 cores).</li>
+  <li>Candidates: a candidate's proof is the rough measure's shortest where it found one, else the push search's; the finalists' and the chosen goal's are after the exact measure, so they can be shorter than as candidates.</li>
 </ul>
-
-<div id="effortCheck"></div>
-
-<h2>Where the time goes</h2>
-<div class="card"><table id="time"></table></div>
 
 <h2>Every cell</h2>
 <details><summary>The numbers, cell by cell</summary><div class="card" style="margin-top:8px"><table id="all"></table></div></details>
 <div id="tip"></div>
 <script>
-const DATA = {"byLength":[{"walls":0,"b":[{"n":107,"repeat":1,"cycle":0},{"n":317,"repeat":14,"cycle":1},{"n":247,"repeat":91,"cycle":14},{"n":229,"repeat":207,"cycle":79}]},{"walls":0.02,"b":[{"n":131,"repeat":2,"cycle":0},{"n":318,"repeat":8,"cycle":1},{"n":220,"repeat":75,"cycle":10},{"n":231,"repeat":206,"cycle":83}]},{"walls":0.04,"b":[{"n":167,"repeat":2,"cycle":0},{"n":308,"repeat":16,"cycle":5},{"n":212,"repeat":80,"cycle":16},{"n":213,"repeat":183,"cycle":76}]},{"walls":0.06,"b":[{"n":210,"repeat":2,"cycle":0},{"n":320,"repeat":18,"cycle":8},{"n":198,"repeat":84,"cycle":20},{"n":172,"repeat":150,"cycle":76}]},{"walls":0.08,"b":[{"n":265,"repeat":2,"cycle":1},{"n":317,"repeat":21,"cycle":9},{"n":177,"repeat":55,"cycle":18},{"n":141,"repeat":127,"cycle":55}]},{"walls":0.1,"b":[{"n":338,"repeat":3,"cycle":0},{"n":315,"repeat":26,"cycle":9},{"n":144,"repeat":54,"cycle":12},{"n":103,"repeat":95,"cycle":50}]},{"walls":0.125,"b":[{"n":415,"repeat":4,"cycle":1},{"n":325,"repeat":28,"cycle":8},{"n":107,"repeat":42,"cycle":13},{"n":53,"repeat":50,"cycle":29}]},{"walls":0.15,"b":[{"n":514,"repeat":9,"cycle":4},{"n":287,"repeat":21,"cycle":5},{"n":75,"repeat":34,"cycle":12},{"n":24,"repeat":22,"cycle":11}]}],"buckets":["≤6","7–10","11–15","16+"],"byEffort":[{"effort":0,"walls":0,"boards":450,"goals":450,"found":1,"moves":13.784,"decisions":10.333,"repeat":0.413,"cycle":0.122,"cyclomatic":1.473,"makerMs":207.343},{"effort":0,"walls":0.02,"boards":450,"goals":450,"found":1,"moves":13.518,"decisions":9.298,"repeat":0.378,"cycle":0.127,"cyclomatic":1.409,"makerMs":193.854},{"effort":0,"walls":0.04,"boards":450,"goals":450,"found":1,"moves":12.756,"decisions":8.109,"repeat":0.364,"cycle":0.116,"cyclomatic":1.382,"makerMs":167.653},{"effort":0,"walls":0.06,"boards":450,"goals":450,"found":1,"moves":11.664,"decisions":7.127,"repeat":0.32,"cycle":0.129,"cyclomatic":1.242,"makerMs":119.862},{"effort":0,"walls":0.08,"boards":450,"goals":450,"found":1,"moves":10.676,"decisions":6.149,"repeat":0.251,"cycle":0.096,"cyclomatic":1.06,"makerMs":102.082},{"effort":0,"walls":0.1,"boards":450,"goals":450,"found":1,"moves":9.604,"decisions":5.211,"repeat":0.216,"cycle":0.078,"cyclomatic":0.873,"makerMs":70.579},{"effort":0,"walls":0.125,"boards":450,"goals":450,"found":1,"moves":8.147,"decisions":4.144,"repeat":0.138,"cycle":0.058,"cyclomatic":0.658,"makerMs":39.56},{"effort":0,"walls":0.15,"boards":450,"goals":450,"found":1,"moves":6.802,"decisions":3.32,"repeat":0.104,"cycle":0.042,"cyclomatic":0.424,"makerMs":20.284},{"effort":2,"walls":0,"boards":180,"goals":180,"found":1,"moves":15.128,"decisions":11.428,"repeat":0.311,"cycle":0.1,"cyclomatic":1.611,"makerMs":3246.056},{"effort":2,"walls":0.04,"boards":180,"goals":180,"found":1,"moves":12.072,"decisions":7.567,"repeat":0.228,"cycle":0.072,"cyclomatic":1.167,"makerMs":1267.743},{"effort":2,"walls":0.08,"boards":180,"goals":180,"found":1,"moves":9.506,"decisions":5.139,"repeat":0.161,"cycle":0.067,"cyclomatic":0.711,"makerMs":737.084},{"effort":2,"walls":0.15,"boards":180,"goals":180,"found":1,"moves":6.511,"decisions":2.744,"repeat":0.056,"cycle":0.017,"cyclomatic":0.233,"makerMs":79.887}],"shared":[8,12,16],"cells":[{"walls":0,"density":6,"boards":150,"goals":150,"blockFill":0.459,"wallFill":0,"hist":[0,1157,5,4],"goalMax":[0,144,3,3],"m":{"found":1,"legal":1,"moves":7.86,"exact":0.893,"decisions":6.307,"fitness":5.922,"makerMs":84.207,"distance":8.247,"repeat":0.04,"repeatOther":0.04,"redRepeat":0,"blocksMoved":7.773,"returns":0.087,"reversal":0.027,"cyclomatic":0.213,"cycle":0.013,"detour":0.958}},{"walls":0,"density":8,"boards":150,"goals":150,"blockFill":0.535,"wallFill":0,"hist":[0,1380,36,3,2,1],"goalMax":[0,123,22,2,2,1],"m":{"found":1,"legal":1,"moves":9.827,"exact":0.68,"decisions":7.793,"fitness":6.964,"makerMs":151.474,"distance":8.773,"repeat":0.18,"repeatOther":0.173,"redRepeat":0.013,"blocksMoved":9.48,"returns":0.347,"reversal":0.08,"cyclomatic":0.533,"cycle":0.047,"detour":1.095}},{"walls":0,"density":10,"boards":150,"goals":150,"blockFill":0.589,"wallFill":0,"hist":[0,1511,55,8,2,1],"goalMax":[0,111,28,8,2,1],"m":{"found":1,"legal":1,"moves":11.053,"exact":0.52,"decisions":8.647,"fitness":7.924,"makerMs":171.204,"distance":8.8,"repeat":0.26,"repeatOther":0.253,"redRepeat":0.027,"blocksMoved":10.513,"returns":0.54,"reversal":0.087,"cyclomatic":0.82,"cycle":0.053,"detour":1.3}},{"walls":0,"density":12,"boards":150,"goals":150,"blockFill":0.627,"wallFill":0,"hist":[0,1703,95,24,3,3,1],"goalMax":[0,87,36,20,3,3,1],"m":{"found":1,"legal":1,"moves":13.32,"exact":0.373,"decisions":10.173,"fitness":9.156,"makerMs":213.099,"distance":8.793,"repeat":0.42,"repeatOther":0.42,"redRepeat":0.06,"blocksMoved":12.193,"returns":1.127,"reversal":0.173,"cyclomatic":1.287,"cycle":0.093,"detour":1.5}},{"walls":0,"density":14,"boards":150,"goals":150,"blockFill":0.668,"wallFill":0,"hist":[0,1846,152,29,6,3,1],"goalMax":[0,68,54,19,5,3,1],"m":{"found":1,"legal":1,"moves":15.213,"exact":0.273,"decisions":11.333,"fitness":10.513,"makerMs":288.576,"distance":8.847,"repeat":0.547,"repeatOther":0.547,"redRepeat":0.107,"blocksMoved":13.58,"returns":1.633,"reversal":0.253,"cyclomatic":1.84,"cycle":0.193,"detour":1.725}},{"walls":0,"density":16,"boards":150,"goals":150,"blockFill":0.699,"wallFill":0,"hist":[0,2073,191,59,14,6,1,1],"goalMax":[0,54,44,33,13,5,0,1],"m":{"found":1,"legal":1,"moves":18.207,"exact":0.187,"decisions":13.033,"fitness":12.034,"makerMs":286.001,"distance":9.013,"repeat":0.64,"repeatOther":0.633,"redRepeat":0.14,"blocksMoved":15.633,"returns":2.573,"reversal":0.32,"cyclomatic":2.6,"cycle":0.227,"detour":2}},{"walls":0.02,"density":6,"boards":150,"goals":150,"blockFill":0.443,"wallFill":0.02,"hist":[0,1143,4,2],"goalMax":[0,145,3,2],"m":{"found":1,"legal":1,"moves":7.713,"exact":0.907,"decisions":5.82,"fitness":5.6,"makerMs":92.757,"distance":8.78,"repeat":0.033,"repeatOther":0.033,"redRepeat":0.007,"blocksMoved":7.66,"returns":0.053,"reversal":0.013,"cyclomatic":0.3,"cycle":0,"detour":0.9}},{"walls":0.02,"density":8,"boards":150,"goals":150,"blockFill":0.518,"wallFill":0.02,"hist":[0,1357,22,5,1,2],"goalMax":[0,131,12,4,1,2],"m":{"found":1,"legal":1,"moves":9.533,"exact":0.753,"decisions":7.093,"fitness":6.742,"makerMs":125.602,"distance":8.547,"repeat":0.127,"repeatOther":0.127,"redRepeat":0.007,"blocksMoved":9.247,"returns":0.287,"reversal":0.067,"cyclomatic":0.56,"cycle":0.047,"detour":1.125}},{"walls":0.02,"density":10,"boards":150,"goals":150,"blockFill":0.571,"wallFill":0.02,"hist":[0,1500,60,3,2],"goalMax":[0,114,31,3,2],"m":{"found":1,"legal":1,"moves":10.913,"exact":0.58,"decisions":8.127,"fitness":7.579,"makerMs":170.207,"distance":9.027,"repeat":0.24,"repeatOther":0.24,"redRepeat":0.02,"blocksMoved":10.433,"returns":0.48,"reversal":0.1,"cyclomatic":0.727,"cycle":0.067,"detour":1.2}},{"walls":0.02,"density":12,"boards":150,"goals":150,"blockFill":0.609,"wallFill":0.02,"hist":[0,1747,117,19,6,1,1,1],"goalMax":[0,88,40,14,5,1,1,1],"m":{"found":1,"legal":1,"moves":13.867,"exact":0.427,"decisions":9.54,"fitness":9.071,"makerMs":206.233,"distance":9.08,"repeat":0.413,"repeatOther":0.413,"redRepeat":0.06,"blocksMoved":12.613,"returns":1.253,"reversal":0.207,"cyclomatic":1.333,"cycle":0.12,"detour":1.5}},{"walls":0.02,"density":14,"boards":150,"goals":150,"blockFill":0.648,"wallFill":0.02,"hist":[0,1913,151,21,3,6],"goalMax":[0,70,57,16,2,5],"m":{"found":1,"legal":1,"moves":15.467,"exact":0.273,"decisions":10.387,"fitness":10.179,"makerMs":258.871,"distance":9.333,"repeat":0.533,"repeatOther":0.507,"redRepeat":0.093,"blocksMoved":13.96,"returns":1.507,"reversal":0.28,"cyclomatic":1.727,"cycle":0.18,"detour":1.667}},{"walls":0.02,"density":16,"boards":150,"goals":150,"blockFill":0.678,"wallFill":0.02,"hist":[0,1959,188,46,15,4,2,0,1],"goalMax":[0,61,46,25,14,2,1,0,1],"m":{"found":1,"legal":1,"moves":17.153,"exact":0.247,"decisions":11.26,"fitness":11.776,"makerMs":240.587,"distance":8.467,"repeat":0.593,"repeatOther":0.593,"redRepeat":0.14,"blocksMoved":14.767,"returns":2.387,"reversal":0.28,"cyclomatic":2.333,"cycle":0.213,"detour":2}},{"walls":0.04,"density":6,"boards":150,"goals":150,"blockFill":0.428,"wallFill":0.041,"hist":[0,1143,5,1],"goalMax":[0,146,3,1],"m":{"found":1,"legal":1,"moves":7.707,"exact":0.867,"decisions":5.393,"fitness":5.182,"makerMs":79.478,"distance":8.947,"repeat":0.027,"repeatOther":0.027,"redRepeat":0,"blocksMoved":7.66,"returns":0.047,"reversal":0.02,"cyclomatic":0.273,"cycle":0.013,"detour":0.888}},{"walls":0.04,"density":8,"boards":150,"goals":150,"blockFill":0.499,"wallFill":0.041,"hist":[0,1342,28,5,1,2],"goalMax":[0,130,13,4,1,2],"m":{"found":1,"legal":1,"moves":9.513,"exact":0.747,"decisions":6.407,"fitness":6.522,"makerMs":113.44,"distance":8.133,"repeat":0.133,"repeatOther":0.133,"redRepeat":0.007,"blocksMoved":9.187,"returns":0.327,"reversal":0.067,"cyclomatic":0.593,"cycle":0.053,"detour":1.25}},{"walls":0.04,"density":10,"boards":150,"goals":150,"blockFill":0.551,"wallFill":0.04,"hist":[0,1468,52,7,4],"goalMax":[0,115,24,7,4],"m":{"found":1,"legal":1,"moves":10.727,"exact":0.62,"decisions":7.147,"fitness":7.269,"makerMs":157.074,"distance":8.753,"repeat":0.233,"repeatOther":0.233,"redRepeat":0.007,"blocksMoved":10.207,"returns":0.52,"reversal":0.127,"cyclomatic":0.853,"cycle":0.093,"detour":1.293}},{"walls":0.04,"density":12,"boards":150,"goals":150,"blockFill":0.588,"wallFill":0.042,"hist":[0,1605,88,13,7,1,1,1],"goalMax":[0,95,36,10,6,1,1,1],"m":{"found":1,"legal":1,"moves":12.44,"exact":0.48,"decisions":7.96,"fitness":8.27,"makerMs":190.32,"distance":8.2,"repeat":0.367,"repeatOther":0.367,"redRepeat":0.033,"blocksMoved":11.44,"returns":1,"reversal":0.2,"cyclomatic":1.113,"cycle":0.073,"detour":1.6}},{"walls":0.04,"density":14,"boards":150,"goals":150,"blockFill":0.625,"wallFill":0.041,"hist":[0,1782,151,16,2,7,2],"goalMax":[0,72,57,13,2,4,2],"m":{"found":1,"legal":1,"moves":14.58,"exact":0.313,"decisions":9.427,"fitness":9.766,"makerMs":184.188,"distance":8.747,"repeat":0.52,"repeatOther":0.493,"redRepeat":0.1,"blocksMoved":13.067,"returns":1.513,"reversal":0.28,"cyclomatic":1.807,"cycle":0.193,"detour":1.75}},{"walls":0.04,"density":16,"boards":150,"goals":150,"blockFill":0.659,"wallFill":0.039,"hist":[0,1854,186,47,10,4,2,0,1],"goalMax":[0,61,43,32,9,4,0,0,1],"m":{"found":1,"legal":1,"moves":16.313,"exact":0.247,"decisions":9.96,"fitness":10.749,"makerMs":208.65,"distance":8.087,"repeat":0.593,"repeatOther":0.573,"redRepeat":0.12,"blocksMoved":14.027,"returns":2.287,"reversal":0.28,"cyclomatic":2.44,"cycle":0.22,"detour":2.167}},{"walls":0.06,"density":6,"boards":150,"goals":150,"blockFill":0.412,"wallFill":0.062,"hist":[0,1068,3,1],"goalMax":[0,147,2,1],"m":{"found":1,"legal":1,"moves":7.18,"exact":0.9,"decisions":4.727,"fitness":5.044,"makerMs":58.824,"distance":8.26,"repeat":0.02,"repeatOther":0.013,"redRepeat":0.007,"blocksMoved":7.147,"returns":0.033,"reversal":0.007,"cyclomatic":0.18,"cycle":0,"detour":1}},{"walls":0.06,"density":8,"boards":150,"goals":150,"blockFill":0.484,"wallFill":0.062,"hist":[0,1210,40,2,1,1,1],"goalMax":[0,131,14,2,1,1,1],"m":{"found":1,"legal":1,"moves":8.74,"exact":0.773,"decisions":5.627,"fitness":6.079,"makerMs":80.314,"distance":7.373,"repeat":0.127,"repeatOther":0.12,"redRepeat":0.027,"blocksMoved":8.367,"returns":0.373,"reversal":0.087,"cyclomatic":0.62,"cycle":0.073,"detour":1.25}},{"walls":0.06,"density":10,"boards":150,"goals":150,"blockFill":0.534,"wallFill":0.06,"hist":[0,1420,59,7,6,1],"goalMax":[0,115,22,6,6,1],"m":{"found":1,"legal":1,"moves":10.587,"exact":0.647,"decisions":6.5,"fitness":6.892,"makerMs":116.063,"distance":7.993,"repeat":0.233,"repeatOther":0.233,"redRepeat":0.013,"blocksMoved":9.953,"returns":0.633,"reversal":0.133,"cyclomatic":1.033,"cycle":0.1,"detour":1.408}},{"walls":0.06,"density":12,"boards":150,"goals":150,"blockFill":0.571,"wallFill":0.061,"hist":[0,1480,93,5,2,0,1],"goalMax":[0,106,37,4,2,0,1],"m":{"found":1,"legal":1,"moves":11.3,"exact":0.533,"decisions":7.007,"fitness":7.579,"makerMs":127.72,"distance":7.527,"repeat":0.293,"repeatOther":0.293,"redRepeat":0.047,"blocksMoved":10.54,"returns":0.76,"reversal":0.167,"cyclomatic":0.96,"cycle":0.093,"detour":1.519}},{"walls":0.06,"density":14,"boards":150,"goals":150,"blockFill":0.604,"wallFill":0.062,"hist":[0,1535,158,9,6,0,3],"goalMax":[0,78,57,7,5,0,3],"m":{"found":1,"legal":1,"moves":12.8,"exact":0.427,"decisions":7.94,"fitness":9,"makerMs":137.288,"distance":7.447,"repeat":0.48,"repeatOther":0.453,"redRepeat":0.133,"blocksMoved":11.407,"returns":1.393,"reversal":0.28,"cyclomatic":1.6,"cycle":0.207,"detour":1.809}},{"walls":0.06,"density":16,"boards":150,"goals":150,"blockFill":0.638,"wallFill":0.059,"hist":[0,1713,172,34,11,4,1,2],"goalMax":[0,69,44,21,9,4,1,2],"m":{"found":1,"legal":1,"moves":14.953,"exact":0.307,"decisions":8.747,"fitness":10.011,"makerMs":161.663,"distance":7.593,"repeat":0.54,"repeatOther":0.527,"redRepeat":0.093,"blocksMoved":12.913,"returns":2.04,"reversal":0.293,"cyclomatic":2.147,"cycle":0.22,"detour":2}},{"walls":0.08,"density":6,"boards":150,"goals":150,"blockFill":0.398,"wallFill":0.081,"hist":[0,939,7],"goalMax":[0,146,4],"m":{"found":1,"legal":1,"moves":6.353,"exact":0.913,"decisions":3.807,"fitness":4.783,"makerMs":46.96,"distance":6.527,"repeat":0.027,"repeatOther":0.027,"redRepeat":0.013,"blocksMoved":6.307,"returns":0.047,"reversal":0.013,"cyclomatic":0.167,"cycle":0.007,"detour":1.125}},{"walls":0.08,"density":8,"boards":150,"goals":150,"blockFill":0.468,"wallFill":0.081,"hist":[0,1173,24,2,1,1],"goalMax":[0,137,9,2,1,1],"m":{"found":1,"legal":1,"moves":8.24,"exact":0.787,"decisions":4.86,"fitness":5.643,"makerMs":77.648,"distance":6.967,"repeat":0.087,"repeatOther":0.08,"redRepeat":0.013,"blocksMoved":8.007,"returns":0.233,"reversal":0.04,"cyclomatic":0.533,"cycle":0.04,"detour":1.293}},{"walls":0.08,"density":10,"boards":150,"goals":150,"blockFill":0.518,"wallFill":0.078,"hist":[0,1333,52,9,6,1],"goalMax":[0,121,17,5,6,1],"m":{"found":1,"legal":1,"moves":9.953,"exact":0.687,"decisions":5.767,"fitness":6.789,"makerMs":96.978,"distance":7.373,"repeat":0.193,"repeatOther":0.187,"redRepeat":0.02,"blocksMoved":9.34,"returns":0.613,"reversal":0.12,"cyclomatic":0.84,"cycle":0.1,"detour":1.429}},{"walls":0.08,"density":12,"boards":150,"goals":150,"blockFill":0.551,"wallFill":0.082,"hist":[0,1463,67,11,2,1],"goalMax":[0,115,26,7,1,1],"m":{"found":1,"legal":1,"moves":10.953,"exact":0.593,"decisions":6.307,"fitness":7.354,"makerMs":119.349,"distance":7.067,"repeat":0.233,"repeatOther":0.233,"redRepeat":0.04,"blocksMoved":10.293,"returns":0.66,"reversal":0.12,"cyclomatic":0.96,"cycle":0.08,"detour":1.646}},{"walls":0.08,"density":14,"boards":150,"goals":150,"blockFill":0.586,"wallFill":0.082,"hist":[0,1493,117,7,4,1],"goalMax":[0,91,50,4,4,1],"m":{"found":1,"legal":1,"moves":11.793,"exact":0.507,"decisions":6.927,"fitness":8.303,"makerMs":124.919,"distance":7.02,"repeat":0.393,"repeatOther":0.367,"redRepeat":0.1,"blocksMoved":10.813,"returns":0.98,"reversal":0.233,"cyclomatic":1.22,"cycle":0.16,"detour":1.775}},{"walls":0.08,"density":16,"boards":150,"goals":150,"blockFill":0.618,"wallFill":0.08,"hist":[0,1551,127,22,7,4,1],"goalMax":[0,85,38,16,7,3,1],"m":{"found":1,"legal":1,"moves":12.833,"exact":0.453,"decisions":7.28,"fitness":9,"makerMs":125.105,"distance":6.74,"repeat":0.433,"repeatOther":0.413,"redRepeat":0.073,"blocksMoved":11.413,"returns":1.42,"reversal":0.213,"cyclomatic":1.687,"cycle":0.167,"detour":2}},{"walls":0.1,"density":6,"boards":150,"goals":150,"blockFill":0.383,"wallFill":0.102,"hist":[0,867,7],"goalMax":[0,146,4],"m":{"found":1,"legal":1,"moves":5.873,"exact":0.927,"decisions":3.22,"fitness":4.453,"makerMs":36.023,"distance":5.7,"repeat":0.027,"repeatOther":0.027,"redRepeat":0.013,"blocksMoved":5.827,"returns":0.047,"reversal":0.013,"cyclomatic":0.127,"cycle":0.007,"detour":1.125}},{"walls":0.1,"density":8,"boards":150,"goals":150,"blockFill":0.451,"wallFill":0.102,"hist":[0,1132,31,6,0,1],"goalMax":[0,135,9,5,0,1],"m":{"found":1,"legal":1,"moves":8.113,"exact":0.793,"decisions":4.56,"fitness":5.339,"makerMs":57.034,"distance":6.947,"repeat":0.1,"repeatOther":0.093,"redRepeat":0.02,"blocksMoved":7.8,"returns":0.313,"reversal":0.053,"cyclomatic":0.553,"cycle":0.06,"detour":1.317}},{"walls":0.1,"density":10,"boards":150,"goals":150,"blockFill":0.501,"wallFill":0.098,"hist":[0,1163,60,8,4],"goalMax":[0,121,20,5,4],"m":{"found":1,"legal":1,"moves":8.82,"exact":0.753,"decisions":4.807,"fitness":6.063,"makerMs":61.293,"distance":6.353,"repeat":0.193,"repeatOther":0.187,"redRepeat":0.04,"blocksMoved":8.233,"returns":0.587,"reversal":0.133,"cyclomatic":0.787,"cycle":0.08,"detour":1.5}},{"walls":0.1,"density":12,"boards":150,"goals":150,"blockFill":0.533,"wallFill":0.102,"hist":[0,1216,64,7,1,0,0,1],"goalMax":[0,118,25,5,1,0,0,1],"m":{"found":1,"legal":1,"moves":9.173,"exact":0.72,"decisions":4.98,"fitness":6.768,"makerMs":70.209,"distance":5.767,"repeat":0.213,"repeatOther":0.213,"redRepeat":0.033,"blocksMoved":8.593,"returns":0.58,"reversal":0.14,"cyclomatic":0.76,"cycle":0.073,"detour":1.75}},{"walls":0.1,"density":14,"boards":150,"goals":150,"blockFill":0.567,"wallFill":0.102,"hist":[0,1397,86,10,3,3],"goalMax":[0,102,36,6,3,3],"m":{"found":1,"legal":1,"moves":10.84,"exact":0.593,"decisions":5.693,"fitness":7.527,"makerMs":82.702,"distance":6.46,"repeat":0.32,"repeatOther":0.293,"redRepeat":0.073,"blocksMoved":9.993,"returns":0.847,"reversal":0.18,"cyclomatic":1.113,"cycle":0.153,"detour":1.809}},{"walls":0.1,"density":16,"boards":150,"goals":150,"blockFill":0.598,"wallFill":0.1,"hist":[0,1446,93,13,7,6],"goalMax":[0,100,31,8,6,5],"m":{"found":1,"legal":1,"moves":11.527,"exact":0.573,"decisions":6.093,"fitness":8.041,"makerMs":84.087,"distance":5.96,"repeat":0.333,"repeatOther":0.32,"redRepeat":0.047,"blocksMoved":10.433,"returns":1.093,"reversal":0.147,"cyclomatic":1.307,"cycle":0.1,"detour":2}},{"walls":0.125,"density":6,"boards":150,"goals":150,"blockFill":0.366,"wallFill":0.126,"hist":[0,826,6],"goalMax":[0,145,5],"m":{"found":1,"legal":1,"moves":5.587,"exact":0.953,"decisions":2.773,"fitness":4.176,"makerMs":19.48,"distance":5.427,"repeat":0.033,"repeatOther":0.033,"redRepeat":0,"blocksMoved":5.547,"returns":0.04,"reversal":0.027,"cyclomatic":0.14,"cycle":0.007,"detour":1.225}},{"walls":0.125,"density":8,"boards":150,"goals":150,"blockFill":0.432,"wallFill":0.126,"hist":[0,974,22,5,0,1],"goalMax":[0,140,5,4,0,1],"m":{"found":1,"legal":1,"moves":6.92,"exact":0.873,"decisions":3.393,"fitness":5.1,"makerMs":31.091,"distance":5.387,"repeat":0.067,"repeatOther":0.067,"redRepeat":0.007,"blocksMoved":6.68,"returns":0.24,"reversal":0.04,"cyclomatic":0.44,"cycle":0.033,"detour":1.5}},{"walls":0.125,"density":10,"boards":150,"goals":150,"blockFill":0.48,"wallFill":0.122,"hist":[0,1043,44,2,4],"goalMax":[0,127,17,2,4],"m":{"found":1,"legal":1,"moves":7.687,"exact":0.807,"decisions":3.847,"fitness":5.743,"makerMs":34.522,"distance":5.193,"repeat":0.153,"repeatOther":0.153,"redRepeat":0.027,"blocksMoved":7.287,"returns":0.4,"reversal":0.113,"cyclomatic":0.58,"cycle":0.06,"detour":1.5}},{"walls":0.125,"density":12,"boards":150,"goals":150,"blockFill":0.51,"wallFill":0.126,"hist":[0,1078,26,1],"goalMax":[0,135,14,1],"m":{"found":1,"legal":1,"moves":7.553,"exact":0.833,"decisions":3.887,"fitness":6.063,"makerMs":37.739,"distance":4.707,"repeat":0.1,"repeatOther":0.093,"redRepeat":0.013,"blocksMoved":7.367,"returns":0.187,"reversal":0.067,"cyclomatic":0.413,"cycle":0.027,"detour":1.75}},{"walls":0.125,"density":14,"boards":150,"goals":150,"blockFill":0.542,"wallFill":0.127,"hist":[0,1216,63,6,2,1],"goalMax":[0,116,27,4,2,1],"m":{"found":1,"legal":1,"moves":9.153,"exact":0.72,"decisions":4.493,"fitness":6.829,"makerMs":49.937,"distance":5.307,"repeat":0.227,"repeatOther":0.22,"redRepeat":0.047,"blocksMoved":8.587,"returns":0.567,"reversal":0.147,"cyclomatic":0.76,"cycle":0.1,"detour":2}},{"walls":0.125,"density":16,"boards":150,"goals":150,"blockFill":0.572,"wallFill":0.125,"hist":[0,1270,88,9,3,2],"goalMax":[0,113,27,6,2,2],"m":{"found":1,"legal":1,"moves":9.967,"exact":0.64,"decisions":5.153,"fitness":7.336,"makerMs":52.271,"distance":4.913,"repeat":0.247,"repeatOther":0.24,"redRepeat":0.053,"blocksMoved":9.147,"returns":0.82,"reversal":0.14,"cyclomatic":1.12,"cycle":0.113,"detour":2.091}},{"walls":0.15,"density":6,"boards":150,"goals":150,"blockFill":0.349,"wallFill":0.15,"hist":[0,751,6],"goalMax":[0,145,5],"m":{"found":1,"legal":1,"moves":5.087,"exact":0.973,"decisions":2.193,"fitness":3.887,"makerMs":10.479,"distance":4.533,"repeat":0.033,"repeatOther":0.033,"redRepeat":0,"blocksMoved":5.047,"returns":0.04,"reversal":0.027,"cyclomatic":0.113,"cycle":0.007,"detour":1.333}},{"walls":0.15,"density":8,"boards":150,"goals":150,"blockFill":0.412,"wallFill":0.15,"hist":[0,869,16,1],"goalMax":[0,140,9,1],"m":{"found":1,"legal":1,"moves":6.027,"exact":0.94,"decisions":2.747,"fitness":4.547,"makerMs":16.816,"distance":4.647,"repeat":0.067,"repeatOther":0.067,"redRepeat":0.007,"blocksMoved":5.907,"returns":0.12,"reversal":0.053,"cyclomatic":0.24,"cycle":0.013,"detour":1.5}},{"walls":0.15,"density":10,"boards":150,"goals":150,"blockFill":0.457,"wallFill":0.149,"hist":[0,934,21,2,1],"goalMax":[0,138,9,2,1],"m":{"found":1,"legal":1,"moves":6.573,"exact":0.867,"decisions":3.12,"fitness":5.169,"makerMs":20.004,"distance":4.047,"repeat":0.08,"repeatOther":0.08,"redRepeat":0.013,"blocksMoved":6.387,"returns":0.187,"reversal":0.06,"cyclomatic":0.353,"cycle":0.033,"detour":1.792}},{"walls":0.15,"density":12,"boards":150,"goals":150,"blockFill":0.486,"wallFill":0.152,"hist":[0,963,19,1,1],"goalMax":[0,136,12,1,1],"m":{"found":1,"legal":1,"moves":6.72,"exact":0.867,"decisions":3.247,"fitness":5.86,"makerMs":22.22,"distance":4.167,"repeat":0.093,"repeatOther":0.08,"redRepeat":0.027,"blocksMoved":6.56,"returns":0.16,"reversal":0.067,"cyclomatic":0.307,"cycle":0.04,"detour":2}},{"walls":0.15,"density":14,"boards":150,"goals":150,"blockFill":0.52,"wallFill":0.15,"hist":[0,1092,34,5,0,1],"goalMax":[0,128,16,5,0,1],"m":{"found":1,"legal":1,"moves":7.867,"exact":0.793,"decisions":3.593,"fitness":6.079,"makerMs":24.173,"distance":4.52,"repeat":0.147,"repeatOther":0.14,"redRepeat":0.033,"blocksMoved":7.547,"returns":0.32,"reversal":0.087,"cyclomatic":0.507,"cycle":0.047,"detour":2}},{"walls":0.15,"density":16,"boards":150,"goals":150,"blockFill":0.546,"wallFill":0.151,"hist":[0,1043,50,2],"goalMax":[0,127,21,2],"m":{"found":1,"legal":1,"moves":7.66,"exact":0.833,"decisions":3.967,"fitness":6.334,"makerMs":23.141,"distance":3.967,"repeat":0.153,"repeatOther":0.133,"redRepeat":0.067,"blocksMoved":7.3,"returns":0.36,"reversal":0.093,"cyclomatic":0.727,"cycle":0.073,"detour":2}}],"walls":[0,0.02,0.04,0.06,0.08,0.1,0.125,0.15],"densities":[6,8,10,12,14,16],"maxCount":8,"boards":7200,"effort":[0],"time":{"gen":7652.377000000006,"maker":865640.7339999964,"referee":1178.2210000000016,"judge":1004.5839999999964,"choices":1400.9540000000054},"files":["high.jsonl","effort2.jsonl"]};
+const DATA = {"byLength":[{"walls":0,"b":[{"n":107,"repeat":1,"cycle":0},{"n":317,"repeat":14,"cycle":1},{"n":247,"repeat":91,"cycle":14},{"n":229,"repeat":207,"cycle":79}]},{"walls":0.02,"b":[{"n":131,"repeat":2,"cycle":0},{"n":318,"repeat":8,"cycle":1},{"n":220,"repeat":75,"cycle":10},{"n":231,"repeat":206,"cycle":83}]},{"walls":0.04,"b":[{"n":167,"repeat":2,"cycle":0},{"n":308,"repeat":16,"cycle":5},{"n":212,"repeat":80,"cycle":16},{"n":213,"repeat":183,"cycle":76}]},{"walls":0.06,"b":[{"n":210,"repeat":2,"cycle":0},{"n":320,"repeat":18,"cycle":8},{"n":198,"repeat":84,"cycle":20},{"n":172,"repeat":150,"cycle":76}]},{"walls":0.08,"b":[{"n":265,"repeat":2,"cycle":1},{"n":317,"repeat":21,"cycle":9},{"n":177,"repeat":55,"cycle":18},{"n":141,"repeat":127,"cycle":55}]},{"walls":0.1,"b":[{"n":338,"repeat":3,"cycle":0},{"n":315,"repeat":26,"cycle":9},{"n":144,"repeat":54,"cycle":12},{"n":103,"repeat":95,"cycle":50}]},{"walls":0.125,"b":[{"n":415,"repeat":4,"cycle":1},{"n":325,"repeat":28,"cycle":8},{"n":107,"repeat":42,"cycle":13},{"n":53,"repeat":50,"cycle":29}]},{"walls":0.15,"b":[{"n":514,"repeat":9,"cycle":4},{"n":287,"repeat":21,"cycle":5},{"n":75,"repeat":34,"cycle":12},{"n":24,"repeat":22,"cycle":11}]}],"buckets":["≤6","7–10","11–15","16+"],"byEffort":[{"effort":0,"walls":0,"boards":450,"goals":450,"found":1,"moves":13.784,"decisions":10.333,"repeat":0.413,"cycle":0.122,"cyclomatic":1.473,"makerMs":207.343},{"effort":0,"walls":0.02,"boards":450,"goals":450,"found":1,"moves":13.518,"decisions":9.298,"repeat":0.378,"cycle":0.127,"cyclomatic":1.409,"makerMs":193.854},{"effort":0,"walls":0.04,"boards":450,"goals":450,"found":1,"moves":12.756,"decisions":8.109,"repeat":0.364,"cycle":0.116,"cyclomatic":1.382,"makerMs":167.653},{"effort":0,"walls":0.06,"boards":450,"goals":450,"found":1,"moves":11.664,"decisions":7.127,"repeat":0.32,"cycle":0.129,"cyclomatic":1.242,"makerMs":119.862},{"effort":0,"walls":0.08,"boards":450,"goals":450,"found":1,"moves":10.676,"decisions":6.149,"repeat":0.251,"cycle":0.096,"cyclomatic":1.06,"makerMs":102.082},{"effort":0,"walls":0.1,"boards":450,"goals":450,"found":1,"moves":9.604,"decisions":5.211,"repeat":0.216,"cycle":0.078,"cyclomatic":0.873,"makerMs":70.579},{"effort":0,"walls":0.125,"boards":450,"goals":450,"found":1,"moves":8.147,"decisions":4.144,"repeat":0.138,"cycle":0.058,"cyclomatic":0.658,"makerMs":39.56},{"effort":0,"walls":0.15,"boards":450,"goals":450,"found":1,"moves":6.802,"decisions":3.32,"repeat":0.104,"cycle":0.042,"cyclomatic":0.424,"makerMs":20.284},{"effort":2,"walls":0,"boards":180,"goals":180,"found":1,"moves":15.128,"decisions":11.428,"repeat":0.311,"cycle":0.1,"cyclomatic":1.611,"makerMs":3246.056},{"effort":2,"walls":0.04,"boards":180,"goals":180,"found":1,"moves":12.072,"decisions":7.567,"repeat":0.228,"cycle":0.072,"cyclomatic":1.167,"makerMs":1267.743},{"effort":2,"walls":0.08,"boards":180,"goals":180,"found":1,"moves":9.506,"decisions":5.139,"repeat":0.161,"cycle":0.067,"cyclomatic":0.711,"makerMs":737.084},{"effort":2,"walls":0.15,"boards":180,"goals":180,"found":1,"moves":6.511,"decisions":2.744,"repeat":0.056,"cycle":0.017,"cyclomatic":0.233,"makerMs":79.887}],"shared":[8,12,16],"cells":[{"walls":0,"density":6,"boards":150,"goals":150,"blockFill":0.459,"wallFill":0,"hist":[0,1157,5,4],"goalMax":[0,144,3,3],"m":{"found":1,"legal":1,"moves":7.86,"exact":0.893,"decisions":6.307,"fitness":5.922,"makerMs":84.207,"distance":8.247,"repeat":0.04,"repeatOther":0.04,"redRepeat":0,"blocksMoved":7.773,"returns":0.087,"reversal":0.027,"cyclomatic":0.213,"cycle":0.013,"detour":0.958}},{"walls":0,"density":8,"boards":150,"goals":150,"blockFill":0.535,"wallFill":0,"hist":[0,1380,36,3,2,1],"goalMax":[0,123,22,2,2,1],"m":{"found":1,"legal":1,"moves":9.827,"exact":0.68,"decisions":7.793,"fitness":6.964,"makerMs":151.474,"distance":8.773,"repeat":0.18,"repeatOther":0.173,"redRepeat":0.013,"blocksMoved":9.48,"returns":0.347,"reversal":0.08,"cyclomatic":0.533,"cycle":0.047,"detour":1.095}},{"walls":0,"density":10,"boards":150,"goals":150,"blockFill":0.589,"wallFill":0,"hist":[0,1511,55,8,2,1],"goalMax":[0,111,28,8,2,1],"m":{"found":1,"legal":1,"moves":11.053,"exact":0.52,"decisions":8.647,"fitness":7.924,"makerMs":171.204,"distance":8.8,"repeat":0.26,"repeatOther":0.253,"redRepeat":0.027,"blocksMoved":10.513,"returns":0.54,"reversal":0.087,"cyclomatic":0.82,"cycle":0.053,"detour":1.3}},{"walls":0,"density":12,"boards":150,"goals":150,"blockFill":0.627,"wallFill":0,"hist":[0,1703,95,24,3,3,1],"goalMax":[0,87,36,20,3,3,1],"m":{"found":1,"legal":1,"moves":13.32,"exact":0.373,"decisions":10.173,"fitness":9.156,"makerMs":213.099,"distance":8.793,"repeat":0.42,"repeatOther":0.42,"redRepeat":0.06,"blocksMoved":12.193,"returns":1.127,"reversal":0.173,"cyclomatic":1.287,"cycle":0.093,"detour":1.5}},{"walls":0,"density":14,"boards":150,"goals":150,"blockFill":0.668,"wallFill":0,"hist":[0,1846,152,29,6,3,1],"goalMax":[0,68,54,19,5,3,1],"m":{"found":1,"legal":1,"moves":15.213,"exact":0.273,"decisions":11.333,"fitness":10.513,"makerMs":288.576,"distance":8.847,"repeat":0.547,"repeatOther":0.547,"redRepeat":0.107,"blocksMoved":13.58,"returns":1.633,"reversal":0.253,"cyclomatic":1.84,"cycle":0.193,"detour":1.725}},{"walls":0,"density":16,"boards":150,"goals":150,"blockFill":0.699,"wallFill":0,"hist":[0,2073,191,59,14,6,1,1],"goalMax":[0,54,44,33,13,5,0,1],"m":{"found":1,"legal":1,"moves":18.207,"exact":0.187,"decisions":13.033,"fitness":12.034,"makerMs":286.001,"distance":9.013,"repeat":0.64,"repeatOther":0.633,"redRepeat":0.14,"blocksMoved":15.633,"returns":2.573,"reversal":0.32,"cyclomatic":2.6,"cycle":0.227,"detour":2}},{"walls":0.02,"density":6,"boards":150,"goals":150,"blockFill":0.443,"wallFill":0.02,"hist":[0,1143,4,2],"goalMax":[0,145,3,2],"m":{"found":1,"legal":1,"moves":7.713,"exact":0.907,"decisions":5.82,"fitness":5.6,"makerMs":92.757,"distance":8.78,"repeat":0.033,"repeatOther":0.033,"redRepeat":0.007,"blocksMoved":7.66,"returns":0.053,"reversal":0.013,"cyclomatic":0.3,"cycle":0,"detour":0.9}},{"walls":0.02,"density":8,"boards":150,"goals":150,"blockFill":0.518,"wallFill":0.02,"hist":[0,1357,22,5,1,2],"goalMax":[0,131,12,4,1,2],"m":{"found":1,"legal":1,"moves":9.533,"exact":0.753,"decisions":7.093,"fitness":6.742,"makerMs":125.602,"distance":8.547,"repeat":0.127,"repeatOther":0.127,"redRepeat":0.007,"blocksMoved":9.247,"returns":0.287,"reversal":0.067,"cyclomatic":0.56,"cycle":0.047,"detour":1.125}},{"walls":0.02,"density":10,"boards":150,"goals":150,"blockFill":0.571,"wallFill":0.02,"hist":[0,1500,60,3,2],"goalMax":[0,114,31,3,2],"m":{"found":1,"legal":1,"moves":10.913,"exact":0.58,"decisions":8.127,"fitness":7.579,"makerMs":170.207,"distance":9.027,"repeat":0.24,"repeatOther":0.24,"redRepeat":0.02,"blocksMoved":10.433,"returns":0.48,"reversal":0.1,"cyclomatic":0.727,"cycle":0.067,"detour":1.2}},{"walls":0.02,"density":12,"boards":150,"goals":150,"blockFill":0.609,"wallFill":0.02,"hist":[0,1747,117,19,6,1,1,1],"goalMax":[0,88,40,14,5,1,1,1],"m":{"found":1,"legal":1,"moves":13.867,"exact":0.427,"decisions":9.54,"fitness":9.071,"makerMs":206.233,"distance":9.08,"repeat":0.413,"repeatOther":0.413,"redRepeat":0.06,"blocksMoved":12.613,"returns":1.253,"reversal":0.207,"cyclomatic":1.333,"cycle":0.12,"detour":1.5}},{"walls":0.02,"density":14,"boards":150,"goals":150,"blockFill":0.648,"wallFill":0.02,"hist":[0,1913,151,21,3,6],"goalMax":[0,70,57,16,2,5],"m":{"found":1,"legal":1,"moves":15.467,"exact":0.273,"decisions":10.387,"fitness":10.179,"makerMs":258.871,"distance":9.333,"repeat":0.533,"repeatOther":0.507,"redRepeat":0.093,"blocksMoved":13.96,"returns":1.507,"reversal":0.28,"cyclomatic":1.727,"cycle":0.18,"detour":1.667}},{"walls":0.02,"density":16,"boards":150,"goals":150,"blockFill":0.678,"wallFill":0.02,"hist":[0,1959,188,46,15,4,2,0,1],"goalMax":[0,61,46,25,14,2,1,0,1],"m":{"found":1,"legal":1,"moves":17.153,"exact":0.247,"decisions":11.26,"fitness":11.776,"makerMs":240.587,"distance":8.467,"repeat":0.593,"repeatOther":0.593,"redRepeat":0.14,"blocksMoved":14.767,"returns":2.387,"reversal":0.28,"cyclomatic":2.333,"cycle":0.213,"detour":2}},{"walls":0.04,"density":6,"boards":150,"goals":150,"blockFill":0.428,"wallFill":0.041,"hist":[0,1143,5,1],"goalMax":[0,146,3,1],"m":{"found":1,"legal":1,"moves":7.707,"exact":0.867,"decisions":5.393,"fitness":5.182,"makerMs":79.478,"distance":8.947,"repeat":0.027,"repeatOther":0.027,"redRepeat":0,"blocksMoved":7.66,"returns":0.047,"reversal":0.02,"cyclomatic":0.273,"cycle":0.013,"detour":0.888}},{"walls":0.04,"density":8,"boards":150,"goals":150,"blockFill":0.499,"wallFill":0.041,"hist":[0,1342,28,5,1,2],"goalMax":[0,130,13,4,1,2],"m":{"found":1,"legal":1,"moves":9.513,"exact":0.747,"decisions":6.407,"fitness":6.522,"makerMs":113.44,"distance":8.133,"repeat":0.133,"repeatOther":0.133,"redRepeat":0.007,"blocksMoved":9.187,"returns":0.327,"reversal":0.067,"cyclomatic":0.593,"cycle":0.053,"detour":1.25}},{"walls":0.04,"density":10,"boards":150,"goals":150,"blockFill":0.551,"wallFill":0.04,"hist":[0,1468,52,7,4],"goalMax":[0,115,24,7,4],"m":{"found":1,"legal":1,"moves":10.727,"exact":0.62,"decisions":7.147,"fitness":7.269,"makerMs":157.074,"distance":8.753,"repeat":0.233,"repeatOther":0.233,"redRepeat":0.007,"blocksMoved":10.207,"returns":0.52,"reversal":0.127,"cyclomatic":0.853,"cycle":0.093,"detour":1.293}},{"walls":0.04,"density":12,"boards":150,"goals":150,"blockFill":0.588,"wallFill":0.042,"hist":[0,1605,88,13,7,1,1,1],"goalMax":[0,95,36,10,6,1,1,1],"m":{"found":1,"legal":1,"moves":12.44,"exact":0.48,"decisions":7.96,"fitness":8.27,"makerMs":190.32,"distance":8.2,"repeat":0.367,"repeatOther":0.367,"redRepeat":0.033,"blocksMoved":11.44,"returns":1,"reversal":0.2,"cyclomatic":1.113,"cycle":0.073,"detour":1.6}},{"walls":0.04,"density":14,"boards":150,"goals":150,"blockFill":0.625,"wallFill":0.041,"hist":[0,1782,151,16,2,7,2],"goalMax":[0,72,57,13,2,4,2],"m":{"found":1,"legal":1,"moves":14.58,"exact":0.313,"decisions":9.427,"fitness":9.766,"makerMs":184.188,"distance":8.747,"repeat":0.52,"repeatOther":0.493,"redRepeat":0.1,"blocksMoved":13.067,"returns":1.513,"reversal":0.28,"cyclomatic":1.807,"cycle":0.193,"detour":1.75}},{"walls":0.04,"density":16,"boards":150,"goals":150,"blockFill":0.659,"wallFill":0.039,"hist":[0,1854,186,47,10,4,2,0,1],"goalMax":[0,61,43,32,9,4,0,0,1],"m":{"found":1,"legal":1,"moves":16.313,"exact":0.247,"decisions":9.96,"fitness":10.749,"makerMs":208.65,"distance":8.087,"repeat":0.593,"repeatOther":0.573,"redRepeat":0.12,"blocksMoved":14.027,"returns":2.287,"reversal":0.28,"cyclomatic":2.44,"cycle":0.22,"detour":2.167}},{"walls":0.06,"density":6,"boards":150,"goals":150,"blockFill":0.412,"wallFill":0.062,"hist":[0,1068,3,1],"goalMax":[0,147,2,1],"m":{"found":1,"legal":1,"moves":7.18,"exact":0.9,"decisions":4.727,"fitness":5.044,"makerMs":58.824,"distance":8.26,"repeat":0.02,"repeatOther":0.013,"redRepeat":0.007,"blocksMoved":7.147,"returns":0.033,"reversal":0.007,"cyclomatic":0.18,"cycle":0,"detour":1}},{"walls":0.06,"density":8,"boards":150,"goals":150,"blockFill":0.484,"wallFill":0.062,"hist":[0,1210,40,2,1,1,1],"goalMax":[0,131,14,2,1,1,1],"m":{"found":1,"legal":1,"moves":8.74,"exact":0.773,"decisions":5.627,"fitness":6.079,"makerMs":80.314,"distance":7.373,"repeat":0.127,"repeatOther":0.12,"redRepeat":0.027,"blocksMoved":8.367,"returns":0.373,"reversal":0.087,"cyclomatic":0.62,"cycle":0.073,"detour":1.25}},{"walls":0.06,"density":10,"boards":150,"goals":150,"blockFill":0.534,"wallFill":0.06,"hist":[0,1420,59,7,6,1],"goalMax":[0,115,22,6,6,1],"m":{"found":1,"legal":1,"moves":10.587,"exact":0.647,"decisions":6.5,"fitness":6.892,"makerMs":116.063,"distance":7.993,"repeat":0.233,"repeatOther":0.233,"redRepeat":0.013,"blocksMoved":9.953,"returns":0.633,"reversal":0.133,"cyclomatic":1.033,"cycle":0.1,"detour":1.408}},{"walls":0.06,"density":12,"boards":150,"goals":150,"blockFill":0.571,"wallFill":0.061,"hist":[0,1480,93,5,2,0,1],"goalMax":[0,106,37,4,2,0,1],"m":{"found":1,"legal":1,"moves":11.3,"exact":0.533,"decisions":7.007,"fitness":7.579,"makerMs":127.72,"distance":7.527,"repeat":0.293,"repeatOther":0.293,"redRepeat":0.047,"blocksMoved":10.54,"returns":0.76,"reversal":0.167,"cyclomatic":0.96,"cycle":0.093,"detour":1.519}},{"walls":0.06,"density":14,"boards":150,"goals":150,"blockFill":0.604,"wallFill":0.062,"hist":[0,1535,158,9,6,0,3],"goalMax":[0,78,57,7,5,0,3],"m":{"found":1,"legal":1,"moves":12.8,"exact":0.427,"decisions":7.94,"fitness":9,"makerMs":137.288,"distance":7.447,"repeat":0.48,"repeatOther":0.453,"redRepeat":0.133,"blocksMoved":11.407,"returns":1.393,"reversal":0.28,"cyclomatic":1.6,"cycle":0.207,"detour":1.809}},{"walls":0.06,"density":16,"boards":150,"goals":150,"blockFill":0.638,"wallFill":0.059,"hist":[0,1713,172,34,11,4,1,2],"goalMax":[0,69,44,21,9,4,1,2],"m":{"found":1,"legal":1,"moves":14.953,"exact":0.307,"decisions":8.747,"fitness":10.011,"makerMs":161.663,"distance":7.593,"repeat":0.54,"repeatOther":0.527,"redRepeat":0.093,"blocksMoved":12.913,"returns":2.04,"reversal":0.293,"cyclomatic":2.147,"cycle":0.22,"detour":2}},{"walls":0.08,"density":6,"boards":150,"goals":150,"blockFill":0.398,"wallFill":0.081,"hist":[0,939,7],"goalMax":[0,146,4],"m":{"found":1,"legal":1,"moves":6.353,"exact":0.913,"decisions":3.807,"fitness":4.783,"makerMs":46.96,"distance":6.527,"repeat":0.027,"repeatOther":0.027,"redRepeat":0.013,"blocksMoved":6.307,"returns":0.047,"reversal":0.013,"cyclomatic":0.167,"cycle":0.007,"detour":1.125}},{"walls":0.08,"density":8,"boards":150,"goals":150,"blockFill":0.468,"wallFill":0.081,"hist":[0,1173,24,2,1,1],"goalMax":[0,137,9,2,1,1],"m":{"found":1,"legal":1,"moves":8.24,"exact":0.787,"decisions":4.86,"fitness":5.643,"makerMs":77.648,"distance":6.967,"repeat":0.087,"repeatOther":0.08,"redRepeat":0.013,"blocksMoved":8.007,"returns":0.233,"reversal":0.04,"cyclomatic":0.533,"cycle":0.04,"detour":1.293}},{"walls":0.08,"density":10,"boards":150,"goals":150,"blockFill":0.518,"wallFill":0.078,"hist":[0,1333,52,9,6,1],"goalMax":[0,121,17,5,6,1],"m":{"found":1,"legal":1,"moves":9.953,"exact":0.687,"decisions":5.767,"fitness":6.789,"makerMs":96.978,"distance":7.373,"repeat":0.193,"repeatOther":0.187,"redRepeat":0.02,"blocksMoved":9.34,"returns":0.613,"reversal":0.12,"cyclomatic":0.84,"cycle":0.1,"detour":1.429}},{"walls":0.08,"density":12,"boards":150,"goals":150,"blockFill":0.551,"wallFill":0.082,"hist":[0,1463,67,11,2,1],"goalMax":[0,115,26,7,1,1],"m":{"found":1,"legal":1,"moves":10.953,"exact":0.593,"decisions":6.307,"fitness":7.354,"makerMs":119.349,"distance":7.067,"repeat":0.233,"repeatOther":0.233,"redRepeat":0.04,"blocksMoved":10.293,"returns":0.66,"reversal":0.12,"cyclomatic":0.96,"cycle":0.08,"detour":1.646}},{"walls":0.08,"density":14,"boards":150,"goals":150,"blockFill":0.586,"wallFill":0.082,"hist":[0,1493,117,7,4,1],"goalMax":[0,91,50,4,4,1],"m":{"found":1,"legal":1,"moves":11.793,"exact":0.507,"decisions":6.927,"fitness":8.303,"makerMs":124.919,"distance":7.02,"repeat":0.393,"repeatOther":0.367,"redRepeat":0.1,"blocksMoved":10.813,"returns":0.98,"reversal":0.233,"cyclomatic":1.22,"cycle":0.16,"detour":1.775}},{"walls":0.08,"density":16,"boards":150,"goals":150,"blockFill":0.618,"wallFill":0.08,"hist":[0,1551,127,22,7,4,1],"goalMax":[0,85,38,16,7,3,1],"m":{"found":1,"legal":1,"moves":12.833,"exact":0.453,"decisions":7.28,"fitness":9,"makerMs":125.105,"distance":6.74,"repeat":0.433,"repeatOther":0.413,"redRepeat":0.073,"blocksMoved":11.413,"returns":1.42,"reversal":0.213,"cyclomatic":1.687,"cycle":0.167,"detour":2}},{"walls":0.1,"density":6,"boards":150,"goals":150,"blockFill":0.383,"wallFill":0.102,"hist":[0,867,7],"goalMax":[0,146,4],"m":{"found":1,"legal":1,"moves":5.873,"exact":0.927,"decisions":3.22,"fitness":4.453,"makerMs":36.023,"distance":5.7,"repeat":0.027,"repeatOther":0.027,"redRepeat":0.013,"blocksMoved":5.827,"returns":0.047,"reversal":0.013,"cyclomatic":0.127,"cycle":0.007,"detour":1.125}},{"walls":0.1,"density":8,"boards":150,"goals":150,"blockFill":0.451,"wallFill":0.102,"hist":[0,1132,31,6,0,1],"goalMax":[0,135,9,5,0,1],"m":{"found":1,"legal":1,"moves":8.113,"exact":0.793,"decisions":4.56,"fitness":5.339,"makerMs":57.034,"distance":6.947,"repeat":0.1,"repeatOther":0.093,"redRepeat":0.02,"blocksMoved":7.8,"returns":0.313,"reversal":0.053,"cyclomatic":0.553,"cycle":0.06,"detour":1.317}},{"walls":0.1,"density":10,"boards":150,"goals":150,"blockFill":0.501,"wallFill":0.098,"hist":[0,1163,60,8,4],"goalMax":[0,121,20,5,4],"m":{"found":1,"legal":1,"moves":8.82,"exact":0.753,"decisions":4.807,"fitness":6.063,"makerMs":61.293,"distance":6.353,"repeat":0.193,"repeatOther":0.187,"redRepeat":0.04,"blocksMoved":8.233,"returns":0.587,"reversal":0.133,"cyclomatic":0.787,"cycle":0.08,"detour":1.5}},{"walls":0.1,"density":12,"boards":150,"goals":150,"blockFill":0.533,"wallFill":0.102,"hist":[0,1216,64,7,1,0,0,1],"goalMax":[0,118,25,5,1,0,0,1],"m":{"found":1,"legal":1,"moves":9.173,"exact":0.72,"decisions":4.98,"fitness":6.768,"makerMs":70.209,"distance":5.767,"repeat":0.213,"repeatOther":0.213,"redRepeat":0.033,"blocksMoved":8.593,"returns":0.58,"reversal":0.14,"cyclomatic":0.76,"cycle":0.073,"detour":1.75}},{"walls":0.1,"density":14,"boards":150,"goals":150,"blockFill":0.567,"wallFill":0.102,"hist":[0,1397,86,10,3,3],"goalMax":[0,102,36,6,3,3],"m":{"found":1,"legal":1,"moves":10.84,"exact":0.593,"decisions":5.693,"fitness":7.527,"makerMs":82.702,"distance":6.46,"repeat":0.32,"repeatOther":0.293,"redRepeat":0.073,"blocksMoved":9.993,"returns":0.847,"reversal":0.18,"cyclomatic":1.113,"cycle":0.153,"detour":1.809}},{"walls":0.1,"density":16,"boards":150,"goals":150,"blockFill":0.598,"wallFill":0.1,"hist":[0,1446,93,13,7,6],"goalMax":[0,100,31,8,6,5],"m":{"found":1,"legal":1,"moves":11.527,"exact":0.573,"decisions":6.093,"fitness":8.041,"makerMs":84.087,"distance":5.96,"repeat":0.333,"repeatOther":0.32,"redRepeat":0.047,"blocksMoved":10.433,"returns":1.093,"reversal":0.147,"cyclomatic":1.307,"cycle":0.1,"detour":2}},{"walls":0.125,"density":6,"boards":150,"goals":150,"blockFill":0.366,"wallFill":0.126,"hist":[0,826,6],"goalMax":[0,145,5],"m":{"found":1,"legal":1,"moves":5.587,"exact":0.953,"decisions":2.773,"fitness":4.176,"makerMs":19.48,"distance":5.427,"repeat":0.033,"repeatOther":0.033,"redRepeat":0,"blocksMoved":5.547,"returns":0.04,"reversal":0.027,"cyclomatic":0.14,"cycle":0.007,"detour":1.225}},{"walls":0.125,"density":8,"boards":150,"goals":150,"blockFill":0.432,"wallFill":0.126,"hist":[0,974,22,5,0,1],"goalMax":[0,140,5,4,0,1],"m":{"found":1,"legal":1,"moves":6.92,"exact":0.873,"decisions":3.393,"fitness":5.1,"makerMs":31.091,"distance":5.387,"repeat":0.067,"repeatOther":0.067,"redRepeat":0.007,"blocksMoved":6.68,"returns":0.24,"reversal":0.04,"cyclomatic":0.44,"cycle":0.033,"detour":1.5}},{"walls":0.125,"density":10,"boards":150,"goals":150,"blockFill":0.48,"wallFill":0.122,"hist":[0,1043,44,2,4],"goalMax":[0,127,17,2,4],"m":{"found":1,"legal":1,"moves":7.687,"exact":0.807,"decisions":3.847,"fitness":5.743,"makerMs":34.522,"distance":5.193,"repeat":0.153,"repeatOther":0.153,"redRepeat":0.027,"blocksMoved":7.287,"returns":0.4,"reversal":0.113,"cyclomatic":0.58,"cycle":0.06,"detour":1.5}},{"walls":0.125,"density":12,"boards":150,"goals":150,"blockFill":0.51,"wallFill":0.126,"hist":[0,1078,26,1],"goalMax":[0,135,14,1],"m":{"found":1,"legal":1,"moves":7.553,"exact":0.833,"decisions":3.887,"fitness":6.063,"makerMs":37.739,"distance":4.707,"repeat":0.1,"repeatOther":0.093,"redRepeat":0.013,"blocksMoved":7.367,"returns":0.187,"reversal":0.067,"cyclomatic":0.413,"cycle":0.027,"detour":1.75}},{"walls":0.125,"density":14,"boards":150,"goals":150,"blockFill":0.542,"wallFill":0.127,"hist":[0,1216,63,6,2,1],"goalMax":[0,116,27,4,2,1],"m":{"found":1,"legal":1,"moves":9.153,"exact":0.72,"decisions":4.493,"fitness":6.829,"makerMs":49.937,"distance":5.307,"repeat":0.227,"repeatOther":0.22,"redRepeat":0.047,"blocksMoved":8.587,"returns":0.567,"reversal":0.147,"cyclomatic":0.76,"cycle":0.1,"detour":2}},{"walls":0.125,"density":16,"boards":150,"goals":150,"blockFill":0.572,"wallFill":0.125,"hist":[0,1270,88,9,3,2],"goalMax":[0,113,27,6,2,2],"m":{"found":1,"legal":1,"moves":9.967,"exact":0.64,"decisions":5.153,"fitness":7.336,"makerMs":52.271,"distance":4.913,"repeat":0.247,"repeatOther":0.24,"redRepeat":0.053,"blocksMoved":9.147,"returns":0.82,"reversal":0.14,"cyclomatic":1.12,"cycle":0.113,"detour":2.091}},{"walls":0.15,"density":6,"boards":150,"goals":150,"blockFill":0.349,"wallFill":0.15,"hist":[0,751,6],"goalMax":[0,145,5],"m":{"found":1,"legal":1,"moves":5.087,"exact":0.973,"decisions":2.193,"fitness":3.887,"makerMs":10.479,"distance":4.533,"repeat":0.033,"repeatOther":0.033,"redRepeat":0,"blocksMoved":5.047,"returns":0.04,"reversal":0.027,"cyclomatic":0.113,"cycle":0.007,"detour":1.333}},{"walls":0.15,"density":8,"boards":150,"goals":150,"blockFill":0.412,"wallFill":0.15,"hist":[0,869,16,1],"goalMax":[0,140,9,1],"m":{"found":1,"legal":1,"moves":6.027,"exact":0.94,"decisions":2.747,"fitness":4.547,"makerMs":16.816,"distance":4.647,"repeat":0.067,"repeatOther":0.067,"redRepeat":0.007,"blocksMoved":5.907,"returns":0.12,"reversal":0.053,"cyclomatic":0.24,"cycle":0.013,"detour":1.5}},{"walls":0.15,"density":10,"boards":150,"goals":150,"blockFill":0.457,"wallFill":0.149,"hist":[0,934,21,2,1],"goalMax":[0,138,9,2,1],"m":{"found":1,"legal":1,"moves":6.573,"exact":0.867,"decisions":3.12,"fitness":5.169,"makerMs":20.004,"distance":4.047,"repeat":0.08,"repeatOther":0.08,"redRepeat":0.013,"blocksMoved":6.387,"returns":0.187,"reversal":0.06,"cyclomatic":0.353,"cycle":0.033,"detour":1.792}},{"walls":0.15,"density":12,"boards":150,"goals":150,"blockFill":0.486,"wallFill":0.152,"hist":[0,963,19,1,1],"goalMax":[0,136,12,1,1],"m":{"found":1,"legal":1,"moves":6.72,"exact":0.867,"decisions":3.247,"fitness":5.86,"makerMs":22.22,"distance":4.167,"repeat":0.093,"repeatOther":0.08,"redRepeat":0.027,"blocksMoved":6.56,"returns":0.16,"reversal":0.067,"cyclomatic":0.307,"cycle":0.04,"detour":2}},{"walls":0.15,"density":14,"boards":150,"goals":150,"blockFill":0.52,"wallFill":0.15,"hist":[0,1092,34,5,0,1],"goalMax":[0,128,16,5,0,1],"m":{"found":1,"legal":1,"moves":7.867,"exact":0.793,"decisions":3.593,"fitness":6.079,"makerMs":24.173,"distance":4.52,"repeat":0.147,"repeatOther":0.14,"redRepeat":0.033,"blocksMoved":7.547,"returns":0.32,"reversal":0.087,"cyclomatic":0.507,"cycle":0.047,"detour":2}},{"walls":0.15,"density":16,"boards":150,"goals":150,"blockFill":0.546,"wallFill":0.151,"hist":[0,1043,50,2],"goalMax":[0,127,21,2],"m":{"found":1,"legal":1,"moves":7.66,"exact":0.833,"decisions":3.967,"fitness":6.334,"makerMs":23.141,"distance":3.967,"repeat":0.153,"repeatOther":0.133,"redRepeat":0.067,"blocksMoved":7.3,"returns":0.36,"reversal":0.093,"cyclomatic":0.727,"cycle":0.073,"detour":2}}],"walls":[0,0.02,0.04,0.06,0.08,0.1,0.125,0.15],"densities":[6,8,10,12,14,16],"maxCount":8,"boards":7200,"effort":[0],"timeByWall":[{"walls":0,"boards":900,"parts":{"The maker":210.195,"Board generation":1.05,"The Referee":0.223,"The Judge":0.223,"Choices along the proof":0.269}},{"walls":0.02,"boards":900,"parts":{"The maker":193.17,"Board generation":1.123,"The Referee":0.226,"The Judge":0.189,"Choices along the proof":0.271}},{"walls":0.04,"boards":900,"parts":{"The maker":164.735,"Board generation":1.05,"The Referee":0.205,"The Judge":0.156,"Choices along the proof":0.233}},{"walls":0.06,"boards":900,"parts":{"The maker":123.826,"Board generation":0.964,"The Referee":0.16,"The Judge":0.127,"Choices along the proof":0.189}},{"walls":0.08,"boards":900,"parts":{"The maker":110.621,"Board generation":1.111,"The Referee":0.168,"The Judge":0.131,"Choices along the proof":0.198}},{"walls":0.1,"boards":900,"parts":{"The maker":79.09,"Board generation":1.103,"The Referee":0.129,"The Judge":0.109,"Choices along the proof":0.163}},{"walls":0.125,"boards":900,"parts":{"The maker":49.661,"Board generation":1.067,"The Referee":0.123,"The Judge":0.084,"Choices along the proof":0.135}},{"walls":0.15,"boards":900,"parts":{"The maker":30.526,"Board generation":1.034,"The Referee":0.075,"The Judge":0.097,"Choices along the proof":0.098}}],"candidates":[{"walls":0,"boards":100,"perBoard":130.5,"length":{"candidates":7.439,"longest":20.99,"finalists":11.003,"chosen":13.1,"standing":0.771},"stage":{"candidates":0.106,"finalists":0.28,"chosen":0.43},"long":{"candidates":0.225,"chosen":0.62},"buckets":[{"n":6338,"re":3,"share":0,"finalRe":0,"finalNo":0.007,"fitRe":6.318,"fitNo":1.959,"decRe":5,"decNo":1.858},{"n":3770,"re":210,"share":0.056,"finalRe":0.071,"finalNo":0.027,"fitRe":4.308,"fitNo":2.591,"decRe":5.548,"decNo":4.935},{"n":2215,"re":680,"share":0.307,"finalRe":0.074,"finalNo":0.029,"fitRe":3.992,"fitNo":2.221,"decRe":7.981,"decNo":7.877},{"n":727,"re":494,"share":0.68,"finalRe":0.089,"finalNo":0.017,"fitRe":5.201,"fitNo":2.683,"decRe":12.055,"decNo":11.571}],"steps":{"pushes":8.662,"rough":184.507,"exact":73.927,"picked":0.399}},{"walls":0.04,"boards":100,"perBoard":99.9,"length":{"candidates":7.528,"longest":23.73,"finalists":10.847,"chosen":12.44,"standing":0.726},"stage":{"candidates":0.117,"finalists":0.257,"chosen":0.38},"long":{"candidates":0.236,"chosen":0.56},"buckets":[{"n":5250,"re":8,"share":0.002,"finalRe":0,"finalNo":0.013,"fitRe":5.372,"fitNo":1.895,"decRe":4.5,"decNo":1.555},{"n":2384,"re":141,"share":0.059,"finalRe":0.121,"finalNo":0.037,"fitRe":4.459,"fitNo":2.588,"decRe":5.021,"decNo":4.416},{"n":1503,"re":434,"share":0.289,"finalRe":0.065,"finalNo":0.047,"fitRe":3.897,"fitNo":2.076,"decRe":7.147,"decNo":7.029},{"n":853,"re":584,"share":0.685,"finalRe":0.082,"finalNo":0.019,"fitRe":3.889,"fitNo":2.414,"decRe":11.774,"decNo":11.074}],"steps":{"pushes":8.141,"rough":142.402,"exact":73.497,"picked":0.651}},{"walls":0.08,"boards":100,"perBoard":71.04,"length":{"candidates":6.381,"longest":20.05,"finalists":9.087,"chosen":10.71,"standing":0.732},"stage":{"candidates":0.095,"finalists":0.157,"chosen":0.24},"long":{"candidates":0.174,"chosen":0.39},"buckets":[{"n":4475,"re":12,"share":0.003,"finalRe":0.083,"finalNo":0.025,"fitRe":5.169,"fitNo":1.723,"decRe":3.583,"decNo":1.266},{"n":1394,"re":86,"share":0.062,"finalRe":0.151,"finalNo":0.06,"fitRe":4.02,"fitNo":2.588,"decRe":4.302,"decNo":3.905},{"n":804,"re":282,"share":0.351,"finalRe":0.074,"finalNo":0.069,"fitRe":3.917,"fitNo":2.09,"decRe":6.266,"decNo":6.096},{"n":431,"re":298,"share":0.691,"finalRe":0.087,"finalNo":0.09,"fitRe":2.978,"fitNo":2.498,"decRe":9.883,"decNo":9.91}],"steps":{"pushes":4.213,"rough":76.112,"exact":47.296,"picked":0.301}},{"walls":0.15,"boards":100,"perBoard":40.81,"length":{"candidates":4.071,"longest":12.05,"finalists":6.127,"chosen":6.79,"standing":0.748},"stage":{"candidates":0.043,"finalists":0.077,"chosen":0.12},"long":{"candidates":0.051,"chosen":0.11},"buckets":[{"n":3373,"re":12,"share":0.004,"finalRe":0.417,"finalNo":0.054,"fitRe":4.595,"fitNo":1.516,"decRe":1.333,"decNo":0.878},{"n":498,"re":45,"share":0.09,"finalRe":0.333,"finalNo":0.159,"fitRe":3.789,"fitNo":2.491,"decRe":3.711,"decNo":3.316},{"n":163,"re":78,"share":0.479,"finalRe":0.128,"finalNo":0.141,"fitRe":3.917,"fitNo":1.891,"decRe":4.795,"decNo":5.129},{"n":47,"re":42,"share":0.894,"finalRe":0.071,"finalNo":0.4,"fitRe":2.532,"fitNo":4.626,"decRe":7.167,"decNo":8}],"steps":{"pushes":2.301,"rough":26.151,"exact":19.37,"picked":0.233}}],"candDensity":[12],"profile":[{"walls":0,"density":12,"boards":100,"parts":{"Board generation":2.49,"Push search (goal-fast.ts)":7.95,"Simplify and replay proofs":28.94,"A* search, the rest (difficulty.ts astar)":43.08,"Lower bound (window.ts lower, lowerCheap)":177.92,"Measure set-up (windows, the blocks that matter)":7.3,"Other (the runtime, garbage collection, the rest)":2,"The experiment's own analysis (the Judge on every candidate)":13.25,"Judging the finalists (decisions)":0.24}},{"walls":0.04,"density":12,"boards":100,"parts":{"Other (the runtime, garbage collection, the rest)":1.66,"Board generation":2.64,"Push search (goal-fast.ts)":7.51,"Simplify and replay proofs":25.61,"Measure set-up (windows, the blocks that matter)":5.17,"Lower bound (window.ts lower, lowerCheap)":148.85,"A* search, the rest (difficulty.ts astar)":35.57,"The experiment's own analysis (the Judge on every candidate)":9.41,"Judging the finalists (decisions)":0.6}},{"walls":0.08,"density":12,"boards":100,"parts":{"Other (the runtime, garbage collection, the rest)":1.05,"Board generation":1.74,"Push search (goal-fast.ts)":3.97,"Simplify and replay proofs":14.23,"Measure set-up (windows, the blocks that matter)":4.54,"Lower bound (window.ts lower, lowerCheap)":82.1,"A* search, the rest (difficulty.ts astar)":22.34,"The experiment's own analysis (the Judge on every candidate)":5.45,"Judging the finalists (decisions)":0.29}},{"walls":0.15,"density":12,"boards":100,"parts":{"Other (the runtime, garbage collection, the rest)":0.88,"Board generation":2.24,"Push search (goal-fast.ts)":2.19,"Simplify and replay proofs":3,"Measure set-up (windows, the blocks that matter)":1.88,"Lower bound (window.ts lower, lowerCheap)":30.9,"A* search, the rest (difficulty.ts astar)":9.16,"The experiment's own analysis (the Judge on every candidate)":2.27,"Judging the finalists (decisions)":0.18}}]};
 const $ = (id) => document.getElementById(id);
-const pc = (x) => (x === null ? "–" : Math.round(100 * x) + "%");
+const pc = (x) => (x === null || x === undefined ? "–" : Math.round(100 * x) + "%");
 const wl = (w) => Math.round(w * 1000) / 10 + "%";
+const esc = (s) => String(s).replace(/"/g, "&quot;");
 const tip = $("tip");
 document.addEventListener("mousemove", (e) => {
   const t = e.target.closest && e.target.closest("[data-tip]");
   if (!t) { tip.style.display = "none"; return; }
   tip.innerHTML = t.dataset.tip; tip.style.display = "block";
-  tip.style.left = Math.min(innerWidth - 290, e.clientX + 14) + "px"; tip.style.top = e.clientY + 14 + "px";
+  tip.style.left = Math.min(innerWidth - 310, e.clientX + 14) + "px"; tip.style.top = e.clientY + 14 + "px";
 });
+/** An ordinal colour (light to dark with the value), the i-th of n. */
+const ord = (i, n) => "var(--o" + (n <= 1 ? 5 : 1 + Math.round((i * 7) / (n - 1))) + ")";
+const cat = (i) => "var(--c" + (i + 1) + ")";
+const legend = (items) => items.map(([name, color]) => '<span><i style="background:' + color + '"></i>' + name + "</span>").join("");
+const nice = (top) => { const raw = top / 5, p = Math.pow(10, Math.floor(Math.log10(raw))), m = raw / p; return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 2.5 ? 2.5 : m <= 5 ? 5 : 10) * p; };
+
+/** Axes with titles: y grid lines and ticks, the x title under, the y title turned. */
+function frame(o) {
+  const { W, H, L, R, T, B, yMax, yFmt, xTitle, yTitle } = o, step = nice(yMax);
+  const y = (v) => T + (1 - v / yMax) * (H - T - B);
+  let s = "";
+  for (let v = 0; v <= yMax + 1e-9; v += step) s += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y(v) + '" y2="' + y(v) + '" stroke="var(--line)"/><text x="' + (L - 6) + '" y="' + (y(v) + 4) + '" text-anchor="end">' + yFmt(v) + "</text>";
+  s += '<text x="' + (L + (W - L - R) / 2) + '" y="' + (H - 4) + '" text-anchor="middle" class="t">' + xTitle + "</text>";
+  s += '<text transform="translate(13,' + (T + (H - T - B) / 2) + ') rotate(-90)" text-anchor="middle" class="t">' + yTitle + "</text>";
+  return { s, y };
+}
+
+/** Lines over the wall share (x by value): series [{ name, color, pts: [[x, y, tip]] }]. */
+function lines(el, o) {
+  const W = o.W || 900, H = o.H || 290, L = 64, R = 96, T = 12, B = 46;
+  const xs = o.xs, xmax = Math.max(...xs) || 1, x = (v) => L + (v / xmax) * (W - L - R);
+  const yMax = o.yMax ?? Math.max(...o.series.flatMap((s) => s.pts.map((p) => p[1]))) * 1.1;
+  const f = frame({ W, H, L, R, T, B, yMax, yFmt: o.yFmt, xTitle: o.xTitle, yTitle: o.yTitle });
+  let s = f.s;
+  for (const v of xs) s += '<text x="' + x(v) + '" y="' + (H - B + 16) + '" text-anchor="middle">' + o.xFmt(v) + "</text>";
+  const ends = [];
+  for (const se of o.series) {
+    s += '<polyline points="' + se.pts.map((p) => x(p[0]) + "," + f.y(p[1])).join(" ") + '" fill="none" stroke="' + se.color + '" stroke-width="2"/>';
+    for (const p of se.pts) s += '<circle cx="' + x(p[0]) + '" cy="' + f.y(p[1]) + '" r="4" fill="' + se.color + '" stroke="var(--card)" stroke-width="2"/><circle cx="' + x(p[0]) + '" cy="' + f.y(p[1]) + '" r="11" fill="transparent" data-tip="' + esc(p[2]) + '"/>';
+    const last = se.pts.at(-1);
+    if (last) ends.push({ x: x(last[0]) + 8, y: f.y(last[1]) + 4, name: se.name });
+  }
+  ends.sort((a, b) => a.y - b.y);
+  for (let i = 1; i < ends.length; i++) ends[i].y = Math.max(ends[i].y, ends[i - 1].y + 12);
+  const over = ends.length ? ends.at(-1).y - (H - B + 2) : 0;
+  if (over > 0) for (const e of ends) e.y -= over;
+  for (let i = ends.length - 2; i >= 0; i--) ends[i].y = Math.min(ends[i].y, ends[i + 1].y - 12);
+  for (const e of ends) s += '<text x="' + e.x + '" y="' + e.y + '">' + e.name + "</text>";
+  el.innerHTML = (o.series.length > 1 ? '<div class="legend">' + legend(o.series.map((se) => [se.name, se.color])) + "</div>" : "") + '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' + esc(o.yTitle + " by " + o.xTitle) + '">' + s + "</svg>";
+}
+
+/** Grouped bars: groups along x, a bar per series in each. */
+function bars(el, o) {
+  const W = o.W || 900, H = o.H || 280, L = 64, R = 10, T = 14, B = 46, G = o.groups.length, S = o.series.length;
+  const yMax = o.yMax ?? Math.max(...o.series.flatMap((s) => s.values.filter((v) => v !== null))) * 1.15;
+  const f = frame({ W, H, L, R, T, B, yMax, yFmt: o.yFmt, xTitle: o.xTitle, yTitle: o.yTitle });
+  let s = f.s;
+  const gw = (W - L - R) / G, bw = Math.min(40, (gw - 16) / S - 2);
+  o.groups.forEach((g, i) => {
+    const x0 = L + i * gw + (gw - S * (bw + 2)) / 2;
+    s += '<text x="' + (L + (i + 0.5) * gw) + '" y="' + (H - B + 16) + '" text-anchor="middle">' + g + "</text>";
+    o.series.forEach((se, j) => {
+      const v = se.values[i];
+      if (v === null || v === undefined) return;
+      const x = x0 + j * (bw + 2), h = Math.max(0, f.y(0) - f.y(v)), r = Math.min(4, h, bw / 2);
+      s += '<path d="M' + x + "," + f.y(0) + "v" + -(h - r) + "q0,-" + r + " " + r + ",-" + r + "h" + (bw - 2 * r) + "q" + r + ",0 " + r + "," + r + "v" + (h - r) + 'z" fill="' + se.color + '"/>';
+      if (o.labels) s += '<text class="v" x="' + (x + bw / 2) + '" y="' + (f.y(v) - 4) + '" text-anchor="middle">' + o.yFmt(v) + "</text>";
+      s += '<rect x="' + x + '" y="' + 14 + '" width="' + (bw + 2) + '" height="' + (H - 14 - B) + '" fill="transparent" data-tip="' + esc(g + ", " + se.name + ": " + o.yFmt(v) + (se.tips ? "<br>" + se.tips[i] : "")) + '"/>';
+    });
+  });
+  el.innerHTML = '<div class="legend">' + legend(o.series.map((se) => [se.name, se.color])) + '</div><svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' + esc(o.yTitle + " by " + o.xTitle) + '">' + s + "</svg>";
+}
+
+/** A continuous heatmap with its axes titled, the value printed in each cell and a colour scale. */
+function heatmap(el, o) {
+  const rows = o.rows, cols = o.cols, Wd = o.W || 450, L = o.L || 78, T = 46, ch = o.ch || 24, cw = (Wd - L - 6) / cols.length, H = T + rows.length * ch + 52;
+  const vals = []; rows.forEach((r, i) => cols.forEach((c, j) => { const v = o.value(i, j); if (v !== null && v !== undefined) vals.push(v); }));
+  const lo = o.lo ?? Math.min(...vals), hi = o.hi ?? Math.max(...vals);
+  // Sequential (lo to hi), or diverging round o.diverge.mid (on o.diverge.tf's scale: log2 for
+  // a ratio), blue above it, red below, grey at it.
+  const dv = o.diverge, tf = dv?.tf ?? ((v) => v), inv = dv?.inv ?? ((v) => v);
+  const span = dv ? Math.max(1e-9, ...vals.map((v) => Math.abs(tf(v) - tf(dv.mid)))) : 0;
+  const t = (v) => (dv ? Math.max(-1, Math.min(1, (tf(v) - tf(dv.mid)) / span)) : hi === lo ? 0.5 : Math.max(0, Math.min(1, (v - lo) / (hi - lo))));
+  const fill = (v) => (dv ? (t(v) >= 0 ? "color-mix(in oklab, var(--hi) " + Math.round(100 * t(v)) + "%, var(--mid))" : "color-mix(in oklab, var(--neg) " + Math.round(-100 * t(v)) + "%, var(--mid))") : "color-mix(in oklab, var(--hi) " + Math.round(100 * t(v)) + "%, var(--lo))");
+  let s = '<text x="' + (L + (Wd - L - 6) / 2) + '" y="11" text-anchor="middle" class="t">' + o.colTitle + "</text>";
+  cols.forEach((c, j) => { s += '<text x="' + (L + (j + 0.5) * cw) + '" y="27" text-anchor="middle">' + c[0] + "</text>" + (c[1] ? '<text x="' + (L + (j + 0.5) * cw) + '" y="40" text-anchor="middle" style="font-size:9px">' + c[1] + "</text>" : ""); });
+  s += '<text transform="translate(11,' + (T + (rows.length * ch) / 2) + ') rotate(-90)" text-anchor="middle" class="t">' + o.rowTitle + "</text>";
+  rows.forEach((r, i) => {
+    s += '<text x="' + (L - 6) + '" y="' + (T + i * ch + ch / 2 + 4) + '" text-anchor="end">' + r + "</text>";
+    cols.forEach((c, j) => {
+      const v = o.value(i, j);
+      s += '<rect x="' + (L + j * cw) + '" y="' + (T + i * ch) + '" width="' + (cw + 0.5) + '" height="' + (ch + 0.5) + '" fill="' + (v === null || v === undefined ? "var(--empty)" : fill(v)) + '" data-tip="' + esc((o.tip ? o.tip(i, j) : r + ", " + c[0]) + "<br>" + o.name + ": <b>" + (v === null || v === undefined ? "–" : o.fmt(v)) + "</b>") + '"/>';
+      if (v !== null && v !== undefined) s += '<text class="v" x="' + (L + (j + 0.5) * cw) + '" y="' + (T + i * ch + ch / 2 + 4) + '" text-anchor="middle" style="pointer-events:none;fill:' + (Math.abs(t(v)) > 0.55 ? "var(--hi-ink)" : "var(--ink)") + '">' + o.fmt(v) + (o.sub ? '<tspan style="font-size:9px;opacity:.75"> ' + o.sub(i, j) + "</tspan>" : "") + "</text>";
+    });
+  });
+  // The colour scale.
+  const sy = T + rows.length * ch + 16, sw = Math.min(220, Wd - L - 6), id = "g" + Math.random().toString(36).slice(2);
+  const stops = dv ? '<stop offset="0" stop-color="var(--neg)"/><stop offset="0.5" stop-color="var(--mid)"/><stop offset="1" stop-color="var(--hi)"/>' : '<stop offset="0" stop-color="var(--lo)"/><stop offset="1" stop-color="var(--hi)"/>';
+  s += '<defs><linearGradient id="' + id + '">' + stops + "</linearGradient></defs>";
+  s += '<rect x="' + L + '" y="' + sy + '" width="' + sw + '" height="10" fill="url(#' + id + ')"/>';
+  const [a, m, z] = dv ? [inv(tf(dv.mid) - span), dv.mid, inv(tf(dv.mid) + span)] : [lo, (lo + hi) / 2, hi];
+  s += '<text x="' + L + '" y="' + (sy + 24) + '">' + o.fmt(a) + '</text><text x="' + (L + sw / 2) + '" y="' + (sy + 24) + '" text-anchor="middle">' + o.fmt(m) + '</text><text x="' + (L + sw) + '" y="' + (sy + 24) + '" text-anchor="end">' + o.fmt(z) + "</text>";
+  s += '<text x="' + (L - 6) + '" y="' + (sy + 9) + '" text-anchor="end">colour</text>';
+  el.innerHTML = (o.title ? "<h3 style='margin-top:0'>" + o.title + "</h3>" : "") + (o.what ? "<p class='what'>" + o.what + "</p>" : "") + '<svg viewBox="0 0 ' + Wd + " " + H + '" role="img" aria-label="' + esc(o.title || o.name) + '">' + s + "</svg>";
+}
+
+/** Horizontal stacked bars: a row each, its parts in a fixed order, the total at the end. */
+function stacked(el, o) {
+  const W = 900, L = 120, R = 70, T = 8, rh = 28, B = 42, H = T + o.rows.length * rh + B;
+  const max = Math.max(...o.rows.map((r) => o.order.reduce((a, k) => a + (r.parts[k] || 0), 0)));
+  const x = (v) => (v / max) * (W - L - R);
+  let s = "";
+  const step = nice(max);
+  for (let v = 0; v <= max + 1e-9; v += step) s += '<line x1="' + (L + x(v)) + '" x2="' + (L + x(v)) + '" y1="' + T + '" y2="' + (T + o.rows.length * rh) + '" stroke="var(--line)"/><text x="' + (L + x(v)) + '" y="' + (T + o.rows.length * rh + 14) + '" text-anchor="middle">' + Math.round(v) + "</text>";
+  s += '<text x="' + (L + (W - L - R) / 2) + '" y="' + (H - 4) + '" text-anchor="middle" class="t">' + o.xTitle + "</text>";
+  s += '<text x="4" y="' + (T - 0) + '" class="t" style="font-size:11px">' + "</text>";
+  o.rows.forEach((r, i) => {
+    let at = L;
+    const y = T + i * rh + 4, total = o.order.reduce((a, k) => a + (r.parts[k] || 0), 0);
+    s += '<text x="' + (L - 8) + '" y="' + (y + 14) + '" text-anchor="end">' + r.label + "</text>";
+    o.order.forEach((k, j) => {
+      const v = r.parts[k] || 0, w = x(v);
+      if (w <= 0) return;
+      s += '<rect x="' + at + '" y="' + y + '" width="' + Math.max(0, w - 2) + '" height="' + (rh - 8) + '" fill="' + o.colors[j] + '" data-tip="' + esc(r.label + "<br>" + k + ": <b>" + v.toFixed(1) + " ms</b> a board (" + Math.round((100 * v) / total) + "%)") + '"/>';
+      at += w;
+    });
+    s += '<text class="v" x="' + (at + 6) + '" y="' + (y + 14) + '">' + Math.round(total) + " ms</text>";
+  });
+  s += '<text transform="translate(12,' + (T + (o.rows.length * rh) / 2) + ') rotate(-90)" text-anchor="middle" class="t">' + o.yTitle + "</text>";
+  el.innerHTML = (o.title ? "<h3 style='margin-top:0'>" + o.title + "</h3>" : "") + (o.what ? "<p class='what'>" + o.what + "</p>" : "") + '<div class="legend">' + legend(o.order.map((k, j) => [k, o.colors[j]])) + '</div><svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' + esc(o.title || o.xTitle) + '">' + s + "</svg>";
+}
+const card = (parent) => { const d = document.createElement("div"); d.className = "card"; parent.appendChild(d); return d; };
+
 $("effort").textContent = DATA.effort.join(", ");
 const goals = DATA.cells.reduce((a, c) => a + c.goals, 0);
-$("count").textContent = DATA.boards + " boards, " + goals + " goals (" + DATA.cells.length + " cells, about " + Math.round(DATA.boards / DATA.cells.length) + " boards each).";
+$("count").textContent = DATA.boards + " boards, " + goals + " goals (" + DATA.walls.length + " wall shares × " + DATA.densities.length + " block densities, about " + Math.round(DATA.boards / DATA.cells.length) + " boards each).";
 const cell = (w, d) => DATA.cells.find((c) => c.walls === w && c.density === d);
 const pool = (cs, f) => { const n = cs.reduce((a, c) => a + c.goals, 0); return n ? cs.reduce((a, c) => a + c.goals * (f(c) ?? 0), 0) / n : null; };
-const W0 = DATA.walls[0], WN = DATA.walls.at(-1), D12 = DATA.densities.includes(12) ? 12 : DATA.densities[DATA.densities.length >> 1];
+const W0 = DATA.walls[0], WN = DATA.walls.at(-1);
 const byWall = (w) => DATA.cells.filter((c) => c.walls === w);
+const C0 = DATA.candidates[0], CN = DATA.candidates.at(-1);
 $("tiles").innerHTML = [
-  [pc(pool(byWall(W0), (c) => c.m.repeat)), "goals with a block moved 2+ times, no walls (all densities)"],
-  [pc(pool(byWall(WN), (c) => c.m.repeat)), "the same at " + wl(WN) + " walls"],
-  [pc(pool(byWall(W0), (c) => c.m.cycle)), "goals with a directed blocker cycle, no walls"],
-  [pc(pool(byWall(WN), (c) => c.m.cycle)), "the same at " + wl(WN) + " walls"],
+  [pc(pool(byWall(W0), (c) => c.m.repeat)) + " → " + pc(pool(byWall(WN), (c) => c.m.repeat)), "goals with a block moved 2+ times, no walls → " + wl(WN) + " walls (all densities)"],
   [(pool(byWall(W0), (c) => c.m.moves) ?? 0).toFixed(1) + " → " + (pool(byWall(WN), (c) => c.m.moves) ?? 0).toFixed(1), "proof moves (mean), no walls → " + wl(WN)],
+  ...(C0 ? [
+    [pc(C0.stage.candidates) + " → " + pc(C0.stage.chosen), "re-moved blocks among the maker's candidates → among its chosen goals, no walls: selection favours them"],
+    [Math.round(C0.perBoard) + " → " + Math.round(CN.perBoard), "candidates a board, no walls → " + wl(CN.walls) + ": walls shrink the pool"],
+  ] : []),
 ].map(([v, w]) => '<div class="tile"><div class="big">' + v + '</div><div class="what">' + w + "</div></div>").join("");
 
-const ramp = (i, n) => "var(--s" + (n <= 1 ? 3 : 1 + Math.round((i * 5) / (n - 1))) + ")";
-// The histogram: grouped bars, x times moved, a bar per wall share.
-let histD = "all", zoom = true;
+// The histograms: a panel per cell.
+let showOne = false;
 function hist() {
-  const cs = (w) => DATA.cells.filter((c) => c.walls === w && (histD === "all" || c.density === histD));
-  const K = DATA.maxCount, Wn = DATA.walls.length;
-  const series = DATA.walls.map((w) => {
-    const h = []; let tot = 0;
-    for (const c of cs(w)) c.hist.forEach((v, k) => { h[k] = (h[k] || 0) + v; tot += v; });
-    return { w, tot, v: Array.from({ length: K + 1 }, (_, k) => (tot ? (h[k] || 0) / tot : 0)), n: h };
-  });
-  const W = 900, H = 320, L = 44, R = 10, T = 12, B = 34;
-  const top = Math.max(0.05, ...series.flatMap((s) => (zoom ? s.v.slice(2) : s.v))) * (zoom ? 1.1 : 1), step = top > 0.5 ? 0.2 : top > 0.2 ? 0.1 : 0.05;
-  const gw = (W - L - R) / K, bw = Math.max(2, (gw - 10) / Wn - 2);
-  const y = (v) => T + (1 - v / top) * (H - T - B);
-  let s = "";
-  for (let v = 0; v <= top + 1e-9; v += step) s += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y(v) + '" y2="' + y(v) + '" stroke="var(--line)"/><text x="' + (L - 6) + '" y="' + (y(v) + 4) + '" text-anchor="end">' + Math.round(v * 100) + "%</text>";
-  for (let k = 1; k <= K; k++) {
-    const x0 = L + (k - 1) * gw + 5;
-    s += '<text x="' + (x0 + (gw - 10) / 2) + '" y="' + (H - 14) + '" text-anchor="middle">' + k + (k === 1 ? " time" : "") + "</text>";
-    series.forEach((se, i) => {
-      const v = se.v[k], x = x0 + i * (bw + 2), h = Math.max(0, y(0) - y(Math.min(v, top)));
-      if (v > 0) s += '<path d="M' + x + "," + y(0) + "v" + -Math.max(0, h - 3) + "q0,-3 3,-3h" + (bw - 6) + "q3,0 3,3v" + Math.max(0, h - 3) + 'z" fill="' + ramp(i, Wn) + '"/>';
-      s += '<rect x="' + x + '" y="' + T + '" width="' + (bw + 2) + '" height="' + (H - T - B) + '" fill="transparent" data-tip="' + wl(se.w) + " walls, moved " + k + " times: " + (100 * v).toFixed(1) + "% of " + se.tot + ' moved blocks (' + (se.n[k] || 0) + ')"/>';
+  const Wn = DATA.walls.length, Dn = DATA.densities.length, K = Math.min(DATA.maxCount, 8), from = showOne ? 1 : 2;
+  const W = 960, L = 84, T = 50, R = 6, B = 50, pw = (W - L - R) / Dn, ph = 74, gap = 10, H = T + Wn * ph + B;
+  const share = (c, k) => { const tot = c.hist.reduce((a, b) => a + b, 0); return tot ? (c.hist[k] || 0) / tot : 0; };
+  let top = 0;
+  for (const c of DATA.cells) for (let k = from; k <= K; k++) top = Math.max(top, share(c, k));
+  top = nice(top) * Math.ceil(top / nice(top));
+  let s = '<text x="' + (L + (W - L - R) / 2) + '" y="12" text-anchor="middle" class="t">Block density (tries per 4×4 chunk; block fill round the origin)</text>';
+  s += '<text transform="translate(12,' + (T + (Wn * ph) / 2) + ') rotate(-90)" text-anchor="middle" class="t">Wall share (% of cells)</text>';
+  DATA.densities.forEach((d, j) => { s += '<text x="' + (L + (j + 0.5) * pw) + '" y="30" text-anchor="middle">' + d + '</text><text x="' + (L + (j + 0.5) * pw) + '" y="43" text-anchor="middle" style="font-size:9px">' + pc(cell(DATA.walls[0], d).blockFill) + " blocks</text>"; });
+  const bw = (pw - gap - 8) / (K - from + 1);
+  DATA.walls.forEach((w, i) => {
+    const y0 = T + i * ph, base = y0 + ph - 14, scale = (v) => (v / top) * (ph - 26);
+    s += '<text x="' + (L - 30) + '" y="' + (y0 + ph / 2) + '" text-anchor="end">' + wl(w) + "</text>";
+    // The y scale on each row: 0 and the top.
+    s += '<text x="' + (L - 4) + '" y="' + (base + 3) + '" text-anchor="end" style="font-size:9px">0</text><text x="' + (L - 4) + '" y="' + (base - scale(top) + 3) + '" text-anchor="end" style="font-size:9px">' + Math.round(top * 1000) / 10 + "%</text>";
+    DATA.densities.forEach((d, j) => {
+      const c = cell(w, d), x0 = L + j * pw + 4;
+      s += '<rect x="' + (x0 - 2) + '" y="' + (y0 + 4) + '" width="' + (pw - gap + 2) + '" height="' + (ph - 8) + '" fill="var(--bg)"/>';
+      s += '<line x1="' + x0 + '" x2="' + (x0 + pw - gap - 4) + '" y1="' + base + '" y2="' + base + '" stroke="var(--line)"/><line x1="' + x0 + '" x2="' + (x0 + pw - gap - 4) + '" y1="' + (base - scale(top)) + '" y2="' + (base - scale(top)) + '" stroke="var(--line)" stroke-dasharray="2 3"/>';
+      if (!c) return;
+      for (let k = from; k <= K; k++) {
+        const v = share(c, k), h = scale(Math.min(v, top)), x = x0 + (k - from) * bw;
+        if (h > 0) s += '<rect x="' + (x + 1) + '" y="' + (base - h) + '" width="' + Math.max(1, bw - 2) + '" height="' + h + '" fill="' + (k === 1 ? "var(--c0)" : "var(--c1)") + '"/>';
+        s += '<rect x="' + x + '" y="' + (y0 + 4) + '" width="' + bw + '" height="' + (ph - 8) + '" fill="transparent" data-tip="' + esc(wl(w) + " walls, density " + d + "<br>blocks moved " + k + " time" + (k > 1 ? "s" : "") + ": <b>" + (100 * v).toFixed(1) + "%</b> of " + c.hist.reduce((a, b) => a + b, 0) + " moved blocks (" + (c.hist[k] || 0) + ")") + '"/>';
+        if (i === Wn - 1) s += '<text x="' + (x + bw / 2) + '" y="' + (base + 12) + '" text-anchor="middle" style="font-size:9px">' + k + "</text>";
+      }
+      s += '<text class="v" x="' + (x0 + pw - gap - 6) + '" y="' + (y0 + 16) + '" text-anchor="end" style="fill:var(--ink)">' + pc(c.m.repeat) + "</text>";
     });
-  }
-  s += '<text x="' + (L + (W - L - R) / 2) + '" y="' + (H - 1) + '" text-anchor="middle">times the block is moved in the proof</text>';
+  });
+  s += '<text x="' + (L + (W - L - R) / 2) + '" y="' + (H - 6) + '" text-anchor="middle" class="t">Times a block is moved in the proof (each panel); the corner: goals with a block moved 2+ times</text>';
+  s += '<text x="' + (L + (W - L - R) / 2) + '" y="' + (H - 22) + '" text-anchor="middle" style="font-size:10px">Bar height: share of the cell\'s moved blocks (same scale in every panel, 0 to ' + Math.round(top * 1000) / 10 + "%" + (showOne ? "; the grey bar, moved once, is cut off at the top" : "") + ")</text>";
   $("hist").setAttribute("viewBox", "0 0 " + W + " " + H);
   $("hist").innerHTML = s;
 }
-$("histFilter").innerHTML += ["all", ...DATA.densities].map((d) => '<button data-d="' + d + '"' + (d === "all" ? ' class="on"' : "") + ">" + (d === "all" ? "All" : d) + "</button>").join("");
-$("histFilter").innerHTML += ' <span style="margin-left:12px">Scale:</span> <button data-z="0">Full</button><button data-z="1" class="on">Zoom on 2+ (1 clipped)</button>';
 $("histFilter").addEventListener("click", (e) => {
   const b = e.target.closest("button"); if (!b) return;
-  if (b.dataset.z !== undefined) {
-    zoom = b.dataset.z === "1";
-    for (const x of $("histFilter").querySelectorAll("button[data-z]")) x.classList.toggle("on", x === b);
-    return hist();
-  }
-  histD = b.dataset.d === "all" ? "all" : Number(b.dataset.d);
-  for (const x of $("histFilter").querySelectorAll("button[data-d]")) x.classList.toggle("on", x === b);
+  showOne = b.dataset.one === "1";
+  for (const x of $("histFilter").querySelectorAll("button")) x.classList.toggle("on", x === b);
   hist();
 });
-$("histLegend").innerHTML = DATA.walls.map((w, i) => '<span><i style="background:' + ramp(i, DATA.walls.length) + '"></i>' + wl(w) + " walls</span>").join("");
 hist();
 
-// Share with a repeated block: wall share across, a line per density.
-(function () {
-  const W = 900, H = 260, L = 44, R = 70, T = 12, B = 30, Dn = DATA.densities.length;
-  const xs = DATA.walls, xmax = Math.max(...xs) || 1;
-  const x = (w) => L + (w / xmax) * (W - L - R), y = (v) => T + (1 - v) * (H - T - B);
-  let s = "";
-  const used = [];
-  for (let v = 0; v <= 1.0001; v += 0.2) s += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y(v) + '" y2="' + y(v) + '" stroke="var(--line)"/><text x="' + (L - 6) + '" y="' + (y(v) + 4) + '" text-anchor="end">' + Math.round(v * 100) + "%</text>";
-  for (const w of xs) s += '<text x="' + x(w) + '" y="' + (H - 8) + '" text-anchor="middle">' + wl(w) + "</text>";
-  DATA.densities.forEach((d, i) => {
-    const pts = xs.map((w) => [w, cell(w, d)]).filter(([, c]) => c && c.m.repeat !== null);
-    s += '<polyline points="' + pts.map(([w, c]) => x(w) + "," + y(c.m.repeat)).join(" ") + '" fill="none" stroke="' + ramp(i, Dn) + '" stroke-width="2"/>';
-    for (const [w, c] of pts) s += '<circle cx="' + x(w) + '" cy="' + y(c.m.repeat) + '" r="4" fill="' + ramp(i, Dn) + '" stroke="var(--card)" stroke-width="2"/><circle cx="' + x(w) + '" cy="' + y(c.m.repeat) + '" r="10" fill="transparent" data-tip="density ' + d + ", " + wl(w) + " walls: " + pc(c.m.repeat) + " of " + c.goals + ' goals"/>';
-    const last = pts.at(-1);
-    if (last) used.push({ y: y(last[1].m.repeat) + 4, x: x(last[0]) + 8, d });
-  });
-  // The end labels, kept 12 px apart and inside the plot.
-  used.sort((a, b) => a.y - b.y);
-  for (let i = 1; i < used.length; i++) used[i].y = Math.max(used[i].y, used[i - 1].y + 12);
-  const over = used.length ? used.at(-1).y - (H - B + 4) : 0;
-  if (over > 0) for (const u of used) u.y -= over;
-  for (let i = used.length - 2; i >= 0; i--) used[i].y = Math.min(used[i].y, used[i + 1].y - 12);
-  for (const u of used) s += '<text x="' + u.x + '" y="' + u.y + '">density ' + u.d + "</text>";
-  $("repeatLine").setAttribute("viewBox", "0 0 " + W + " " + H);
-  $("repeatLine").innerHTML = s;
-  $("lineLegend").innerHTML = DATA.densities.map((d, i) => '<span><i style="background:' + ramp(i, Dn) + '"></i>density ' + d + "</span>").join("");
-})();
+lines($("repeatLine"), {
+  xs: DATA.walls, xFmt: wl, xTitle: "Wall share (% of cells that are walls)", yTitle: "Goals with a block moved 2+ times", yFmt: pc, yMax: 1,
+  series: DATA.densities.map((d, i) => ({ name: "density " + d, color: ord(i, DATA.densities.length), pts: DATA.walls.map((w) => [w, cell(w, d)?.m.repeat ?? 0, "Block density " + d + ", " + wl(w) + " walls: <b>" + pc(cell(w, d)?.m.repeat) + "</b> of " + cell(w, d)?.goals + " goals have a block moved 2+ times"]) })),
+});
+$("repeatLegend").innerHTML = "";
+
+heatmap($("byLength"), {
+  W: 960, ch: 30, L: 112, name: "goals with a block moved 2+ times", rowTitle: "Proof length", colTitle: "Wall share (% of cells)", lo: 0, hi: 1,
+  rows: DATA.buckets.map((b) => b + " moves"), cols: DATA.walls.map((w) => [wl(w)]), fmt: pc,
+  value: (i, j) => { const x = DATA.byLength[j].b[i]; return x.n ? x.repeat / x.n : null; },
+  sub: (i, j) => "(" + DATA.byLength[j].b[i].n + ")",
+  tip: (i, j) => wl(DATA.walls[j]) + " walls, proofs of " + DATA.buckets[i] + " moves: " + DATA.byLength[j].b[i].n + " goals, " + pc(DATA.byLength[j].b[i].cycle / Math.max(1, DATA.byLength[j].b[i].n)) + " with a directed cycle",
+});
 
 const MAPS = [
-  ["repeat", "Goals with a block moved 2+ times", pc],
-  ["repeatOther", "Goals with a block other than red moved 2+ times", pc],
-  ["redRepeat", "Goals with red moved 2+ times", pc],
-  ["cycle", "Goals with a directed blocker cycle", pc],
-  ["cyclomatic", "Blocker-graph cyclomatic complexity (mean)", (v) => v.toFixed(2)],
-  ["reversal", "Goals with a reversal (back-and-forth)", pc],
-  ["returns", "Returns to a block already left (mean)", (v) => v.toFixed(2)],
-  ["detour", "Detour: moves per cell of red's distance (median)", (v) => v.toFixed(2)],
-  ["found", "Found rate", pc],
-  ["moves", "Fewest moves: the proof's (mean)", (v) => v.toFixed(1)],
-  ["exact", "Proof's length exact in the maker's window", pc],
-  ["decisions", "Decisions (mean)", (v) => v.toFixed(1)],
-  ["fitness", "Fitness (median)", (v) => v.toFixed(2)],
-  ["makerMs", "Maker time, ms (median)", (v) => Math.round(v)],
-  ["blocksMoved", "Blocks moved (mean)", (v) => v.toFixed(1)],
-  ["distance", "Red's distance, cells (mean)", (v) => v.toFixed(1)],
+  ["repeat", "Goals with a block moved 2+ times", pc, "share of goals whose proof moves some block twice or more"],
+  ["repeatOther", "Goals with a block other than red moved 2+ times", pc, "as above, the red block left out"],
+  ["redRepeat", "Goals with red moved 2+ times", pc, "share of goals whose red block moves twice or more"],
+  ["cycle", "Goals with a directed blocker cycle", pc, "share of goals whose blocker graph (approximation) has a directed cycle"],
+  ["cyclomatic", "Blocker-graph cyclomatic complexity", (v) => v.toFixed(2), "mean of edges − nodes + components"],
+  ["reversal", "Goals with a reversal (back-and-forth)", pc, "share of goals where a block slides back the way it came"],
+  ["returns", "Returns to a block already left", (v) => v.toFixed(2), "mean per goal: moves of a block already moved before"],
+  ["detour", "Detour", (v) => v.toFixed(2), "median of the proof's moves per cell of red's straight distance"],
+  ["found", "Found rate", pc, "share of boards where the maker found a goal"],
+  ["moves", "Fewest moves (the proof's)", (v) => v.toFixed(1), "mean moves of the proof"],
+  ["exact", "Proof's length exact in the maker's window", pc, "share of goals whose fewest the maker's measure proved"],
+  ["decisions", "Decisions", (v) => v.toFixed(1), "mean of the Judge's decision count"],
+  ["fitness", "Fitness", (v) => v.toFixed(2), "median of the Judge's fitness"],
+  ["makerMs", "Maker time", (v) => Math.round(v) + "", "median ms a goal, one process on the VM"],
+  ["blocksMoved", "Blocks moved", (v) => v.toFixed(1), "mean number of distinct blocks the proof moves"],
+  ["distance", "Red's distance", (v) => v.toFixed(1), "mean cells from red's start to its target"],
 ];
-function heat(key, title, fmt) {
-  const Dn = DATA.densities.length, Wn = DATA.walls.length;
-  const W = 300, L = 46, T = 34, cw = (W - L - 4) / Dn, ch = 26, H = T + Wn * ch + 4;
-  const vals = DATA.cells.map((c) => c.m[key]).filter((v) => v !== null);
-  const lo = Math.min(...vals), hi = Math.max(...vals);
-  let s = "";
-  DATA.densities.forEach((d, j) => {
-    const any = DATA.cells.filter((c) => c.density === d);
-    s += '<text x="' + (L + (j + 0.5) * cw) + '" y="12" text-anchor="middle">' + d + '</text><text x="' + (L + (j + 0.5) * cw) + '" y="26" text-anchor="middle" style="font-size:9px">' + Math.round(100 * any[0].blockFill) + "%</text>";
-  });
-  DATA.walls.forEach((w, i) => {
-    s += '<text x="' + (L - 6) + '" y="' + (T + i * ch + ch / 2 + 4) + '" text-anchor="end">' + wl(w) + "</text>";
-    DATA.densities.forEach((d, j) => {
-      const c = cell(w, d), v = c ? c.m[key] : null;
-      const t = v === null || hi === lo ? 0 : (v - lo) / (hi - lo);
-      const fill = v === null ? "var(--empty)" : "color-mix(in oklab, var(--s6) " + Math.round(8 + 92 * t) + "%, var(--empty))";
-      s += '<rect x="' + (L + j * cw + 1) + '" y="' + (T + i * ch + 1) + '" width="' + (cw - 2) + '" height="' + (ch - 2) + '" rx="3" fill="' + fill + '" data-tip="density ' + d + ", " + wl(w) + " walls (fill: blocks " + (c ? pc(c.blockFill) : "") + ", walls " + (c ? pc(c.wallFill) : "") + ")<br>" + title + ": <b>" + (v === null ? "–" : fmt(v)) + "</b><br>" + (c ? c.goals + " goals of " + c.boards + " boards" : "") + '"/>';
-      if (v !== null) s += '<text class="v" x="' + (L + (j + 0.5) * cw) + '" y="' + (T + i * ch + ch / 2 + 4) + '" text-anchor="middle" style="fill:' + (t > 0.55 ? "#fff" : "var(--ink)") + ';pointer-events:none">' + fmt(v) + "</text>";
-    });
-  });
-  return '<div class="card"><h3>' + title + '</h3><svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' + title + '">' + s + "</svg></div>";
+for (const [key, title, fmt, what] of MAPS) heatmap(card($("maps")), {
+  title, what, name: title, rowTitle: "Wall share", colTitle: "Block density (tries; block fill)",
+  rows: DATA.walls.map(wl), cols: DATA.densities.map((d) => [d, pc(cell(DATA.walls[0], d).blockFill)]), fmt,
+  value: (i, j) => cell(DATA.walls[i], DATA.densities[j])?.m[key] ?? null,
+  tip: (i, j) => { const c = cell(DATA.walls[i], DATA.densities[j]); return "Density " + c.density + ", " + wl(c.walls) + " walls (fill: blocks " + pc(c.blockFill) + ", walls " + pc(c.wallFill) + "), " + c.goals + " goals of " + c.boards + " boards"; },
+});
+
+// Effort 2 against effort 0.
+$("sharedD").textContent = DATA.shared.join(", ");
+if (DATA.byEffort.length) {
+  const efforts = [...new Set(DATA.byEffort.map((r) => r.effort))];
+  const xs = [...new Set(DATA.byEffort.map((r) => r.walls))].sort((a, b) => a - b);
+  const series = (f, fmt) => efforts.map((e, i) => ({ name: "effort " + e, color: cat(i), pts: DATA.byEffort.filter((r) => r.effort === e).map((r) => [r.walls, f(r), "Effort " + e + ", " + wl(r.walls) + " walls: <b>" + fmt(f(r)) + "</b> (" + r.boards + " boards)"]) }));
+  for (const [f, title, yTitle, fmt, yMax] of [[(r) => r.repeat, "Goals with a block moved 2+ times", "Goals (%)", pc, 1], [(r) => r.moves, "Proof moves (mean)", "Moves", (v) => v.toFixed(1)], [(r) => r.cycle, "Goals with a directed blocker cycle", "Goals (%)", pc], [(r) => r.makerMs, "Maker time a goal (median)", "Milliseconds", (v) => Math.round(v) + ""]]) {
+    const c = card($("effortCharts"));
+    c.innerHTML = "<h3 style='margin-top:0'>" + title + "</h3><p class='what'>x: wall share (% of cells). y: " + title.toLowerCase() + ". A line per effort level.</p><div></div>";
+    lines(c.lastChild, { W: 460, H: 270, xs, xFmt: wl, xTitle: "Wall share (% of cells)", yTitle, yFmt: fmt, yMax, series: series(f, fmt) });
+  }
 }
-$("maps").innerHTML = MAPS.map((m) => heat(...m)).join("");
 
-(function () {
-  const W = 900, L = 70, T = 22, cw = (W - L - 4) / DATA.walls.length, ch = 30, H = T + DATA.buckets.length * ch + 4;
-  let s = "";
-  DATA.walls.forEach((w, j) => { s += '<text x="' + (L + (j + 0.5) * cw) + '" y="14" text-anchor="middle">' + wl(w) + " walls</text>"; });
-  DATA.buckets.forEach((b, i) => {
-    s += '<text x="' + (L - 6) + '" y="' + (T + i * ch + ch / 2 + 4) + '" text-anchor="end">' + b + " moves</text>";
-    DATA.byLength.forEach((c, j) => {
-      const x = c.b[i], v = x.n ? x.repeat / x.n : null;
-      const fill = v === null ? "var(--empty)" : "color-mix(in oklab, var(--s6) " + Math.round(8 + 92 * v) + "%, var(--empty))";
-      s += '<rect x="' + (L + j * cw + 1) + '" y="' + (T + i * ch + 1) + '" width="' + (cw - 2) + '" height="' + (ch - 2) + '" rx="3" fill="' + fill + '" data-tip="' + wl(c.walls) + " walls, proofs of " + b + " moves: " + (v === null ? "none" : pc(v) + " with a block moved 2+ times, " + pc(x.cycle / x.n) + " with a directed cycle") + "<br>" + x.n + ' goals"/>';
-      if (v !== null) s += '<text class="v" x="' + (L + (j + 0.5) * cw) + '" y="' + (T + i * ch + ch / 2 + 4) + '" text-anchor="middle" style="fill:' + (v > 0.5 ? "#fff" : "var(--ink)") + ';pointer-events:none">' + pc(v) + ' <tspan style="font-size:10px;opacity:.7">(' + x.n + ")</tspan></text>";
-    });
+// Candidates or selection.
+$("candN").textContent = DATA.candidates.reduce((a, c) => a + c.boards, 0) + " (" + DATA.candidates.map((c) => c.boards).join(", ") + " at " + DATA.candidates.map((c) => wl(c.walls)).join(", ") + " walls)";
+$("candD").textContent = DATA.candDensity.join(", ");
+if (DATA.candidates.length) {
+  const K = DATA.candidates, groups = K.map((c) => wl(c.walls) + " walls"), box = $("candidates");
+  let c = card(box);
+  c.innerHTML = "<h3 style='margin-top:0'>Re-moved blocks at each step of the selection</h3><p class='what'>x: wall share. y: the share of goals with a block moved 2+ times among all the candidates the maker weighs, among its 3 finalists, and among the goals it picks. If selection pushed re-moved blocks out, the bars would fall from left to right within a group; they rise.</p><div></div>";
+  bars(c.lastChild, { groups, xTitle: "Wall share (% of cells)", yTitle: "Goals with a block moved 2+ times", yFmt: pc, labels: true,
+    series: [["All candidates", "candidates", cat(0)], ["Finalists (top 3 by rank)", "finalists", cat(1)], ["Chosen (by the Judge's fitness)", "chosen", cat(2)]].map(([name, k, color]) => ({ name, color, values: K.map((x) => x.stage[k]) })) });
+  c = card(box);
+  c.innerHTML = "<h3 style='margin-top:0'>Proof length: the pool or the pick?</h3><p class='what'>x: wall share. y: proof moves (mean): of all candidates, of each board's longest candidate, of the finalists, and of the chosen goal. The chosen goal stays at about the same place in its pool; the pool itself gets shorter.</p><div></div>";
+  bars(c.lastChild, { groups, xTitle: "Wall share (% of cells)", yTitle: "Proof moves (mean)", yFmt: (v) => (Math.round(v * 10) / 10).toString(), labels: true,
+    series: [["All candidates", "candidates", cat(0)], ["Each board's longest candidate", "longest", cat(3)], ["Finalists", "finalists", cat(1)], ["Chosen", "chosen", cat(2)]].map(([name, k, color]) => ({ name, color, values: K.map((x) => x.length[k]) })) });
+  c = card(box);
+  c.innerHTML = "<h3 style='margin-top:0'>The size of the pool</h3><p class='what'>x: wall share. y: candidates the maker weighs per board, and the share of them (and of the chosen goals) with proofs of 11 moves or more.</p><div style='display:grid;grid-template-columns:1fr 1fr;gap:8px'><div></div><div></div></div>";
+  bars(c.lastChild.children[0], { W: 450, groups, xTitle: "Wall share", yTitle: "Candidates a board", yFmt: (v) => Math.round(v) + "", labels: true, series: [{ name: "Candidates a board", color: cat(0), values: K.map((x) => x.perBoard) }] });
+  bars(c.lastChild.children[1], { W: 450, groups, xTitle: "Wall share", yTitle: "Proofs of 11+ moves", yFmt: pc, yMax: 1, labels: true, series: [{ name: "All candidates", color: cat(0), values: K.map((x) => x.long.candidates) }, { name: "Chosen", color: cat(2), values: K.map((x) => x.long.chosen) }] });
+  const maps = document.createElement("div"); maps.className = "maps"; box.appendChild(maps);
+  const rows = DATA.buckets.map((b) => b + " moves"), cols = K.map((x) => [wl(x.walls)]);
+  const B = (i, j) => K[j].buckets[i];
+  const bt = (i, j) => wl(K[j].walls) + " walls, candidates of " + DATA.buckets[i] + " moves: " + B(i, j).n + " (" + B(i, j).re + " with a re-moved block)";
+  heatmap(card(maps), { title: "Candidates with a re-moved block", what: "Share of candidates with a block moved 2+ times, by proof length (row) and wall share (column); the count of candidates under it.", name: "re-moved share", rowTitle: "Proof length", colTitle: "Wall share", L: 112, rows, cols, fmt: pc, lo: 0, hi: 1, value: (i, j) => B(i, j).share, sub: (i, j) => "(" + B(i, j).n + ")", tip: bt });
+  heatmap(card(maps), { title: "Odds of reaching the finals", what: "Finalist rate of candidates with a re-moved block divided by that of the rest, at the same proof length: above 1 (blue), the rank favours them; below (red), it passes them over. Blank: fewer than 5 candidates on either side, or none reached the finals.", name: "finalist rate, re-moved ÷ the rest", rowTitle: "Proof length", colTitle: "Wall share", L: 112, rows, cols, fmt: (v) => v.toFixed(1) + "×", diverge: { mid: 1, tf: Math.log2, inv: (v) => Math.pow(2, v) },
+    value: (i, j) => (B(i, j).re >= 5 && B(i, j).n - B(i, j).re >= 5 && B(i, j).finalNo && B(i, j).finalRe ? B(i, j).finalRe / B(i, j).finalNo : null), tip: (i, j) => bt(i, j) + "<br>finalists: " + pc(B(i, j).finalRe) + " of those with a re-moved block, " + pc(B(i, j).finalNo) + " of the rest" });
+  heatmap(card(maps), { title: "The Judge's fitness", what: "Median fitness of candidates with a re-moved block divided by that of the rest, at the same proof length: above 1 (blue), the Judge scores them higher; below (red), lower.", name: "fitness, re-moved ÷ the rest", rowTitle: "Proof length", colTitle: "Wall share", L: 112, rows, cols, fmt: (v) => v.toFixed(2) + "×", diverge: { mid: 1, tf: Math.log2, inv: (v) => Math.pow(2, v) },
+    value: (i, j) => (B(i, j).re >= 5 && B(i, j).n - B(i, j).re >= 5 && B(i, j).fitNo ? B(i, j).fitRe / B(i, j).fitNo : null), tip: (i, j) => bt(i, j) + "<br>median fitness " + B(i, j).fitRe + " with a re-moved block, " + B(i, j).fitNo + " for the rest" });
+  heatmap(card(maps), { title: "The Judge's decisions", what: "Mean decisions of candidates with a re-moved block minus those of the rest, at the same proof length: above 0 (blue), the decision count is higher for them; below (red), lower.", name: "decisions, re-moved − the rest", rowTitle: "Proof length", colTitle: "Wall share", L: 112, rows, cols, fmt: (v) => (v > 0 ? "+" : "") + v.toFixed(1), diverge: { mid: 0 },
+    value: (i, j) => (B(i, j).re >= 5 && B(i, j).n - B(i, j).re >= 5 && B(i, j).decNo !== null ? B(i, j).decRe - B(i, j).decNo : null), tip: (i, j) => bt(i, j) + "<br>mean decisions " + B(i, j).decRe + " with a re-moved block, " + B(i, j).decNo + " for the rest" });
+}
+
+// Where the time goes.
+{
+  const box = $("time");
+  const parts1 = ["The maker", "Board generation", "The Referee", "The Judge", "Choices along the proof"];
+  stacked(card(box), {
+    title: "The whole sweep: the maker against the rest", what: "A bar per wall share (all densities pooled): mean ms a board for each step the experiment runs. The maker is nearly all of it.",
+    rows: DATA.timeByWall.map((r) => ({ label: wl(r.walls) + " walls", parts: r.parts })), order: parts1, colors: [cat(0), cat(2), cat(3), cat(4), cat(6)], xTitle: "Milliseconds a board (mean, one process)", yTitle: "Wall share",
   });
-  $("byLength").innerHTML = '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="Repeated blocks by proof length and wall share">' + s + "</svg>";
-})();
-if (DATA.byEffort.length) $("effortCheck").innerHTML = "<h2>A harder-working maker</h2><p class='sub'>The same boards at a higher effort (more candidates, wider measures), on densities " + DATA.shared.join(", ") + " pooled, against the sweep's effort: whether the trend is the maker's or the boards'.</p><div class='card'><table><tr><th>Effort</th><th>Walls</th><th>Boards</th><th>Found</th><th>Moves (mean)</th><th>Decisions (mean)</th><th>Block moved 2+</th><th>Directed cycle</th><th>Cyclomatic (mean)</th><th>Maker ms (median)</th></tr>" +
-  DATA.byEffort.map((r) => "<tr><td>" + r.effort + "</td><td>" + wl(r.walls) + "</td><td>" + r.boards + "</td><td>" + pc(r.found) + "</td><td>" + r.moves.toFixed(1) + "</td><td>" + r.decisions.toFixed(1) + "</td><td>" + pc(r.repeat) + "</td><td>" + pc(r.cycle) + "</td><td>" + r.cyclomatic.toFixed(2) + "</td><td>" + Math.round(r.makerMs) + "</td></tr>").join("") + "</table></div>";
-const T = DATA.time, tt = Object.values(T).reduce((a, b) => a + b, 0);
-$("time").innerHTML = "<tr><th style='text-align:left'>Step</th><th>Total s (all processes)</th><th>Share</th></tr>" +
-  [["gen", "Generating the board (the chunks round the origin)"], ["maker", "The maker (push search, rough and exact measures)"], ["referee", "The Referee"], ["judge", "The Judge (decisions included)"], ["choices", "Choices along the proof"]]
-    .map(([k, w]) => "<tr><td style='text-align:left'>" + w + "</td><td>" + (T[k] / 1000).toFixed(1) + "</td><td>" + (100 * T[k] / tt).toFixed(1) + "%</td></tr>").join("");
+  if (DATA.profile.length) {
+    const order = ["Lower bound (window.ts lower, lowerCheap)", "A* search, the rest (difficulty.ts astar)", "Measure set-up (windows, the blocks that matter)", "Simplify and replay proofs", "Push search (goal-fast.ts)", "Judging the finalists (decisions)", "Board generation", "Other (the runtime, garbage collection, the rest)", "The experiment's own analysis (the Judge on every candidate)"];
+    stacked(card(box), {
+      title: "Inside the maker, at block density " + DATA.profile[0].density, what: "A bar per wall share: mean ms a board for each part of the maker, from a CPU profile. The measure's lower bound (window.ts) is about two thirds of it; walls make every part cheaper.",
+      rows: DATA.profile.map((p) => ({ label: wl(p.walls) + " walls", parts: p.parts })), order, colors: [cat(0), cat(1), cat(2), cat(3), cat(4), cat(5), cat(6), "var(--c0)", cat(7)], xTitle: "Milliseconds a board (mean, from the profile)", yTitle: "Wall share",
+    });
+    const K = DATA.candidates;
+    stacked(card(box), {
+      title: "The maker's steps", what: "A bar per wall share: mean ms a board in each step of the maker (timed at its steps): the push search, the rough measure of every candidate, the exact measure of the finalists, the pick.",
+      rows: K.map((k) => ({ label: wl(k.walls) + " walls", parts: { "Push search": k.steps.pushes, "Rough measure (every candidate)": k.steps.rough, "Exact measure (finalists)": k.steps.exact, "Pick (Judge's fitness)": k.steps.picked } })),
+      order: ["Push search", "Rough measure (every candidate)", "Exact measure (finalists)", "Pick (Judge's fitness)"], colors: [cat(4), cat(0), cat(1), cat(5)], xTitle: "Milliseconds a board (mean)", yTitle: "Wall share",
+    });
+  }
+}
 
-const cols = MAPS.map((m) => m[0]);
 $("all").innerHTML = "<tr><th>Walls</th><th>Density</th><th>Boards</th><th>Goals</th><th>Block fill</th><th>Wall fill</th>" + MAPS.map((m) => "<th>" + m[0] + "</th>").join("") + "</tr>" +
   DATA.cells.map((c) => "<tr><td>" + wl(c.walls) + "</td><td>" + c.density + "</td><td>" + c.boards + "</td><td>" + c.goals + "</td><td>" + pc(c.blockFill) + "</td><td>" + pc(c.wallFill) + "</td>" + MAPS.map(([k, , f]) => "<td>" + (c.m[k] === null ? "–" : f(c.m[k])) + "</td>").join("") + "</tr>").join("");
 </script>
