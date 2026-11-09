@@ -73,9 +73,11 @@ const throbScale = (t: number) => (t <= 0 || t >= 1 ? 1 : 1 + 0.15 * Math.sin(Ma
 export function draw(
   canvas: HTMLCanvasElement,
   scene: Scene,
-  { fullscreen, density, fps = true, sliding, sparkles = [], throb = null, cue = null, ripples = [], shake = null, pinThrob = null, pinHeld = null, used = 0, trace, finish = null, soul = null, waiting = false, appear = 1, stillRed = null, detail = 1, now = 0, hud = null, surface = null, labels = [] }: {
+  { fullscreen, density, walls = 0, fps = true, sliding, sparkles = [], throb = null, cue = null, ripples = [], shake = null, pinThrob = null, pinHeld = null, used = 0, trace, finish = null, soul = null, waiting = false, appear = 1, stillRed = null, detail = 1, now = 0, hud = null, surface = null, labels = [] }: {
     fullscreen: boolean;
     density: number;
+    /** The walls slider's position, 0..1. */
+    walls?: number;
     /** Whether the fps counter is showing. */
     fps?: boolean;
     /** Where the sliding block is drawn now, and where its slide runs from and to. */
@@ -293,6 +295,7 @@ export function draw(
     else if (block.ui === "testbed") testbedIcon(ctx, block);
     else if (block.ui === "fps") fpsIcon(ctx, block, fps);
     else if (block.ui === "density") densityIcon(ctx, block, density);
+    else if (block.ui === "walls") wallsIcon(ctx, block, walls);
     else if (block.ui === "home") homeIcon(ctx, block);
   };
   timed(ctx, "blocks", () => {
@@ -825,6 +828,30 @@ function densityIcon(ctx: CanvasRenderingContext2D, block: Block, density: numbe
     }
   }
   sliderTrack(ctx, block, density);
+}
+
+/** A 3x2 patch of cells, walls (filled) among them more of them the higher the share, above
+ * a slider showing where it is. */
+function wallsIcon(ctx: CanvasRenderingContext2D, block: Block, share: number): void {
+  const x = block.x * UNIT, y = block.y * UNIT;
+  const size = UNIT * 0.1, gap = UNIT * 0.05;
+  // The cells fill in an order that looks scattered.
+  const filled = Math.round(share * 6), order = [4, 0, 2, 5, 1, 3];
+  ctx.lineWidth = 1.5;
+  for (let i = 0; i < 6; i++) {
+    const left = x + UNIT * 0.275 + (i % 3) * (size + gap);
+    const top = y + UNIT * 0.22 + Math.floor(i / 3) * (size + gap);
+    ctx.beginPath();
+    ctx.rect(left, top, size, size);
+    if (order.indexOf(i) < filled) {
+      ctx.fillStyle = COLORS.icon;
+      ctx.fill();
+    } else {
+      ctx.strokeStyle = COLORS.icon;
+      ctx.stroke();
+    }
+  }
+  sliderTrack(ctx, block, share);
 }
 
 /** A house: the homepage. */

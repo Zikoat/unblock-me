@@ -16,7 +16,7 @@ import { judge, type Terms } from "./judge";
 import { Gestures, TAP_SLOP, type Input } from "./gestures";
 import { ISLAND_LEVELS } from "./island-levels";
 import { bayReached, GATE, GATE_GONE, inIsland, opensGate, isLast, islandCamera, islandGoals, islandRects, nextIslandGoal, squareAt, squareMiddle, squareOf } from "./island";
-import { fixedLayout, MAX_TRIES, MIN_TRIES, randomLayout, TRIES, UNIT, type Placed, type Ui } from "./layout";
+import { fixedLayout, MAX_TRIES, MAX_WALLS, MIN_TRIES, randomLayout, TRIES, UNIT, WALLS, type Placed, type Ui } from "./layout";
 import { CARD, CUE_MS, draw, fading, islandCardRect, resetFades, RIPPLE_MS, SHAKE_MS, THROB_MS, redArrow, uiArrow, type Sparkle } from "./render";
 import { ease, slideDuration } from "./slide";
 import { blockAt, blocksIn, slideRange, type Move } from "./rules";
@@ -33,6 +33,7 @@ const GOAL_KEY = "unblock-me:v13:goal";
 const BORDER_KEY = "unblock-me:border";
 const FPS_KEY = "unblock-me:fps"; // whether the fps counter shows
 const TRIES_KEY = "unblock-me:tries";
+const WALLS_KEY = "unblock-me:walls";
 const CAMERA_KEY = "unblock-me:camera"; // where the view is, kept across reloads
 const LOG_KEY = "unblock-me:log"; // the play log; kept across resets
 const DEVICE_KEY = "unblock-me:device"; // names this browser's automatic uploads; kept across resets
@@ -145,7 +146,7 @@ function load<T>(key: string, fallback: T): T {
 type LogEvent =
   | { e: "load"; commit: string }
   | { e: "error"; message: string; where: string }
-  | { e: "goal"; commit: string; id: string; target: Point; start?: Point; tries: number; seed: number; solution: number; moved: [string, number, number][]; judge?: Terms }
+  | { e: "goal"; commit: string; id: string; target: Point; start?: Point; tries: number; walls?: number; seed: number; solution: number; moved: [string, number, number][]; judge?: Terms }
   // A goal from the maker the Referee rejected (src/referee.ts): a bug. With what it was asked
   // (the Request, and the worker's near and effort), to replay; the goal counts as none found.
   | { e: "rejected"; rule: number; why: string; goal: contract.Goal; request: contract.Request; near: Point; level: number }
@@ -157,7 +158,8 @@ type LogEvent =
   | { e: "prefetched" }
   | { e: "reached"; id: string; used: number }
   | { e: "reset"; goal: string | null }
-  | { e: "density"; from: number; to: number; goal: string | null };
+  | { e: "density"; from: number; to: number; goal: string | null }
+  | { e: "walls"; from: number; to: number; goal: string | null };
 const LOG_MAX = 3000;
 const playLog: (LogEvent & { t: number })[] = (() => {
   try {
@@ -216,10 +218,11 @@ function save(): void {
     localStorage.setItem(BORDER_KEY, JSON.stringify(scene.border));
     localStorage.setItem(FPS_KEY, JSON.stringify(showingFps));
     localStorage.setItem(TRIES_KEY, JSON.stringify(tries));
+    localStorage.setItem(WALLS_KEY, JSON.stringify(walls));
     localStorage.setItem(MOVED_KEY, JSON.stringify([...scene.moved].map(([id, p]) => [id, p.x, p.y])));
     localStorage.setItem(HISTORY_KEY, JSON.stringify(scene.history));
-    // A goal belongs to one seed and density.
-    localStorage.setItem(GOAL_KEY, JSON.stringify({ seed, tries, goal: scene.goal, done: scene.done }));
+    // A goal belongs to one seed and density (and wall share).
+    localStorage.setItem(GOAL_KEY, JSON.stringify({ seed, tries, walls, goal: scene.goal, done: scene.done }));
     localStorage.setItem(LOG_KEY, JSON.stringify(playLog));
   } catch {
     // Private mode or full storage: changes just don't survive a reload.
@@ -227,18 +230,21 @@ function save(): void {
   lookAhead();
 }
 
+// A board from before walls (a seed stored, no wall share) keeps none, so its moves still fit.
+const hadSeed = load<number | null>(SEED_KEY, null) !== null;
 const seed = load<number>(SEED_KEY, Math.floor(Math.random() * 2 ** 32));
 let tries = load<number>(TRIES_KEY, TRIES);
+let walls = load<number>(WALLS_KEY, hadSeed ? 0 : WALLS);
 const debug = load<boolean>(DEBUG_KEY, false);
 // The fullscreen block shows only where the browser can go full screen (not iPhone Safari).
 const canFullscreen = !!(document.fullscreenEnabled || (document as unknown as { webkitFullscreenEnabled?: boolean }).webkitFullscreenEnabled);
 const shownUi = { debug, fullscreen: canFullscreen, island: withIsland };
 const moved = load<[string, number, number][]>(MOVED_KEY, []);
-const storedGoal = load<{ seed: number; tries: number; goal: Goal | null; done?: Goal[] } | null>(GOAL_KEY, null);
+const storedGoal = load<{ seed: number; tries: number; walls?: number; goal: Goal | null; done?: Goal[] } | null>(GOAL_KEY, null);
 // (An island goal fits only a page with the island.)
-const goalsFit = storedGoal?.seed === seed && storedGoal.tries === tries && (withIsland || squareOf(storedGoal.goal) === null);
+const goalsFit = storedGoal?.seed === seed && storedGoal.tries === tries && (storedGoal.walls ?? 0) === walls && (withIsland || squareOf(storedGoal.goal) === null);
 const scene = newScene(innerWidth, innerHeight, {
-  layout: randomLayout(seed, { tries, ...shownUi }),
+  layout: randomLayout(seed, { tries, walls, ...shownUi }),
   moved: new Map(moved.map(([id, x, y]) => [id, { x, y }])),
   history: load<Move[]>(HISTORY_KEY, []),
   border: load<boolean>(BORDER_KEY, false),
@@ -346,7 +352,7 @@ function requestGoal(near: Point = viewCentre(scene.camera, scene.width, scene.h
     ahead.wanted = ahead.asked;
     return;
   }
-  const request: GoalRequest = { job: ++job, seed, tries, ui: shownUi, placed, near, moved: [...scene.moved], level: 0, exclude, avoid: targetsOf(scene.done), target: rampTarget(worldGoals()) };
+  const request: GoalRequest = { job: ++job, seed, tries, walls, ui: shownUi, placed, near, moved: [...scene.moved], level: 0, exclude, avoid: targetsOf(scene.done), target: rampTarget(worldGoals()) };
   sent = request;
   asked = { request: asRequest(request, scene.done), near, level: 0 };
   asking(0, worker, request);
@@ -358,7 +364,7 @@ let sent: GoalRequest | null = null;
 type Asked = { request: contract.Request; near: Point; level: number };
 let asked: Asked | null = null;
 const asRequest = (r: GoalRequest, done: readonly { id: string; target: Point }[]) =>
-  contract.gameRequest({ seed: r.seed, tries: r.tries, ui: r.ui, placed: r.placed, moved: new Map(r.moved), done, rampAim: r.target });
+  contract.gameRequest({ seed: r.seed, tries: r.tries, walls: r.walls, ui: r.ui, placed: r.placed, moved: new Map(r.moved), done, rampAim: r.target });
 /** For tests: a change made to the next goals a worker sends (this many), before they are checked. */
 let tamper: { change: (goal: Goal) => void; times: number } | null = null;
 /** A goal from a worker, checked by the Referee (an assertion: a rejected goal is a bug,
@@ -430,7 +436,7 @@ function showGoal(goal: Goal | null): void {
     const before = squareOf(goal) === null ? undefined : scene.done.filter((d) => squareOf(d) === squareOf(goal)).at(-1);
     goal.begun = before?.ended ?? scene.history.length;
     // A snapshot of the board, so the goal can be measured again later.
-    log({ e: "goal", commit: __COMMIT__, id: goal.id, target: goal.target, start: goal.start, tries, seed, solution: goal.solution.length, moved: [...scene.moved].map(([id, p]) => [id, p.x, p.y]), ...(goal.judged && { judge: goal.judged }) });
+    log({ e: "goal", commit: __COMMIT__, id: goal.id, target: goal.target, start: goal.start, tries, walls, seed, solution: goal.solution.length, moved: [...scene.moved].map(([id, p]) => [id, p.x, p.y]), ...(goal.judged && { judge: goal.judged }) });
   }
   // The last red block's soul flies to the new one, once its finish is over.
   if (!finish) sendSoul();
@@ -465,7 +471,7 @@ function targetsOf(goals: Goal[]): Rect[] {
   });
 }
 function boardKey(moved: ReadonlyMap<string, Point>, exclude: string[], near: Point): string {
-  return JSON.stringify([seed, tries, placed, [...moved].sort(([a], [b]) => (a < b ? -1 : 1)), exclude, near]);
+  return JSON.stringify([seed, tries, walls, placed, [...moved].sort(([a], [b]) => (a < b ? -1 : 1)), exclude, near]);
 }
 /** The moves that matter to the world's first goal: those off the island, and the last
  * square's blocker (its red block ends on its target, the rest are walled in). */
@@ -485,7 +491,7 @@ function prefetchFirst(): void {
   while (inIsland(near)) near = { x: near.x + 1, y: near.y };
   const exclude = all.map((g) => g.id);
   ahead.asked = boardKey(worldMoved(moved), exclude, near);
-  const request: GoalRequest = { job: ++ahead.job, seed, tries, ui: shownUi, placed, near, moved: [...moved], level: 3, exclude, avoid: targetsOf(all), target: rampTarget(0) };
+  const request: GoalRequest = { job: ++ahead.job, seed, tries, walls, ui: shownUi, placed, near, moved: [...moved], level: 3, exclude, avoid: targetsOf(all), target: rampTarget(0) };
   ahead.contract = { request: asRequest(request, all), near, level: 3 };
   asking(1, ahead.worker, request);
 }
@@ -504,7 +510,7 @@ function lookAhead(): void {
   const key = boardKey(moved, exclude, goal.target);
   if (key === ahead.asked || ahead.ready?.key === key) return;
   ahead.asked = key;
-  const request: GoalRequest = { job: ++ahead.job, seed, tries, ui: shownUi, placed, near: goal.target, moved: [...moved], level: 2, exclude, avoid: targetsOf([...scene.done, goal]), target: rampTarget(worldGoals() + 1) };
+  const request: GoalRequest = { job: ++ahead.job, seed, tries, walls, ui: shownUi, placed, near: goal.target, moved: [...moved], level: 2, exclude, avoid: targetsOf([...scene.done, goal]), target: rampTarget(worldGoals() + 1) };
   ahead.contract = { request: asRequest(request, [...scene.done, goal]), near: goal.target, level: 2 };
   asking(1, ahead.worker, request);
 }
@@ -754,7 +760,18 @@ const gestures = new Gestures(scene, {
       if (next !== tries) {
         log({ e: "density", from: tries, to: next, goal: scene.goal?.id ?? null });
         tries = next;
-        relayout(scene, randomLayout(seed, { tries, ...shownUi }));
+        relayout(scene, randomLayout(seed, { tries, walls, ...shownUi }));
+        logged = 0; // a new board starts a new history
+      }
+      if (done && !scene.goal) requestGoal();
+    }
+    if (ui === "walls") {
+      const at = slide(ui, walls / MAX_WALLS, dx);
+      const next = Math.round(at * MAX_WALLS * 100) / 100;
+      if (next !== walls) {
+        log({ e: "walls", from: walls, to: next, goal: scene.goal?.id ?? null });
+        walls = next;
+        relayout(scene, randomLayout(seed, { tries, walls, ...shownUi }));
         logged = 0; // a new board starts a new history
       }
       if (done && !scene.goal) requestGoal();
@@ -816,6 +833,7 @@ Object.assign(window, {
     scene,
     seed: () => seed,
     tries: () => tries,
+    walls: () => walls,
     visibleBlocks: () => visibleBlocks(scene),
     onScreen: () => blocksIn(scene.layout, latticeRect(scene, { x: 0, y: 0, width: scene.width, height: scene.height }), scene),
     slideRange: (id: string) => slideRange(scene.layout, visibleBlocks(scene).find((b) => b.id === id)!, scene),
@@ -1143,6 +1161,7 @@ function paint(now: number, moving: ReturnType<typeof sliding>, to: HTMLCanvasEl
       draw(to, scene, {
         fullscreen: fullscreenElement() !== null,
         density: slider?.ui === "density" ? slider.at : (tries - MIN_TRIES) / (MAX_TRIES - MIN_TRIES),
+        walls: slider?.ui === "walls" ? slider.at : walls / MAX_WALLS,
         fps: showingFps,
         sliding: moving,
         sparkles,
@@ -1211,6 +1230,7 @@ function tooltip(ui: Ui): string | null {
     case "reports": return "Reports";
     case "testbed": return "Debug: The testbed, a small board for trying the finish's animations";
     case "upload": return "Debug: Send play data to the VM for analysis";
+    case "walls": return "Walls: drag sideways for more or fewer fixed cells (a new board)";
     default: return null;
   }
 }

@@ -130,7 +130,7 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
   await frame(page);
   await pass(page, 300);
   const uis = await page.evaluate(() => [unblock.visibleBlocks().filter((b) => b.ui).length, localStorage.getItem("unblock-me:debug")]);
-  check(uis[0] === 9 && uis[1] === "true", `and turn the debug UI on, reset among it (${uis})`);
+  check(uis[0] === 10 && uis[1] === "true", `and turn the debug UI on, reset among it (${uis})`);
 
   // Random layout with the UI blocks in the middle.
   await fresh();
@@ -159,7 +159,7 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
   check(iconPixels > 0.05 && iconPixels < 0.4, `the reset block shows a light icon (${(iconPixels * 100).toFixed(0)}% of its middle)`);
   const random = await page.evaluate(() => unblock.visibleBlocks());
   check(random.length >= 12, `the random layout is dense (${random.length} blocks inside the border)`);
-  check(random.every((b) => b.ui || (b.w === 2 && b.h === 1) || (b.w === 1 && b.h === 2)), "every block is 2x1 or 1x2");
+  check(random.every((b) => b.ui || (b.wall ? b.w === 1 && b.h === 1 : (b.w === 2 && b.h === 1) || (b.w === 1 && b.h === 2))), "every block is 2x1 or 1x2, every wall 1x1");
   check(random.filter((b) => b.ui).every((b) => b.w === 1 && b.h === 1), "UI blocks are 1x1");
   await page.screenshot({ path: shots + "phone-1-random.png" });
 
@@ -208,6 +208,7 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
     "unblock-me:v13:history": "[]",
     "unblock-me:v13:moved": "[]",
     "unblock-me:v13:seed": String(seedAfter),
+    "unblock-me:walls": "0.04",
   }), `storage holds only fresh defaults, and other pages' keys are left alone (${JSON.stringify(rest)})`);
   check(JSON.parse(storedGoal ?? "null")?.seed === seedAfter, "and a new goal for the new seed");
   await expectColor(page, cell(-0.85, 4.15), "reset", "the reset block is still in its place");
@@ -295,6 +296,25 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
   check(await page.evaluate(() => unblock.tries() === 21), "the density survives a reload");
   await gesture([[track.left + track.width * (20 / 29), track.y]], [[track.left - 200, track.y]]);
   check(await page.evaluate(() => unblock.tries() === 1), "and stops at 1 try at the left end");
+
+  // The walls slider (the debug row's last block): a new player starts at 4% walls; 10 px
+  // right on the 31.2 px track from 0.04/0.2 is round(100 * 0.2 * (0.2 + 10/31.2)) / 100 = 0.10.
+  await fresh();
+  check(await page.evaluate(() => unblock.walls() === 0.04), `a new player's board has 4% walls (${await page.evaluate(() => unblock.walls())})`);
+  const wallsOf = () => page.evaluate(() => unblock.visibleBlocks().filter((b) => b.wall).length);
+  const fewWalls = await wallsOf();
+  const wallTrack = { left: cell(1 + 0.24, 0)[0], width: 0.52 * UNIT, y: cell(0, 4.7)[1] };
+  const wallKnob = [wallTrack.left + wallTrack.width * 0.2, wallTrack.y];
+  await gesture([wallKnob], [[wallKnob[0] + 10, wallKnob[1]]], { steps: 10 });
+  check(await page.evaluate(() => unblock.walls() === 0.1), `dragging the walls knob 10 px right sets 10% walls (${await page.evaluate(() => unblock.walls())})`);
+  const moreWalls = await wallsOf();
+  check(moreWalls > fewWalls, `and the board has more walls (${fewWalls} -> ${moreWalls})`);
+  await page.screenshot({ path: shots + "phone-2e-walls.png" });
+  await page.reload();
+  await frame(page);
+  check(await page.evaluate(() => unblock.walls() === 0.1), "the wall share survives a reload");
+  await gesture([[wallTrack.left + wallTrack.width * 0.5, wallTrack.y]], [[wallTrack.left - 200, wallTrack.y]]);
+  check(await page.evaluate(() => unblock.walls() === 0) && (await wallsOf()) === 0, "and stops at no walls at the left end");
 
   // Walls are drawn grey and do not move.
   await place([{ id: "w", x: -1, y: 2, w: 1, h: 1, wall: true }]);

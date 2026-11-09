@@ -5,7 +5,7 @@ import type { Sound } from "./sfx";
 import { blockAt, slideRange, type Move } from "./rules";
 
 /** UI blocks that are also sliders: a drag on them adjusts instead of panning. */
-const SLIDERS = new Set<Ui>(["density"]);
+const SLIDERS = new Set<Ui>(["density", "walls"]);
 
 /** A press that moves less than this many screen pixels is a tap. */
 export const TAP_SLOP = 10;
@@ -24,7 +24,7 @@ type Mode =
   | { kind: "panning"; id: number; last: Point }
   /** `grab` is where the finger went down, `lo`..`hi` how far the block can slide. */
   | { kind: "dragging"; id: number; block: Block; grab: Point; lo: number; hi: number; at: number; against: boolean }
-  /** Dragging sideways on the density block. */
+  /** Dragging sideways on a slider block (density, walls). */
   | { kind: "adjusting"; id: number; ui: Ui; start: Point; dx: number }
   | { kind: "pinching"; ids: [number, number]; from: [Point, Point]; start: Camera };
 
@@ -34,7 +34,7 @@ type Mode =
  * one finger pans the background or slides a block along its long axis until it hits
  * another block (a block that cannot move either way pans), two fingers pinch-zoom and pan.
  * UI blocks and walls never move: dragging one pans, tapping a UI block calls `onUi` with
- * its kind. The density block is also a slider: dragging on it calls `onAdjust` with how
+ * its kind. The density and walls blocks are also sliders: dragging on it calls `onAdjust` with how
  * far the finger has moved sideways since the press (screen px), and once more with `done`.
  * `onChange` runs when a block was moved, to store it.
  */

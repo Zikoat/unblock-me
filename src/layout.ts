@@ -2,7 +2,7 @@ import type { Rect } from "./camera";
 import { ISLAND_KEEP_OUT, islandBlocks } from "./island";
 
 /** A 1x1 control on the board: it never slides, a tap runs it. */
-export type Ui = "home" | "reset" | "fullscreen" | "reports" | "density" | "border" | "upload" | "fps" | "testbed";
+export type Ui = "home" | "reset" | "fullscreen" | "reports" | "density" | "walls" | "border" | "upload" | "fps" | "testbed";
 
 /** A block on the lattice, in lattice units: 2x1 slides horizontally, 1x2 vertically.
  * UI blocks and walls never slide. */
@@ -63,6 +63,7 @@ export const DEBUG_UI: Placed[] = [
   { id: "home", x: 1, y: 3, w: 1, h: 1, ui: "home" },
   { id: "reset", x: -1, y: 4, w: 1, h: 1, ui: "reset" },
   { id: "testbed", x: 0, y: 4, w: 1, h: 1, ui: "testbed" },
+  { id: "walls", x: 1, y: 4, w: 1, h: 1, ui: "walls" },
 ];
 export const UI_BLOCKS: Placed[] = [...GAME_UI, ...DEBUG_UI];
 /** `island`: the handcrafted squares right of the start (src/island.ts). */
@@ -85,6 +86,12 @@ export const MAX_TRIES = 30;
 
 /** Mixed into the seed for the walls' own random stream. */
 const WALL_SALT = 0x5bd1e995;
+
+/** The game's share of wall cells for a new player (reports/walls.html: at the game's density,
+ * up to about 4% the maker's goals are as long and re-move blocks as often as with none, and
+ * it finds one on every board; more walls make them shorter), and the slider's range. */
+export const WALLS = 0.04;
+export const MAX_WALLS = 0.2;
 
 /** mulberry32. */
 function random(seed: number): () => number {

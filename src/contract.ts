@@ -117,6 +117,7 @@ export function playerCells(request: Request, board: Board): { x: number; y: num
 export function gameRequest(game: {
   seed: number;
   tries: number;
+  walls?: number;
   ui: UiShown;
   placed?: Placed[] | null;
   moved: ReadonlyMap<string, Point>;
@@ -125,7 +126,7 @@ export function gameRequest(game: {
 }): Request {
   return {
     version: CONTRACT,
-    world: { seed: game.seed, density: game.tries, ui: { ...game.ui }, version: WORLD_VERSION, ...(game.placed && { placed: game.placed }) },
+    world: { seed: game.seed, density: game.tries, ...(game.walls && { walls: game.walls }), ui: { ...game.ui }, version: WORLD_VERSION, ...(game.placed && { placed: game.placed }) },
     moved: movedIndex(game.moved),
     history: game.done.map((g) => ({ red: g.id, target: { x: g.target.x, y: g.target.y } })),
     rampAim: game.rampAim ?? null,
