@@ -15,6 +15,7 @@ import { referee } from "./referee";
 import { judge, type Terms } from "./judge";
 import { Gestures, TAP_SLOP, type Input } from "./gestures";
 import { ISLAND_LEVELS } from "./island-levels";
+import { TRIALS } from "./trials";
 import { bayReached, GATE, GATE_GONE, inIsland, opensGate, isLast, islandCamera, islandGoals, islandRects, nextIslandGoal, squareAt, squareMiddle, squareOf } from "./island";
 import { fixedLayout, MAX_TRIES, MAX_WALLS, MIN_TRIES, randomLayout, TRIES, UNIT, WALLS, type Placed, type Ui } from "./layout";
 import { CARD, CUE_MS, draw, fading, islandCardRect, resetFades, RIPPLE_MS, SHAKE_MS, THROB_MS, redArrow, uiArrow, type Sparkle } from "./render";
@@ -77,9 +78,13 @@ const forcedSoul = SOUL_STYLES.find((st) => st === new URLSearchParams(location.
 const SOUL_UNLOCK = 7;
 // ?testbed=N starts at goal N (0 first).
 let testbedNext = Number(new URLSearchParams(location.search).get("testbed")) || 0;
+// ?trial=<label> opens one of the trial boards (src/trials.ts, reports/extra-moves.html) with
+// its one goal, its label on screen; a reload starts it over.
+const trial = TRIALS.find((t) => t.label === new URLSearchParams(location.search).get("trial")) ?? null;
+let trialShown = false;
 // ?board=<JSON list of placed blocks> opens exactly that board (for sharing a board, and
-// for tests). Nothing is stored while it is open (nor on the testbed).
-const shared = new URLSearchParams(location.search).get("board") ?? (testbed ? JSON.stringify(TESTBED.blocks) : null);
+// for tests). Nothing is stored while it is open (nor on the testbed or a trial).
+const shared = new URLSearchParams(location.search).get("board") ?? (testbed ? JSON.stringify(TESTBED.blocks) : trial ? JSON.stringify(trial.blocks) : null);
 // Set by a reset: from then on this page stores nothing.
 let forgetting = false;
 
@@ -327,6 +332,7 @@ let goalWaiters: (() => void)[] = [];
  * red block. */
 function requestGoal(near: Point = viewCentre(scene.camera, scene.width, scene.height), patient = false): void {
   if (testbed) return showGoal(TESTBED.goals[testbedNext++] ? { ...TESTBED.goals[testbedNext - 1]! } : null);
+  if (trial) return showGoal(trialShown ? null : ((trialShown = true), { id: trial.red, target: { ...trial.target }, solution: trial.solution.map((m) => ({ id: m.id, from: { ...m.from }, to: { ...m.to } })), difficulty: known(trial.fewest) }));
   if (shared) return;
   // The island's squares come first, in turn.
   const square = withIsland ? nextIslandGoal(scene.done) : null;
@@ -522,8 +528,8 @@ ahead.worker.onmessage = (event: MessageEvent<Reply>) => {
   ahead.ready = { key: ahead.asked, goal: made.goal, rejected: made.rule !== undefined };
   if (ahead.wanted && ahead.wanted === ahead.asked) requestGoal(finish?.next);
 };
-if (testbed) {
-  // The testbed shows its first goal once its board is in place (below).
+if (testbed || trial) {
+  // The testbed and a trial show their first goal once the board is in place (below).
 } else if (!scene.goal) requestGoal();
 else lookAhead();
 prefetchFirst();
@@ -882,7 +888,18 @@ if (shared) {
   } catch {
     // A broken link: show the normal board.
   }
-  if (testbed) requestGoal();
+  if (testbed || trial) requestGoal();
+}
+if (trial) {
+  const label = document.querySelector<HTMLElement>("#trial")!;
+  label.textContent = `Trial ${trial.label}`;
+  label.hidden = false;
+  // The whole square in view (a 7x7 one is wider than a phone at the usual zoom).
+  const xs = trial.blocks.flatMap((b) => [b.x, b.x + b.w]), ys = trial.blocks.flatMap((b) => [b.y, b.y + b.h]);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const scale = Math.min(1, (0.94 * scene.width) / ((x1 - x0) * UNIT), (0.8 * scene.height) / ((y1 - y0) * UNIT));
+  scene.camera = { scale, offsetX: scene.width / 2 - ((x0 + x1) / 2) * UNIT * scale, offsetY: scene.height / 2 - ((y0 + y1) / 2) * UNIT * scale };
+  redraw();
 }
 
 // Live reload: every build writes a new id to build.txt. While the page is visible, check

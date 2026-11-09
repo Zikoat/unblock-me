@@ -852,6 +852,35 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
   check((await page.evaluate(() => unblock.scene.camera.scale)) > 1.5, "wheel zooms in");
 }
 
+// --- A trial board (?trial=, src/trials.ts): its board and goal, its label on screen, the goal
+// reached by its proof's moves, and nothing stored.
+{
+  const page = await clocked(await browser.newPage({ viewport: { width: 1280, height: 800 } }));
+  await page.goto(url);
+  await page.evaluate(() => unblock.forget());
+  await page.goto(`${root}?trial=8A`);
+  await frame(page);
+  const g = await page.evaluate(() => unblock.scene.goal);
+  check(!!g && g.difficulty.moves >= 7 && g.solution.length === g.difficulty.moves, `?trial=8A opens with its goal (${g?.id}, ${g?.difficulty.moves} fewest)`);
+  check((await page.textContent("#trial")) === "Trial 8A" && (await page.isVisible("#trial")), "and its label on screen");
+  for (const m of g.solution) {
+    const b = await page.evaluate((id) => unblock.scene.layout.byId(id), m.id);
+    const mid = { x: (m.from.x + m.to.x + b.w) / 2, y: (m.from.y + m.to.y + b.h) / 2 };
+    await page.evaluate(([mid, UNIT]) => { unblock.scene.camera = { scale: 1, offsetX: 640 - mid.x * UNIT, offsetY: 400 - mid.y * UNIT }; unblock.redraw(); }, [mid, UNIT]);
+    await frame(page);
+    const at = (p) => [640 + (p.x + b.w / 2 - mid.x) * UNIT, 400 + (p.y + b.h / 2 - mid.y) * UNIT];
+    await page.mouse.move(...at(m.from));
+    await page.mouse.down();
+    await page.mouse.move(...at(m.to), { steps: 10 });
+    await page.mouse.up();
+    await pass(page, 400);
+  }
+  check(await page.evaluate(() => unblock.scene.done.length === 1), "its proof's moves reach the goal");
+  const keys = await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("unblock-me:")));
+  check(keys.length === 0, `and nothing is stored on a trial (${keys.join() || "nothing"})`);
+  await page.close();
+}
+
 // --- Goals checked: every goal the maker sends is checked by the Referee and scored by the
 // Judge (src/referee.ts, src/judge.ts), both logged. World goals played by dragging their
 // solutions' moves; then a goal tampered with in the page is rejected, logged and asked for

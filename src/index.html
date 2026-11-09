@@ -30,6 +30,9 @@
   /* The island's next button, under its finish card (main.ts sets its top). */
   #next { position: absolute; left: 50%; transform: translateX(-50%); padding: 0.8em 1.7em; border: 0; border-radius: 999px; background: #f2b632; color: #fff; font: 800 18px/1 system-ui, -apple-system, "Segoe UI", sans-serif; box-shadow: 0 4px 16px rgba(0,0,0,.3); cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
   #next[hidden] { display: none; }
+  /* A trial board's label (main.ts, ?trial=). */
+  #trial { position: absolute; left: 12px; bottom: 12px; padding: 6px 12px; border-radius: 8px; background: rgba(29, 29, 31, 0.82); color: #f3f2ee; font: 600 15px/1.4 system-ui, sans-serif; pointer-events: none !important; }
+  #trial[hidden] { display: none; }
   canvas { display: block; width: 100vw; height: 100dvh; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 </style>
 </head>
@@ -40,6 +43,7 @@
 <div id="fps"><span></span><div id="makers"><div><i></i><span></span></div><div><i></i><span></span></div></div></div>
 <div id="tip" role="tooltip"></div>
 <button id="next" hidden>Next level</button>
+<div id="trial" hidden></div>
 </div>
 <script type="module" src="app.js"></script>
 </body>
