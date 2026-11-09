@@ -17,6 +17,7 @@ import { Gestures, TAP_SLOP, type Input } from "./gestures";
 import { ISLAND_LEVELS } from "./island-levels";
 import { TRIALS } from "./trials";
 import { MAKER_TRIALS } from "./trials-maker";
+import { GEN_TRIALS } from "./trials-gen";
 import { bayReached, GATE, GATE_GONE, inIsland, opensGate, isLast, islandCamera, islandGoals, islandRects, nextIslandGoal, squareAt, squareMiddle, squareOf } from "./island";
 import { fixedLayout, MAX_TRIES, MAX_WALLS, MIN_TRIES, randomLayout, TRIES, UNIT, WALLS, type Placed, type Ui } from "./layout";
 import { CARD, CUE_MS, draw, fading, islandCardRect, resetFades, RIPPLE_MS, SHAKE_MS, THROB_MS, redArrow, uiArrow, type Sparkle } from "./render";
@@ -80,9 +81,9 @@ const SOUL_UNLOCK = 7;
 // ?testbed=N starts at goal N (0 first).
 let testbedNext = Number(new URLSearchParams(location.search).get("testbed")) || 0;
 // ?trial=<label> opens one of the trial boards (src/trials.ts, reports/extra-moves.html; and
-// src/trials-maker.ts, reports/extra-maker.html) with
+// src/trials-maker.ts, reports/extra-maker.html; src/trials-gen.ts, reports/extra-gen.html) with
 // its one goal, its label on screen; a reload starts it over.
-const trial = [...TRIALS, ...MAKER_TRIALS].find((t) => t.label === new URLSearchParams(location.search).get("trial")) ?? null;
+const trial = [...TRIALS, ...MAKER_TRIALS, ...GEN_TRIALS].find((t) => t.label === new URLSearchParams(location.search).get("trial")) ?? null;
 let trialShown = false;
 // ?board=<JSON list of placed blocks> opens exactly that board (for sharing a board, and
 // for tests). Nothing is stored while it is open (nor on the testbed or a trial).
