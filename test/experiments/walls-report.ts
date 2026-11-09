@@ -17,12 +17,16 @@ type Row = {
 const [out, ...files] = process.argv.slice(2);
 /** The findings, written from the data the report was last made from. */
 const SHOWS = `
-<li>Low resolution so far (6 boards a cell, plus 30 a wall share at density 12): random walls do not make re-moved blocks more common with today's maker; if anything fewer. With no walls a block is moved twice or more in about a third of the goals at the game's density (more on denser boards: 5 of 6 at density 16); at 10-15% walls, almost none.</li>
-<li>Walls make the maker's goals shorter: fewer moves, fewer decisions, a shorter run for red, and a faster maker. Its push search stops at a wall, so it finds less deep goals; the boards are not necessarily easier, the goals it finds on them are.</li>
-<li>Up to about 4% walls little changes at density 12 (moves, repeats, found rate all as without), which is why the game's wall slider starts there.</li>
+<li>The gut feeling holds for long goals and not for walls. Blocks moved twice or more come with long proofs: in about 90% of proofs over 15 moves, a third of those of 11-15, under 10% of shorter ones, whatever the walls. Block density is what makes proofs long: at no walls the share with a re-moved block goes from 4% (density 6) to 64% (16).</li>
+<li>Random walls make re-moved blocks rarer, not more common: from 35% of goals with none to 10% at 15% walls (all densities), a directed blocker cycle from 10% to 4%. The goals the maker finds get shorter as walls go up (12.6 moves at the mean with none, 6.7 at 15%), with fewer decisions and a shorter run for red. Its push search stops at a wall, so it finds shallower goals, and walls take cells from blocks (at 15% walls a density-16 board has the block fill of density 8 without).</li>
+<li>At the same proof length walls do not lower the share; if anything they raise it a little (proofs of 7-10 moves: 4% with none, 7-9% from 6% walls; at effort 2, proofs of 11-15: 6% to 17-23%, few goals). So a wall makes a goal of a given length more order-bound, but today's maker trades that for shorter goals.</li>
+<li>Effort 2 (more candidates, wider measures; 60 boards a cell at 4 wall shares × densities 8, 12, 16) shows the same trend with walls, so it is not effort 0's narrow search alone.</li>
+<li>Every board gave a legal goal, at every wall share and density.</li>
+<li>Up to about 4% walls little changes at the game's density (moves, re-moved blocks, found rate as without): the game's walls slider starts there.</li>
+<li>Smarter wall placement (walls that make dead ends red has to plan round, rather than walls anywhere) and a maker that looks for long goals on walled boards are what could make walls raise it; the Judge does not value re-moved blocks today.</li>
 `;
-const rows: Row[] = [];
-for (const f of files) for (const l of (await Bun.file(f).text()).split("\n")) if (l.startsWith("{")) rows.push(JSON.parse(l));
+const allRows: Row[] = [];
+for (const f of files) for (const l of (await Bun.file(f).text()).split("\n")) if (l.startsWith("{")) allRows.push(JSON.parse(l));
 
 /** One drag is one move: back-to-back slides of the same block merge (the maker's proofs
  * already are; this only makes sure). */
@@ -124,6 +128,10 @@ const mean = (v: number[]) => (v.length ? v.reduce((a, b) => a + b, 0) / v.lengt
 const share = (v: boolean[]) => (v.length ? v.filter(Boolean).length / v.length : null);
 const r3 = (x: number | null) => (x === null ? null : Math.round(x * 1000) / 1000);
 
+// The sweep is at the lowest effort in the files; other efforts (a smaller check) are
+// compared with it per wall share, densities pooled.
+const efforts = [...new Set(allRows.map((r) => r.effort))].sort((a, b) => a - b);
+const rows = allRows.filter((r) => r.effort === efforts[0]);
 const wallsList = [...new Set(rows.map((r) => r.walls))].sort((a, b) => a - b);
 const densities = [...new Set(rows.map((r) => r.density))].sort((a, b) => a - b);
 const cells = [];
@@ -168,7 +176,29 @@ for (const w of wallsList) for (const d of densities) {
 
 const time = { gen: 0, maker: 0, referee: 0, judge: 0, choices: 0 };
 for (const r of rows) for (const k of Object.keys(time) as (keyof typeof time)[]) time[k] += r.ms[k] ?? 0;
-const data = { cells, walls: wallsList, densities, maxCount, boards: rows.length, effort: [...new Set(rows.map((r) => r.effort))], time, files: files.map((f) => f.split("/").pop()) };
+// Repeats at the same proof length: per wall share and length bucket, goals and those with
+// a block moved 2+ times (all densities pooled).
+const BUCKETS = [[1, 6], [7, 10], [11, 15], [16, 99]] as const;
+const byLength = wallsList.map((w) => ({
+  walls: w,
+  b: BUCKETS.map(([lo, hi]) => {
+    const dv = rows.filter((r) => r.walls === w && r.found && r.ok).map((r) => derive(r)).filter((x) => x.moves >= lo && x.moves <= hi);
+    return { n: dv.length, repeat: dv.filter((x) => x.max >= 2).length, cycle: dv.filter((x) => x.cycle).length };
+  }),
+}));
+
+// Each effort per wall share, on the densities every effort has.
+const shared = densities.filter((d) => efforts.every((e) => allRows.some((r) => r.effort === e && r.density === d)));
+const byEffort = efforts.length < 2 ? [] : efforts.flatMap((e) => [...new Set(allRows.filter((r) => r.effort === e).map((r) => r.walls))].sort((a, b) => a - b).map((w) => {
+  const all = allRows.filter((r) => r.effort === e && r.walls === w && shared.includes(r.density));
+  const goals = all.filter((r) => r.found && r.ok), dv = goals.map((r) => derive(r));
+  return {
+    effort: e, walls: w, boards: all.length, goals: goals.length,
+    found: r3(goals.length / Math.max(1, all.length)), moves: r3(mean(goals.map((r) => r.terms!.moves))), decisions: r3(mean(goals.map((r) => r.terms!.decisions))),
+    repeat: r3(share(dv.map((x) => x.max >= 2))), cycle: r3(share(dv.map((x) => x.cycle))), cyclomatic: r3(mean(dv.map((x) => x.cyclomatic))), makerMs: r3(median(all.map((r) => r.ms.maker))),
+  };
+}));
+const data = { byLength, buckets: BUCKETS.map(([lo, hi]) => (hi > 50 ? lo + "+" : lo === 1 ? "≤" + hi : lo + "–" + hi)), byEffort, shared, cells, walls: wallsList, densities, maxCount, boards: rows.length, effort: [...new Set(rows.map((r) => r.effort))], time, files: files.map((f) => f.split("/").pop()) };
 const date = new Date().toISOString().slice(0, 10);
 
 const html = `<!doctype html>
@@ -228,6 +258,10 @@ ${"<!--SHOWS-->"}
 <p class="sub">Share of goals where at least one block (red included) moves 2 or more times, by wall share, a line per block density.</p>
 <div class="card"><div class="legend" id="lineLegend"></div><svg id="repeatLine" role="img" aria-label="Share of goals with a repeated block by wall share"></svg></div>
 
+<h3 style="margin-top:14px">At the same proof length</h3>
+<p class="sub">Goals with a block moved 2+ times, by the proof's length (rows) and the wall share (columns), all densities pooled: whether walls change how often blocks are re-moved, or only how long the goals are.</p>
+<div class="card" id="byLength"></div>
+
 <h2>Over the sweep</h2>
 <p class="sub">Each map: wall share down, block density across (with the cells' actual fill under the labels: blocks, walls, round the origin). Darker is more; the number is the cell's value. Hover a cell for its counts.</p>
 <div class="maps" id="maps"></div>
@@ -242,6 +276,8 @@ ${"<!--SHOWS-->"}
   <li>Decisions and fitness are the Judge's (src/judge.ts) on the proof's length; maker time is the median of one process each, on the VM (2 processes on 2 cores).</li>
 </ul>
 
+<div id="effortCheck"></div>
+
 <h2>Where the time goes</h2>
 <div class="card"><table id="time"></table></div>
 
@@ -252,7 +288,7 @@ ${"<!--SHOWS-->"}
 const DATA = ${JSON.stringify(data)};
 const $ = (id) => document.getElementById(id);
 const pc = (x) => (x === null ? "–" : Math.round(100 * x) + "%");
-const wl = (w) => Math.round(w * 100) + "%";
+const wl = (w) => Math.round(w * 1000) / 10 + "%";
 const tip = $("tip");
 document.addEventListener("mousemove", (e) => {
   const t = e.target.closest && e.target.closest("[data-tip]");
@@ -277,7 +313,7 @@ $("tiles").innerHTML = [
 
 const ramp = (i, n) => "var(--s" + (n <= 1 ? 3 : 1 + Math.round((i * 5) / (n - 1))) + ")";
 // The histogram: grouped bars, x times moved, a bar per wall share.
-let histD = "all", zoom = false;
+let histD = "all", zoom = true;
 function hist() {
   const cs = (w) => DATA.cells.filter((c) => c.walls === w && (histD === "all" || c.density === histD));
   const K = DATA.maxCount, Wn = DATA.walls.length;
@@ -306,7 +342,7 @@ function hist() {
   $("hist").innerHTML = s;
 }
 $("histFilter").innerHTML += ["all", ...DATA.densities].map((d) => '<button data-d="' + d + '"' + (d === "all" ? ' class="on"' : "") + ">" + (d === "all" ? "All" : d) + "</button>").join("");
-$("histFilter").innerHTML += ' <span style="margin-left:12px">Scale:</span> <button data-z="0" class="on">Full</button><button data-z="1">Zoom on 2+ (1 clipped)</button>';
+$("histFilter").innerHTML += ' <span style="margin-left:12px">Scale:</span> <button data-z="0">Full</button><button data-z="1" class="on">Zoom on 2+ (1 clipped)</button>';
 $("histFilter").addEventListener("click", (e) => {
   const b = e.target.closest("button"); if (!b) return;
   if (b.dataset.z !== undefined) {
@@ -335,13 +371,15 @@ hist();
     s += '<polyline points="' + pts.map(([w, c]) => x(w) + "," + y(c.m.repeat)).join(" ") + '" fill="none" stroke="' + ramp(i, Dn) + '" stroke-width="2"/>';
     for (const [w, c] of pts) s += '<circle cx="' + x(w) + '" cy="' + y(c.m.repeat) + '" r="4" fill="' + ramp(i, Dn) + '" stroke="var(--card)" stroke-width="2"/><circle cx="' + x(w) + '" cy="' + y(c.m.repeat) + '" r="10" fill="transparent" data-tip="density ' + d + ", " + wl(w) + " walls: " + pc(c.m.repeat) + " of " + c.goals + ' goals"/>';
     const last = pts.at(-1);
-    if (last) {
-      let ly = y(last[1].m.repeat) + 4;
-      while (used.some((u) => Math.abs(u - ly) < 12)) ly += 12;
-      used.push(ly);
-      s += '<text x="' + (x(last[0]) + 8) + '" y="' + ly + '">density ' + d + "</text>";
-    }
+    if (last) used.push({ y: y(last[1].m.repeat) + 4, x: x(last[0]) + 8, d });
   });
+  // The end labels, kept 12 px apart and inside the plot.
+  used.sort((a, b) => a.y - b.y);
+  for (let i = 1; i < used.length; i++) used[i].y = Math.max(used[i].y, used[i - 1].y + 12);
+  const over = used.length ? used.at(-1).y - (H - B + 4) : 0;
+  if (over > 0) for (const u of used) u.y -= over;
+  for (let i = used.length - 2; i >= 0; i--) used[i].y = Math.min(used[i].y, used[i + 1].y - 12);
+  for (const u of used) s += '<text x="' + u.x + '" y="' + u.y + '">density ' + u.d + "</text>";
   $("repeatLine").setAttribute("viewBox", "0 0 " + W + " " + H);
   $("repeatLine").innerHTML = s;
   $("lineLegend").innerHTML = DATA.densities.map((d, i) => '<span><i style="background:' + ramp(i, Dn) + '"></i>density ' + d + "</span>").join("");
@@ -389,6 +427,23 @@ function heat(key, title, fmt) {
 }
 $("maps").innerHTML = MAPS.map((m) => heat(...m)).join("");
 
+(function () {
+  const W = 900, L = 70, T = 22, cw = (W - L - 4) / DATA.walls.length, ch = 30, H = T + DATA.buckets.length * ch + 4;
+  let s = "";
+  DATA.walls.forEach((w, j) => { s += '<text x="' + (L + (j + 0.5) * cw) + '" y="14" text-anchor="middle">' + wl(w) + " walls</text>"; });
+  DATA.buckets.forEach((b, i) => {
+    s += '<text x="' + (L - 6) + '" y="' + (T + i * ch + ch / 2 + 4) + '" text-anchor="end">' + b + " moves</text>";
+    DATA.byLength.forEach((c, j) => {
+      const x = c.b[i], v = x.n ? x.repeat / x.n : null;
+      const fill = v === null ? "var(--empty)" : "color-mix(in oklab, var(--s6) " + Math.round(8 + 92 * v) + "%, var(--empty))";
+      s += '<rect x="' + (L + j * cw + 1) + '" y="' + (T + i * ch + 1) + '" width="' + (cw - 2) + '" height="' + (ch - 2) + '" rx="3" fill="' + fill + '" data-tip="' + wl(c.walls) + " walls, proofs of " + b + " moves: " + (v === null ? "none" : pc(v) + " with a block moved 2+ times, " + pc(x.cycle / x.n) + " with a directed cycle") + "<br>" + x.n + ' goals"/>';
+      if (v !== null) s += '<text class="v" x="' + (L + (j + 0.5) * cw) + '" y="' + (T + i * ch + ch / 2 + 4) + '" text-anchor="middle" style="fill:' + (v > 0.5 ? "#fff" : "var(--ink)") + ';pointer-events:none">' + pc(v) + ' <tspan style="font-size:10px;opacity:.7">(' + x.n + ")</tspan></text>";
+    });
+  });
+  $("byLength").innerHTML = '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="Repeated blocks by proof length and wall share">' + s + "</svg>";
+})();
+if (DATA.byEffort.length) $("effortCheck").innerHTML = "<h2>A harder-working maker</h2><p class='sub'>The same boards at a higher effort (more candidates, wider measures), on densities " + DATA.shared.join(", ") + " pooled, against the sweep's effort: whether the trend is the maker's or the boards'.</p><div class='card'><table><tr><th>Effort</th><th>Walls</th><th>Boards</th><th>Found</th><th>Moves (mean)</th><th>Decisions (mean)</th><th>Block moved 2+</th><th>Directed cycle</th><th>Cyclomatic (mean)</th><th>Maker ms (median)</th></tr>" +
+  DATA.byEffort.map((r) => "<tr><td>" + r.effort + "</td><td>" + wl(r.walls) + "</td><td>" + r.boards + "</td><td>" + pc(r.found) + "</td><td>" + r.moves.toFixed(1) + "</td><td>" + r.decisions.toFixed(1) + "</td><td>" + pc(r.repeat) + "</td><td>" + pc(r.cycle) + "</td><td>" + r.cyclomatic.toFixed(2) + "</td><td>" + Math.round(r.makerMs) + "</td></tr>").join("") + "</table></div>";
 const T = DATA.time, tt = Object.values(T).reduce((a, b) => a + b, 0);
 $("time").innerHTML = "<tr><th style='text-align:left'>Step</th><th>Total s (all processes)</th><th>Share</th></tr>" +
   [["gen", "Generating the board (the chunks round the origin)"], ["maker", "The maker (push search, rough and exact measures)"], ["referee", "The Referee"], ["judge", "The Judge (decisions included)"], ["choices", "Choices along the proof"]]
