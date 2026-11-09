@@ -118,6 +118,20 @@ export type TournamentOptions = GoalOptions & {
   /** The fewest moves a goal aims at (goal.ts rampTarget): of the goals nearest it, the best
    * ranked wins. */
   target?: number;
+  watch?: Watch;
+};
+
+/** For experiments (test/experiments/walls-candidates.ts): sees the search's steps and every
+ * candidate, changing nothing. The candidates are the search's own objects, changed later
+ * (the finalists' measure and proof): copy what is wanted at once. */
+export type Watch = {
+  /** A step done: "pushes", "rough" (every candidate measured), "exact" (the finalists'), "picked". */
+  step?(name: "pushes" | "rough" | "exact" | "picked"): void;
+  /** Every candidate after the rough measure, best ranked first; the first `finalists` go on. */
+  ranked?(candidates: readonly Ranked[], finalists: number): void;
+  /** The finalists after their exact measure, in the order picked (the first wins), with the
+   * fitness each got when judged (null when the rank picks). */
+  picked?(finalists: readonly Ranked[], fitness: ReadonlyMap<Ranked, number> | null): void;
 };
 
 
@@ -141,7 +155,7 @@ export const LEVELS_OF_EFFORT: TournamentOptions[] = [
 ];
 
 /** A hard goal near `near` at an effort level (LEVELS_OF_EFFORT). */
-export function makeGoalHard(layout: Layout, near: Point, options: GoalOptions & { target?: number } = {}, level = 1): Ranked | null {
+export function makeGoalHard(layout: Layout, near: Point, options: GoalOptions & { target?: number; watch?: Watch } = {}, level = 1): Ranked | null {
   return makeGoalTournament(layout, near, { ...LEVELS_OF_EFFORT[Math.max(0, Math.min(level, LEVELS_OF_EFFORT.length - 1))], ...options });
 }
 
@@ -171,9 +185,10 @@ export function onTrack(board: Board, id: string, target: Point): number {
 
 /** The push search's targets, ranked by the difficulty measure. */
 export function makeGoalTournament(layout: Layout, near: Point, options: TournamentOptions = {}): Ranked | null {
-  const { moved = new Map(), avoid = [], rough = 3_000, exact = 50_000, reach = null, finalists = 4, judged = false, stride = 1, tuning = { prune: true, lookahead: true, goalBudget: 50_000 }, target } = options;
+  const { moved = new Map(), avoid = [], rough = 3_000, exact = 50_000, reach = null, finalists = 4, judged = false, stride = 1, tuning = { prune: true, lookahead: true, goalBudget: 50_000 }, target, watch } = options;
   const board = new Board(layout, moved);
   const all = pushes(board, layout, near, { ...options, perCell: options.perCell ?? 6 }, tuning);
+  watch?.step?.("pushes");
   // Every cell of every push is a candidate, measured roughly; each notes the blocks on its
   // red block's track on the way, for the balance's penalty.
   const candidates: Ranked[] = [];
@@ -196,11 +211,15 @@ export function makeGoalTournament(layout: Layout, near: Point, options: Tournam
   const off = (c: Ranked) => (target === undefined ? 0 : Math.abs((c.difficulty.moves ?? c.difficulty.atLeast) - target));
   const rank = (a: Ranked, b: Ranked) => off(a) - off(b) || balance(b) - balance(a) || a.solution.length - b.solution.length || a.distance - b.distance;
   candidates.sort(rank);
+  watch?.step?.("rough");
+  watch?.ranked?.(candidates, finalists);
   const top = candidates.slice(0, finalists);
   for (const c of top) {
     c.difficulty = measure(board, c, { limit: exact, reach });
     if (c.difficulty.solution && c.difficulty.solution.length < c.solution.length) c.solution = c.difficulty.solution;
   }
+  watch?.step?.("exact");
+  let fitness: Map<Ranked, number> | null = null;
   if (judged) {
     // The finalists as the Judge weighs them (contract.ts WISHES): moves plus decisions, the
     // aim's halving per move off rather than first, and the reach from `near`.
@@ -214,7 +233,10 @@ export function makeGoalTournament(layout: Layout, near: Point, options: Tournam
       fit.set(c, ((moves + w.decision * decisions) / Math.pow(c.distance, w.distance)) * Math.pow(w.track, c.train ?? 0) * Math.pow(w.aim, off) * Math.pow(w.reach, Math.max(0, reach - w.reachFree)));
     }
     top.sort((a, b) => fit.get(b)! - fit.get(a)! || rank(a, b));
+    fitness = fit;
   } else top.sort(rank);
+  watch?.step?.("picked");
+  watch?.picked?.(top, fitness);
   const best = top[0] ?? null;
   if (best && !board.replays(best.solution)) throw new Error("goal search: solution does not replay");
   return best;
