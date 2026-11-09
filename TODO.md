@@ -26,6 +26,7 @@ In approximate priority order, highest first; the middle ones are not ordered am
 - Hovering a reached goal highlights the blocks its solution needed, and differently those moved without need; waits on you picking it.
 - Special goals styled as a flame or a glint that unlock those souls (src/main.ts SOUL_UNLOCK: for now they unlock after 7 world goals); waits on deciding how special goals look and are placed.
 - Daily board: the same seed for everyone, ranked by moves, a Wordle-style share; waits on you picking it.
+- Loose goals (your design): a goal on a cell that any block of the same orientation and lane satisfies, not a locked red block; the block that last finished it keeps a gold inner border or glow, which moves to whichever block satisfies it next; several loose goals can be linked, finished only when all are covered at once; a prerequisite for shapes (a shape is a set of cells that interchangeable blocks must fill together); waits on you picking it.
 
 ## User testing
 
