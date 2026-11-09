@@ -62,4 +62,7 @@ the problem. It is also slow on dense boards (seconds, often capped at a lower b
 pushes the blocks nearest `near` one cell at a time, clearing each next cell with a bounded
 backwards search, until a cell cannot be cleared or the push's share of the tick budget is
 spent (no cap on cells). Every cell reached is a candidate; the difficulty measure ranks
-them by difficulty for the distance, roughly and then exactly for the best few.
+them by difficulty for the distance and their extra moves (blocks that move again, as a
+share of the moves, as far as the measure vouches for them; src/judge.ts), roughly and then exactly for the best few, which the
+Judge's fitness picks among. A push's proof is tidied first (src/goal-fast.ts tidy): a move
+it does not need would count as an extra move.

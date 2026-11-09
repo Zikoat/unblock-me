@@ -193,6 +193,48 @@ export function simplifyFast(board: Board, moves: Move[]): Move[] {
   return out;
 }
 
+/** The moves a solution does not need dropped: any one move, or two moves of one block (out
+ * of the way and back, say), a dropped move's start passed on to its block's next move,
+ * whenever the rest still replays and leaves red on `target`; until none drops. A shortest
+ * solution keeps all its moves; a push's may not, and moves it could drop would count as
+ * extra moves (judge.ts extraMoves). */
+export function tidy(board: Board, red: string, target: Point, moves: Move[]): Move[] {
+  const without = (out: Move[], drop: (k: number) => boolean) => {
+    const start = new Map<string, Point>(), kept: Move[] = [];
+    out.forEach((m, k) => {
+      if (drop(k)) {
+        if (!start.has(m.id)) start.set(m.id, m.from);
+        return;
+      }
+      const from = start.get(m.id);
+      start.delete(m.id);
+      kept.push(from ? { ...m, from } : m);
+    });
+    return merge(kept);
+  };
+  const solves = (ms: Move[]) => {
+    let last: Move | undefined;
+    for (const m of ms) if (m.id === red) last = m;
+    return !!last && last.to.x === target.x && last.to.y === target.y && board.replays(ms);
+  };
+  let out = moves;
+  for (let dropped = true; dropped; ) {
+    dropped = false;
+    search: for (let i = 0; i < out.length; i++) {
+      for (let j = i; j < out.length; j++) {
+        if (out[j]!.id !== out[i]!.id) continue;
+        const tried = without(out, (k) => k === i || k === j);
+        if (solves(tried)) {
+          out = tried;
+          dropped = true;
+          break search;
+        }
+      }
+    }
+  }
+  return out;
+}
+
 /** The sliding blocks nearest `near` that may be the red block: in the 8x8 area round it,
  * not excluded nor on an excluded block's track, nearest first, at most `count`. */
 export function candidatesNear(board: Board, layout: Layout, near: Point, exclude: ReadonlySet<string>, count = 6): Block[] {

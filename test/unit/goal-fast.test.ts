@@ -1,7 +1,7 @@
 // The push search: how far a push gets, which blocks it may push, and the tick budget.
 import { describe, expect, test } from "bun:test";
 import { Board } from "../../src/board";
-import { candidatesNear, pushes, simplifyFast } from "../../src/goal-fast";
+import { candidatesNear, pushes, simplifyFast, tidy } from "../../src/goal-fast";
 import { makeGoalHard } from "../../src/goal-search";
 import { fixedLayout, type Placed } from "../../src/layout";
 
@@ -40,6 +40,21 @@ describe("pushes", () => {
     const layout = fixedLayout([H("r", 0, 0), W(-1, 0), W(7, 0)]);
     const board = new Board(layout, new Map([["r", { x: 4, y: 0 }]]));
     expect(push(board, pushes(board, layout, { x: 4, y: 0 }, {}, FAST), "r", 1).to).toEqual({ x: 5, y: 0 });
+  });
+});
+
+describe("tidy", () => {
+  test("drops a move, or two of one block, the rest solves without; a dropped move's start goes to its block's next", () => {
+    // a blocks r and can only go up (a wall below it); c can get into its way there.
+    const board = new Board(fixedLayout([H("r", 0, 0), V("a", 3, 0), W(3, 2), H("c", 4, -2), H("u", 0, -3)]));
+    const m = (id: string, from: [number, number], to: [number, number]) => ({ id, from: { x: from[0], y: from[1] }, to: { x: to[0], y: to[1] } });
+    // c into a's way and back (a pair: neither drops alone), u for nothing, and r's step first.
+    const padded = [m("c", [4, -2], [2, -2]), m("r", [0, 0], [1, 0]), m("u", [0, -3], [2, -3]), m("c", [2, -2], [4, -2]), m("a", [3, 0], [3, -2]), m("r", [1, 0], [4, 0])];
+    expect(tidy(board, "r", { x: 4, y: 0 }, padded)).toEqual([m("a", [3, 0], [3, -2]), m("r", [0, 0], [4, 0])]);
+    // A solution that needs every move keeps them.
+    const short = [m("a", [3, 0], [3, -2]), m("r", [0, 0], [4, 0])];
+    expect(tidy(board, "r", { x: 4, y: 0 }, short)).toEqual(short);
+    expect(board.pos.size).toBe(0);
   });
 });
 

@@ -3,7 +3,7 @@
 import { describe, expect, test } from "bun:test";
 import { Board } from "../../src/board";
 import { replay } from "../../src/frozen";
-import { LEVELS_OF_EFFORT, makeGoalDeep, makeGoalHard, makeGoalTournament, onTrack } from "../../src/goal-search";
+import { extraOf, LEVELS_OF_EFFORT, makeGoalDeep, makeGoalHard, makeGoalTournament, onTrack } from "../../src/goal-search";
 import { fixedLayout, randomLayout, type Placed } from "../../src/layout";
 import { isHorizontal } from "../../src/rules";
 
@@ -52,6 +52,20 @@ describe("goal search", () => {
       }
     }
   }, 30_000);
+});
+
+describe("extra moves the measure vouches for", () => {
+  const d = (moves: number | null, atLeast: number) => ({ moves, atLeast, searched: 0, branching: 1, score: 0 });
+  const proof = (ids: string) => ids.split("").map((id) => ({ id }));
+  test("all of a proof proved shortest; of a longer one, no more than the fewest it needs at least less the blocks it moves", () => {
+    // a b a r a r: 6 moves, 3 blocks, 3 extra.
+    expect(extraOf(d(6, 6), proof("abarar"))).toBe(3);
+    // Not proved: at least 4 moves, 3 blocks, so 1 at most; at least 3, none.
+    expect(extraOf(d(null, 4), proof("abarar"))).toBe(1);
+    expect(extraOf(d(null, 3), proof("abarar"))).toBe(0);
+    // A shorter solution is known to exist (5 < 6): this proof is not one.
+    expect(extraOf(d(5, 5), proof("abarar"))).toBe(2);
+  });
 });
 
 describe("blocks on the red block's track", () => {

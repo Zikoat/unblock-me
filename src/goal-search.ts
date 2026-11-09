@@ -18,8 +18,10 @@ import { contractGoal, WISHES } from "./contract";
 import { decisionStages } from "./decisions";
 import { measure, NEAR, type Difficulty, type Reach } from "./difficulty";
 import type { Goal, GoalOptions } from "./goal";
-import { candidatesNear, pushes, simplifyFast, type Tuning } from "./goal-fast";
+import { candidatesNear, pushes, simplifyFast, tidy, type Tuning } from "./goal-fast";
+import { extraFactor, extraMoves } from "./judge";
 import { intersects, type Layout } from "./layout";
+import type { Move } from "./rules";
 import { Pool, runWindow, Window } from "./window";
 
 export type DeepOptions = GoalOptions & {
@@ -135,7 +137,7 @@ export type Watch = {
 };
 
 
-export type Ranked = Goal & { difficulty: Difficulty; distance: number; train?: number };
+export type Ranked = Goal & { difficulty: Difficulty; distance: number; train?: number; /** Extra moves of its proof (judge.ts extraMoves). */ extra?: number };
 
 /** Tournament settings by effort level: 0 for a goal the player is waiting for (a few
  * hundred ms), 1 for one made ahead (about a second), 2 and 3 for more time (several
@@ -166,7 +168,26 @@ export function makeGoalHard(layout: Layout, near: Point, options: GoalOptions &
  * multiplies the balance by `train`: they have to be pushed ahead of it, some past the
  * target, which is tedious rather than hard (reports/blocks-on-track.html). */
 export const tradeoff = { alpha: 0.6, train: 0.5 }; // (reports/play-analysis.html)
-export const balance = (g: { difficulty: Difficulty; distance: number; train?: number }) => (g.difficulty.score / Math.pow(g.distance, tradeoff.alpha)) * Math.pow(tradeoff.train, g.train ?? 0);
+/** And by the Judge's factor for the extra moves of its proof, as far as its measure vouches
+ * for them (judge.ts extraFactor, extraOf). */
+export const balance = (g: { difficulty: Difficulty; distance: number; train?: number; extra?: number; solution: unknown[] }) => (g.difficulty.score / Math.pow(g.distance, tradeoff.alpha)) * Math.pow(tradeoff.train, g.train ?? 0) * extraFactor(g.extra ?? 0, g.difficulty.moves ?? g.solution.length, WISHES.extra!);
+
+/** A proof tidied (goal-fast.ts tidy) when it moves a block more than once: a move it does
+ * not need would count as an extra move. (One that moves each block once is left as it is:
+ * tidying every candidate cost a tenth of the maker's time.) */
+function tidied(board: Board, red: string, target: Point, proof: Move[]): Move[] {
+  return extraMoves(proof.map((m) => m.id)) > 0 ? tidy(board, red, target, proof) : proof;
+}
+
+/** The extra moves of a goal's `proof` (judge.ts extraMoves), as far as its measure `d` vouches
+ * for them: when it did not prove the proof shortest, the proof may move blocks again that a
+ * shorter one would not, so no more than the fewest it is known to need (at least) less the
+ * blocks the proof moves. (Without this, long proofs with a low bound won the rank.) */
+export function extraOf(d: Difficulty, proof: { id: string }[]): number {
+  const extra = extraMoves(proof.map((m) => m.id));
+  if (d.moves !== null && d.moves >= proof.length) return extra;
+  return Math.min(extra, Math.max(0, (d.moves ?? d.atLeast) - (proof.length - extra)));
+}
 
 /** Blocks on red block `id`'s own track (lying the same way, in its lane) between where it
  * is and the far end of `target`: they can only be pushed ahead of it. */
@@ -198,15 +219,17 @@ export function makeGoalTournament(layout: Layout, near: Point, options: Tournam
       if ((k + 1) % stride !== 0 && k !== p.steps.length - 1) continue;
       const step = p.steps[k]!;
       if (avoid.some((a) => intersects({ ...step.at, w: red.w, h: red.h }, a))) continue;
-      const solution = simplifyFast(board, p.raw.slice(0, step.moves));
+      const solution = tidied(board, p.id, step.at, simplifyFast(board, p.raw.slice(0, step.moves)));
       const goal = { id: p.id, target: step.at, solution };
       const d = measure(board, goal, { limit: rough, margin: NEAR, reach: null });
-      candidates.push({ ...goal, difficulty: d, distance: k + 1, train: onTrack(board, p.id, step.at) });
+      const proof = d.solution && d.solution.length < solution.length ? d.solution : solution;
+      candidates.push({ ...goal, difficulty: d, distance: k + 1, train: onTrack(board, p.id, step.at), extra: extraOf(d, proof) });
     }
   }
   // Rank by difficulty for the distance (a lower bound counts as the moves): a near goal
-  // that is nearly as hard beats a far one. Then the proof's length (shorter is likelier to
-  // be the real fewest).
+  // that is nearly as hard beats a far one; times the Judge's factor for the extra moves (as
+  // far as the measure vouches for them: extraOf). Then the proof's length (shorter is
+  // likelier to be the real fewest).
   // With a target, the nearest it first (as far as is known: the fewest, or else at least).
   const off = (c: Ranked) => (target === undefined ? 0 : Math.abs((c.difficulty.moves ?? c.difficulty.atLeast) - target));
   const rank = (a: Ranked, b: Ranked) => off(a) - off(b) || balance(b) - balance(a) || a.solution.length - b.solution.length || a.distance - b.distance;
@@ -216,13 +239,14 @@ export function makeGoalTournament(layout: Layout, near: Point, options: Tournam
   const top = candidates.slice(0, finalists);
   for (const c of top) {
     c.difficulty = measure(board, c, { limit: exact, reach });
-    if (c.difficulty.solution && c.difficulty.solution.length < c.solution.length) c.solution = c.difficulty.solution;
+    if (c.difficulty.solution && c.difficulty.solution.length < c.solution.length) c.solution = tidied(board, c.id, c.target, c.difficulty.solution);
+    c.extra = extraOf(c.difficulty, c.solution);
   }
   watch?.step?.("exact");
   let fitness: Map<Ranked, number> | null = null;
   if (judged) {
     // The finalists as the Judge weighs them (contract.ts WISHES): moves plus decisions, the
-    // aim's halving per move off rather than first, and the reach from `near`.
+    // extra moves, the aim's halving per move off rather than first, and the reach from `near`.
     const w = WISHES, fit = new Map<Ranked, number>();
     for (const c of top) {
       const moves = c.difficulty.moves ?? c.solution.length;
@@ -230,7 +254,7 @@ export function makeGoalTournament(layout: Layout, near: Point, options: Tournam
       const off = target === undefined ? 0 : Math.abs(moves - target);
       const red = board.block(c.id);
       const reach = Math.max(0, red.x - near.x, near.x - (red.x + red.w - 1)) + Math.max(0, red.y - near.y, near.y - (red.y + red.h - 1));
-      fit.set(c, ((moves + w.decision * decisions) / Math.pow(c.distance, w.distance)) * Math.pow(w.track, c.train ?? 0) * Math.pow(w.aim, off) * Math.pow(w.reach, Math.max(0, reach - w.reachFree)));
+      fit.set(c, ((moves + w.decision * decisions) / Math.pow(c.distance, w.distance)) * Math.pow(w.track, c.train ?? 0) * extraFactor(c.extra ?? 0, moves, w.extra!) * Math.pow(w.aim, off) * Math.pow(w.reach, Math.max(0, reach - w.reachFree)));
     }
     top.sort((a, b) => fit.get(b)! - fit.get(a)! || rank(a, b));
     fitness = fit;
