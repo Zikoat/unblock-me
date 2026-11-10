@@ -208,10 +208,15 @@ export type SolveOptions = {
   maxDepth?: number;
   /** Skip the extra moves over every shortest solution (extraMin and extraMax = the BFS one's). */
   quick?: boolean;
+  /** Only states that could still reach the goal within this many moves (red's 1 and 1 for each
+   * other block on the cells red must pass): every state on a solution that short is kept at its
+   * true depth, so the fewest and extra moves are exact when the fewest is at most `bound`
+   * ("unsolvable" past it). */
+  bound?: number;
 };
 
 /** The fewest moves for block `red` to reach lane position `target`, exactly, and the extra moves. */
-export function solve(g: Grid, red: number, target: number, { edge = "wall", cap = 300_000, atLeast = 0, maxDepth = 60, quick = false }: SolveOptions = {}): Solve {
+export function solve(g: Grid, red: number, target: number, { edge = "wall", cap = 300_000, atLeast = 0, maxDepth = 60, quick = false, bound = Infinity }: SolveOptions = {}): Solve {
   const occ = occupancy(g);
   const a = analyse(g, red, edge, occ);
   const fail = (status: Solve["status"], states = 0, fewest = -1): Solve => ({ status, fewest, extraMin: -1, extraMax: -1, states, relevant: a.relevant.length, sealed: a.sealed, solution: [], extraBfs: -1, used: new Uint8Array(0) });
@@ -244,6 +249,26 @@ export function solve(g: Grid, red: number, target: number, { edge = "wall", cap
       cur[k] = at;
     }
   };
+  /** A lower bound on the moves left after block k moved to `to` (the grid still has it where it
+   * was): red's own move, and one for each other block on the cells red must pass. */
+  const seen = new Int32Array(n + 1);
+  let stamp = 0;
+  const lower = (k: number, to: number) => {
+    const r = k === 0 ? to : cur[0]!;
+    if (r === target) return 0;
+    const lo = target > r ? r + 2 : target, hi = target > r ? target + 1 : r - 1;
+    stamp++;
+    let count = 1;
+    for (let j = lo; j <= hi; j++) {
+      const c = laneCell(g, ps[0]!, j);
+      let o = grid[c]!;
+      if (k !== 0 && o === k + 1) o = 0;
+      if (k !== 0 && (laneCell(g, ps[k]!, to) === c || laneCell(g, ps[k]!, to + 1) === c)) o = k + 1;
+      if (o === -1) return 99;
+      if (o > 1 && seen[o] !== stamp) ((seen[o] = stamp), count++);
+    }
+    return count;
+  };
   if (cur[0] === target) return fail("ok", 1, 0);
   let fewest = -1, head = 0;
   for (let d = 0; fewest < 0; d++) {
@@ -254,6 +279,7 @@ export function solve(g: Grid, red: number, target: number, { edge = "wall", cap
       load(head);
       const from = head;
       slides((k, _a, to) => {
+        if (bound < Infinity && d + 1 + lower(k, to) > bound) return;
         const [, fresh] = st.add(cur, d + 1, from);
         if (fresh && k === 0 && to === target) fewest = d + 1;
       });
