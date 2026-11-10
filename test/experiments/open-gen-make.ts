@@ -13,7 +13,7 @@
 import { bestGoal, cellsAt, clone, type Grid, occupancy, type Piece, randomRoom, rng, span } from "./extra-gen-core";
 import { readFileSync } from "node:fs";
 import { checkOpen } from "./open-core";
-import { randomLayout, TRIES, WALLS } from "../../src/layout";
+import { type Placed, randomLayout, TRIES, WALLS } from "../../src/layout";
 
 export type Want = { lo: number; hi: number; extra: number };
 export const WANT: Want = { lo: 10, hi: 16, extra: 3 };
@@ -238,4 +238,28 @@ export function freshRoom(size: number, side: "high" | "low", aim: number, seed:
     return { size: `${size}x${size}`, walls: [], pieces: g.pieces, pos: g.pos, red: b.red, target: b.target, fewest: b.fewest, extra: { least: b.extra, most: b.extraMax } };
   }
   return null;
+}
+
+/** The board as the game places it: the window framed by walls, centred near the origin; the
+ * goal checked once more, its proof the upper bound's solution. */
+export function placedOf(g: Grid, R: number[], target: number, size: number, margin: number) {
+  const c = checkOpen(g, R, target, 4_000_000);
+  if (!c.exact) throw new Error("not exact");
+  const ox = -Math.floor(g.W / 2), oy = -Math.floor(g.H / 2);
+  const blocks: Placed[] = [];
+  for (let y = -1; y <= g.H; y++) for (let x = -1; x <= g.W; x++) {
+    const inside = x >= 0 && y >= 0 && x < g.W && y < g.H;
+    if (!inside || g.wall[y * g.W + x]) blocks.push({ id: `wall ${x + ox},${y + oy}`, x: x + ox, y: y + oy, w: 1, h: 1, wall: true });
+  }
+  const point = (i: number, at: number) => {
+    const [cell] = cellsAt(g, g.pieces[i]!, at);
+    return { x: (cell! % g.W) + ox, y: Math.floor(cell! / g.W) + oy };
+  };
+  g.pieces.forEach((p, i) => blocks.push({ id: `b${i}`, ...point(i, g.pos[i]!), w: p.h ? 2 : 1, h: p.h ? 1 : 2 }));
+  const solution = c.up.solution.map(([i, a, b]) => ({ id: `b${i}`, from: point(i, a), to: point(i, b) }));
+  const red = R[0]!;
+  return {
+    blocks, red: `b${red}`, target: point(red, target), fewest: c.up.fewest, extra: c.up.extraMin, extraMax: c.up.extraMax, solution,
+    states: { up: c.up.states, low: c.low!.states }, room: { x: margin + ox, y: margin + oy, width: size, height: size }, box: { x: ox, y: oy, width: g.W, height: g.H },
+  };
 }

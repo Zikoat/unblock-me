@@ -9,10 +9,8 @@
 // The J pairs (6+ extra, from open-high.ts's rooms opened by open-gen.ts --lib):
 //   bun test/experiments/open-gen-trials.ts --in data/open-gen/high6.jsonl --min-extra 6 --prefix J --pairs 2 --low-tries 10 --ts src/trials-open-j.ts --const OPEN_TRIALS_J --json data/open-gen/trials-j.json
 import { readFileSync, writeFileSync } from "node:fs";
-import type { Placed } from "../../src/layout";
-import { cellsAt, type Grid } from "./extra-gen-core";
-import { checkOpen } from "./open-core";
-import { freshRoom, makeOpenUp, type Made } from "./open-gen-make";
+import type { Grid } from "./extra-gen-core";
+import { freshRoom, makeOpenUp, type Made, placedOf } from "./open-gen-make";
 
 const arg = (name: string, fallback: string) => {
   const i = process.argv.indexOf(`--${name}`);
@@ -47,30 +45,6 @@ function lowFor(h: Line, k: number): Made {
   }
   if (!best) throw new Error(`no low room at ${h.fewest}`);
   return best;
-}
-
-/** The board as the game places it: the window framed by walls, centred near the origin; the
- * goal checked once more, its proof the upper bound's solution. */
-function placedOf(g: Grid, R: number[], target: number, size: number, margin: number) {
-  const c = checkOpen(g, R, target, 4_000_000);
-  if (!c.exact) throw new Error("not exact");
-  const ox = -Math.floor(g.W / 2), oy = -Math.floor(g.H / 2);
-  const blocks: Placed[] = [];
-  for (let y = -1; y <= g.H; y++) for (let x = -1; x <= g.W; x++) {
-    const inside = x >= 0 && y >= 0 && x < g.W && y < g.H;
-    if (!inside || g.wall[y * g.W + x]) blocks.push({ id: `wall ${x + ox},${y + oy}`, x: x + ox, y: y + oy, w: 1, h: 1, wall: true });
-  }
-  const point = (i: number, at: number) => {
-    const [cell] = cellsAt(g, g.pieces[i]!, at);
-    return { x: (cell! % g.W) + ox, y: Math.floor(cell! / g.W) + oy };
-  };
-  g.pieces.forEach((p, i) => blocks.push({ id: `b${i}`, ...point(i, g.pos[i]!), w: p.h ? 2 : 1, h: p.h ? 1 : 2 }));
-  const solution = c.up.solution.map(([i, a, b]) => ({ id: `b${i}`, from: point(i, a), to: point(i, b) }));
-  const red = R[0]!;
-  return {
-    blocks, red: `b${red}`, target: point(red, target), fewest: c.up.fewest, extra: c.up.extraMin, extraMax: c.up.extraMax, solution,
-    states: { up: c.up.states, low: c.low!.states }, room: { x: margin + ox, y: margin + oy, width: size, height: size }, box: { x: ox, y: oy, width: g.W, height: g.H },
-  };
 }
 
 const made = picked.map((h, k) => {
