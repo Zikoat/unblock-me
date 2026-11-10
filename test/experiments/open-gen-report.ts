@@ -13,6 +13,12 @@ type Line = Omit<Made, "g"> & { seed: number; lib: { size: string; fewest: numbe
 const runs: Line[] = existsSync("data/open-gen/high.jsonl") ? readFileSync("data/open-gen/high.jsonl", "utf8").trim().split("\n").map((l) => JSON.parse(l)) : [];
 type TrialRow = Trial & { side: string; extra: number; extraMax: number; open: Open; ms: number; states: { up: number; low: number }; room: { x: number; y: number; width: number; height: number }; box: { x: number; y: number; width: number; height: number } };
 const trials: TrialRow[] = existsSync("data/open-gen/trials.json") ? JSON.parse(readFileSync("data/open-gen/trials.json", "utf8")) : [];
+// The J trials: 6+ extra moves, rooms climbed by open-high.ts (data/open-gen/rooms6-*.jsonl),
+// opened by open-gen.ts --lib (data/open-gen/high6.jsonl), paired by open-gen-trials.ts.
+const jsonl = (f: string) => (existsSync(f) ? readFileSync(f, "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l)) : []);
+const climbed: { size: string; fewest: number; extra: { least: number; most: number }; run: number; ms: number; from: string }[] = ["data/open-gen/rooms6-0.jsonl", "data/open-gen/rooms6-1.jsonl"].flatMap(jsonl);
+const runs6: Line[] = jsonl("data/open-gen/high6.jsonl");
+const trialsJ: TrialRow[] = existsSync("data/open-gen/trials-j.json") ? JSON.parse(readFileSync("data/open-gen/trials-j.json", "utf8")) : [];
 const pc = (x: number) => `${Math.round(100 * x)}%`;
 const share = (z: { blocks: number; movable: number }) => (z.blocks ? z.movable / z.blocks : 0);
 const mean = (v: number[]) => v.reduce((a, b) => a + b, 0) / Math.max(1, v.length);
@@ -142,6 +148,16 @@ const best = [...runs].sort((a, b) => share(b.open.boundary) + share(b.open.ring
 const pairsN = new Set(trials.map((t) => t.label.slice(0, 2))).size;
 const msAll = runs.map((r) => r.ms / 1000);
 
+// The J section's numbers.
+const climbLogs = ["data/open-gen/rooms6-0.log", "data/open-gen/rooms6-1.log"].filter(existsSync).flatMap((f) => readFileSync(f, "utf8").split("\n").filter((l) => l.startsWith("run ")));
+const climbRuns = climbLogs.length, climbMin = Math.round((climbRuns * 60) / 2 / 60);
+const climbHit = new Set(climbed.map((c) => c.run)).size;
+const climbFirst = pct([...new Set(climbed.map((c) => c.run))].map((r) => Math.min(...climbed.filter((c) => c.run === r).map((c) => c.ms))), 0.5) / 1000;
+const extraSpread = (() => { const n: Record<number, number> = {}; for (const c of climbed) n[c.extra.least] = (n[c.extra.least] ?? 0) + 1; return Object.entries(n).map(([e, k]) => `${k.toLocaleString("en")} with ${e}`).join(", "); })();
+const pairsJ = new Set(trialsJ.map((t) => t.label.slice(0, 2))).size;
+const ms6 = runs6.map((r) => r.ms / 1000);
+const openNote6 = runs6.length ? `${runs6.length} rooms: ${(runs6.filter((r) => goodAt(r.open, ringCellsOf(r))).length)} open enough by the measure above (H's rooms: ${runs.filter((r) => goodAt(r.open, ringCellsOf(r))).length} of ${runs.length}); on the edge ${pc(mean(runs6.map((r) => share(r.open.boundary))))} of the blocks can move (H's: ${pc(mean(fresh.map((r) => share(r.open.boundary))))}), in the ring ${pc(mean(runs6.map((r) => share(r.open.ring))))} (${pc(mean(fresh.map((r) => share(r.open.ring))))}), ${mean(runs6.map((r) => r.open.boundary.walls)).toFixed(1)} edge walls (${mean(runs.map((r) => r.open.boundary.walls)).toFixed(1)}); ${pct(ms6, 0.5).toFixed(0)} s a room at the median, ${Math.max(...ms6).toFixed(0)} s at most.` : "";
+
 const html = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Real extra moves in open rooms</title>
@@ -223,6 +239,27 @@ ${trials.map((t) => `<tr><td class="l"><a href="../?trial=${t.label}">${t.label}
 <p class="sub">The room dashed; red, its target dashed; blue blocks move once in the proof, yellow ones more (the number is how often), grey ones not at all.</p>
 <div class="boards">
 ${trials.map((t) => `<figure>${pic(t.blocks, t.red, t.target, t.solution, t.box, t.room)}<figcaption>${t.label}: ${t.side}, ${t.fewest} moves, ${t.extra} extra</figcaption></figure>`).join("\n")}
+</div>
+</details>
+
+<h2>6 and more extra moves (J trials)</h2>
+<p class="sub">The H rooms had 3 to 4 extra moves, and their pairs felt only a little different (H2 and H3 solved in under 15 s); the earlier boards with 6 to 7 (12A, G2A, M1A) felt clearly different. The library holds few rooms with 6+ extra at 12 to 16 moves and no walls inside (8 goals), so these rooms are climbed first, then opened up exactly as above.</p>
+<ul>
+<li><b>Climbing rooms</b> (open-high.ts): ${climbRuns} climbs of 60 s each, two at once (${climbMin} minutes of the VM's two cores), each from a high-extra goal of the library (its walls taken out), extra-gen's annealed rooms or a random room, annealed on the exact solver of the sealed room (blocks added, removed, moved and slid, the target nudged), scored by the least extra moves over every shortest solution. ${climbHit} of ${climbRuns} climbs reached 6+ extra at 12 to 16 moves without walls inside, ${climbed.length.toLocaleString("en")} distinct rooms in all (${extraSpread}); the first in a climb after ${climbFirst} s at the median. Rooms are no longer the scarce part.</li>
+<li><b>Opening them</b> (open-gen.ts --lib, makeOpenUp with 6+ extra and the room's fewest kept): two rooms from each climb, its most extra and its least, ${runs6.length} opened, 300 s each, two at once. All keep their fewest and 6+ extra exactly in any surroundings (the bounds must agree at every step); the walls left are the ones guarding the come-back lanes.</li>
+</ul>
+<div class="card"><table><tr><th class="l">Seed</th><th class="l">Room</th><th>Fewest</th><th>Extra</th><th>Edge blocks movable</th><th>Edge walls</th><th>Ring blocks movable</th><th>Ring walls</th><th>Time, s</th><th>Checks</th></tr>
+${runs6.map((r) => `<tr><td class="l">${r.seed}</td><td class="l">${r.lib.size} + ring</td><td>${r.fewest}</td><td>${r.extra === r.extraMax ? r.extra : `${r.extra}–${r.extraMax}`}</td>${rowOf("", r.open, ringCellsOf(r))}<td>${(r.ms / 1000).toFixed(0)}</td><td>${r.evals}</td></tr>`).join("\n")}
+</table></div>
+<p class="sub">${openNote6}</p>
+<p class="sub">${pairsJ} blind pair${pairsJ === 1 ? "" : "s"}: an open room with 6+ extra moves against an open room with none at the same fewest and size, opened the same way, on the room and 3 cells of the world round it (framed), as in H.</p>
+${[...Array(pairsJ).keys()].map((k) => `<p class="links">Pair J${k + 1}: ${trialsJ.filter((t) => t.label.startsWith(`J${k + 1}`)).map((t) => `<a href="../?trial=${t.label}">${t.label}</a>`).join("")}</p>`).join("\n")}
+<details><summary>Answer key, J (open after playing)</summary>
+<div class="card"><table><tr><th class="l">Trial</th><th class="l">Side</th><th>Fewest</th><th>Extra (every shortest)</th><th>Red moves</th><th>Blocks moved</th><th>Edge blocks movable</th><th>Edge walls</th><th>Ring blocks movable</th><th>Ring walls</th><th>States (upper / lower)</th></tr>
+${trialsJ.map((t) => `<tr><td class="l"><a href="../?trial=${t.label}">${t.label}</a></td><td class="l">${t.side}</td><td>${t.fewest}</td><td>${t.extra === t.extraMax ? t.extra : `${t.extra}–${t.extraMax}`}</td><td>${t.solution.filter((m) => m.id === t.red).length}</td><td>${new Set(t.solution.map((m) => m.id)).size}</td>${rowOf("", t.open, 4 * (t.room.width - 1))}<td>${t.states.up.toLocaleString("en")} / ${t.states.low.toLocaleString("en")}</td></tr>`).join("\n")}
+</table></div>
+<div class="boards">
+${trialsJ.map((t) => `<figure>${pic(t.blocks, t.red, t.target, t.solution, t.box, t.room)}<figcaption>${t.label}: ${t.side}, ${t.fewest} moves, ${t.extra} extra</figcaption></figure>`).join("\n")}
 </div>
 </details>
 </main></body></html>

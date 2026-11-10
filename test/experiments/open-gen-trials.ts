@@ -6,6 +6,8 @@
 // by open-core.ts's two bounds, checked once more here.
 // Writes src/trials-open.ts (?trial=H1A etc.) and data/open-gen/trials.json for the report:
 //   bun test/experiments/open-gen-trials.ts [--pairs 3] [--budget 300000]
+// The J pairs (6+ extra, from open-high.ts's rooms opened by open-gen.ts --lib):
+//   bun test/experiments/open-gen-trials.ts --in data/open-gen/high6.jsonl --min-extra 6 --prefix J --pairs 2 --low-tries 10 --ts src/trials-open-j.ts --const OPEN_TRIALS_J --json data/open-gen/trials-j.json
 import { readFileSync, writeFileSync } from "node:fs";
 import type { Placed } from "../../src/layout";
 import { cellsAt, type Grid } from "./extra-gen-core";
@@ -16,7 +18,9 @@ const arg = (name: string, fallback: string) => {
   const i = process.argv.indexOf(`--${name}`);
   return i > 0 ? process.argv[i + 1]! : fallback;
 };
-const pairs = Number(arg("pairs", "3")), budget = Number(arg("budget", "300000"));
+const lowTries = Number(arg("low-tries", "3"));
+const pairs = Number(arg("pairs", "3")), budget = Number(arg("budget", "300000")), minExtra = Number(arg("min-extra", "3"));
+const input = arg("in", "data/open-gen/high.jsonl"), prefix = arg("prefix", "H"), tsOut = arg("ts", "src/trials-open.ts"), name = arg("const", "OPEN_TRIALS"), jsonOut = arg("json", "data/open-gen/trials.json");
 
 type Line = Omit<Made, "g"> & { seed: number; lib: { size: string; fewest: number }; board: { W: number; H: number; walls: number[]; pieces: Grid["pieces"]; pos: number[] } };
 const gridOf = (b: Line["board"]): Grid => {
@@ -27,14 +31,14 @@ const gridOf = (b: Line["board"]): Grid => {
 const share = (z: { blocks: number; movable: number }) => (z.blocks ? z.movable / z.blocks : 0);
 const openScore = (m: { open: Made["open"] }) => share(m.open.boundary) + share(m.open.ring) - 0.04 * (m.open.boundary.walls + m.open.ring.walls);
 
-const highs = readFileSync("data/open-gen/high.jsonl", "utf8").trim().split("\n").map((l) => JSON.parse(l) as Line)
-  .filter((l) => l.extra >= 3).sort((a, b) => openScore(b) - openScore(a));
+const highs = readFileSync(input, "utf8").trim().split("\n").map((l) => JSON.parse(l) as Line)
+  .filter((l) => l.extra >= minExtra).sort((a, b) => openScore(b) - openScore(a));
 const picked: Line[] = [];
 for (const h of highs) if (picked.length < pairs && !picked.some((p) => p.lib.size === h.lib.size && p.fewest === h.fewest)) picked.push(h);
 
 function lowFor(h: Line, k: number): Made {
   let best: Made | null = null;
-  for (let t = 0; t < 3 && (!best || openScore(best) < openScore(h) - 0.2); t++) {
+  for (let t = 0; t < lowTries && (!best || openScore(best) < openScore(h) - 0.2); t++) {
     const lib = freshRoom(h.size - 2, "low", h.fewest, 300 + 10 * k + t, 120_000);
     if (!lib) continue;
     const m = makeOpenUp(lib, 500 + 10 * k + t, budget, undefined, { side: "low" });
@@ -80,21 +84,21 @@ const made = picked.map((h, k) => {
 const flips = [false, true, true];
 const trials = made.flatMap((p, k) => {
   const sides = flips[k] ? [["low", p.lo], ["high", p.hi]] as const : [["high", p.hi], ["low", p.lo]] as const;
-  return sides.map(([side, m], j) => ({ label: `H${k + 1}${"AB"[j]}`, side, ...m }));
+  return sides.map(([side, m], j) => ({ label: `${prefix}${k + 1}${"AB"[j]}`, side, ...m }));
 });
 for (const t of trials) console.log(`${t.label}: ${t.side}, ${t.fewest} moves, ${t.extra}-${t.extraMax} extra, edge ${t.open.boundary.movable}/${t.open.boundary.blocks}, ring ${t.open.ring.movable}/${t.open.ring.blocks}`);
 
 const j = (x: unknown) => JSON.stringify(x).replace(/"(\w+)":/g, "$1:");
 const ts = `// Blind trial pairs of rooms with real extra moves and an open edge (reports/open-gen.html, made
 // by test/experiments/open-gen-trials.ts): a room with many extra moves against one with none at
-// the same fewest, both opened up, on the room and 3 cells of the world round it; ?trial=H1A etc.
+// the same fewest, both opened up, on the room and 3 cells of the world round it; ?trial=${prefix}1A etc.
 // Which is which is only in the report.
 import type { Trial } from "./trials";
 
-export const OPEN_TRIALS: Trial[] = [
+export const ${name}: Trial[] = [
 ${trials.map((t) => `  {\n    label: "${t.label}", red: "${t.red}", target: ${j(t.target)}, fewest: ${t.fewest},\n    blocks: ${j(t.blocks)},\n    solution: ${j(t.solution)},\n  },`).join("\n")}
 ];
 `;
-writeFileSync("src/trials-open.ts", ts);
-writeFileSync("data/open-gen/trials.json", JSON.stringify(trials));
-console.log("src/trials-open.ts, data/open-gen/trials.json");
+writeFileSync(tsOut, ts);
+writeFileSync(jsonOut, JSON.stringify(trials));
+console.log(`${tsOut}, ${jsonOut}`);
