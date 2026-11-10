@@ -345,6 +345,8 @@ const html = `<!doctype html>
 <h1>Trial features: which number tracks the verdicts</h1>
 <p class="sub">The twelve trial boards (8A–16B: reports/extra-moves.html; M1: extra-maker.html; G1, G2: extra-gen.html), each measured exactly on the board as played (its frame of walls), against how they felt. Made by test/experiments/trial-features.ts. <strong>Twelve boards and one player: every correlation here is a hint, not a finding.</strong> |ρ| needs about 0.58 to be "significant" at n = 12, and none of that holds with one player's mood and learning between sessions (the G trials came last).</p>
 
+<p class="sub">Follow-up: <a href="trial-mixed.html">trial-mixed.html</a> adds the H and J trials and asks whether how mixed the come-backs are tracks the verdicts better than their count.</p>
+
 <h2>The verdict order</h2>
 <p class="sub">Best/hardest first. Where the quotes say "hard" they also say "good" (12A, 16B, G2A), and the simple ones are the ones disliked, so one order serves both. The pairs are firm (the quotes compare them directly); the order between pairs is my reading and is soft in the middle:</p>
 <ol>

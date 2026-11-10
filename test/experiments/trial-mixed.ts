@@ -2,37 +2,37 @@
 // numbers over every shortest solution (or a uniform sample), against the blind verdicts and the
 // play logs. The open-room trials (H, J; and K once made) are measured by open-core.ts's two
 // bounds, so their numbers hold in any surroundings; the others on their framed board.
-//   bun test/experiments/trial-mixed.ts   (writes /tmp/trial-mixed.json for trial-mixed-report.ts)
+//   bun test/experiments/trial-mixed.ts   (writes data/trial-mixed.json for trial-mixed-report.ts)
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { TRIALS, type Trial } from "../../src/trials";
 import { MAKER_TRIALS } from "../../src/trials-maker";
 import { GEN_TRIALS } from "../../src/trials-gen";
 import { OPEN_TRIALS } from "../../src/trials-open";
 import { OPEN_TRIALS_J } from "../../src/trials-open-j";
+import { OPEN_TRIALS_K } from "../../src/trials-open-k";
 import { analyse, cellsAt, clone, type Grid, solve } from "./extra-gen-core";
 import { checkMixed, KEYS, over } from "./mixed-core";
 import { gridOf, type Mv, play } from "./trial-grid";
 
-const extraTrials: Trial[] = [];
-const kFile = "../../src/trials-open-k.ts";
-if (existsSync("src/trials-open-k.ts")) extraTrials.push(...((await import(kFile)) as { OPEN_TRIALS_K: Trial[] }).OPEN_TRIALS_K);
-const all: Trial[] = [...TRIALS, ...MAKER_TRIALS, ...GEN_TRIALS, ...OPEN_TRIALS, ...OPEN_TRIALS_J, ...extraTrials];
+const all: Trial[] = [...TRIALS, ...MAKER_TRIALS, ...GEN_TRIALS, ...OPEN_TRIALS, ...OPEN_TRIALS_J, ...OPEN_TRIALS_K];
 // The open rooms' rectangles (trial coordinates), from the files that made them.
-const rooms = new Map<string, { x: number; y: number; width: number; height: number }>();
+// (K: the room's own blocks as listed, those sticking out into the world too.)
+const rooms = new Map<string, { x: number; y: number; width: number; height: number }>(), roomIds = new Map<string, string[]>();
 for (const f of ["data/open-gen/trials.json", "data/open-gen/trials-j.json", "data/open-gen/trials-k.json"]) {
-  if (existsSync(f)) for (const t of JSON.parse(readFileSync(f, "utf8"))) rooms.set(t.label, t.room);
+  if (existsSync(f)) for (const t of JSON.parse(readFileSync(f, "utf8"))) (rooms.set(t.label, t.room), t.roomIds && roomIds.set(t.label, t.roomIds));
 }
 const PATHS = 50_000;
 
 function measure(t: Trial) {
-  const { g, red, target, proof, ox, oy } = gridOf(t);
+  const { g, red, target, proof, ox, oy, index } = gridOf(t);
   const t0 = performance.now();
   const proofMix = over([proof.map((m) => m[0])], red);
   const room = rooms.get(t.label);
   if (room) {
     // The room's blocks (red first), every other block the world's.
     const inside = (c: number) => { const x = (c % g.W) + ox, y = Math.floor(c / g.W) + oy; return x >= room.x && y >= room.y && x < room.x + room.width && y < room.y + room.height; };
-    const R = [red, ...g.pieces.keys()].filter((i, k) => (k === 0 || i !== red) && cellsAt(g, g.pieces[i]!, g.pos[i]!).every(inside));
+    const ids = roomIds.get(t.label);
+    const R = ids ? ids.map((id) => index.get(id)!) : [red, ...g.pieces.keys()].filter((i, k) => (k === 0 || i !== red) && cellsAt(g, g.pieces[i]!, g.pos[i]!).every(inside));
     const c = checkMixed(g, R, target, { cap: 4_000_000, paths: PATHS });
     return { how: "open" as const, fewest: c.up.fewest, exact: c.exact, mixedExact: c.mixedExact, solutions: c.solutions, sampled: c.sampled, mix: c.mixed!, low: c.mixedLow, proofMix, ms: performance.now() - t0 };
   }
@@ -69,4 +69,4 @@ const rows = all.filter((t) => !only || only.includes(t.label)).map((t) => {
   console.log(t.label.padEnd(4), m.how.padEnd(6), `${m.fewest}${m.fewest === t.fewest ? "" : "!"}`, `sols ${m.solutions}${m.sampled ? "~" : ""}`, m.mixedExact ? "exact" : "", KEYS.map((k) => `${k} ${r(k)}`).join(", "), `${Math.round(m.ms)} ms`);
   return { label: t.label, ...m, play: play(t.label) };
 });
-writeFileSync("/tmp/trial-mixed.json", JSON.stringify(rows));
+writeFileSync("data/trial-mixed.json", JSON.stringify(rows));
