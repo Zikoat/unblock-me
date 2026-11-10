@@ -1,4 +1,4 @@
-// The trial boards (src/trials.ts, src/trials-maker.ts, src/trials-gen.ts): every one's proof is a legal goal of
+// The trial boards (src/trials.ts, src/trials-maker.ts, src/trials-gen.ts, src/trials-open.ts): every one's proof is a legal goal of
 // its stated fewest moves on its board, and every label is unique.
 import { expect, test } from "bun:test";
 import { contractGoal, WISHES, WORLD_VERSION } from "../../src/contract";
@@ -6,8 +6,9 @@ import { referee } from "../../src/referee";
 import { TRIALS } from "../../src/trials";
 import { MAKER_TRIALS } from "../../src/trials-maker";
 import { GEN_TRIALS } from "../../src/trials-gen";
+import { OPEN_TRIALS } from "../../src/trials-open";
 
-const all = [...TRIALS, ...MAKER_TRIALS, ...GEN_TRIALS];
+const all = [...TRIALS, ...MAKER_TRIALS, ...GEN_TRIALS, ...OPEN_TRIALS];
 test("every trial's proof is legal and as long as its fewest", () => {
   for (const t of all) {
     const request = { version: 1, world: { seed: 0, density: 0, ui: {}, version: WORLD_VERSION, placed: t.blocks }, moved: {}, history: [], rampAim: null, wishes: WISHES, seed: 1 };

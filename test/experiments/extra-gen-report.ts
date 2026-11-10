@@ -139,6 +139,7 @@ const html = `<!doctype html>
 <p><a href="./">Reports</a></p>
 <h1>Generating real extra moves</h1>
 <p class="sub">Extra moves: Σ over the blocks a shortest solution moves of (times moved − 1), red counting, the least over every shortest solution (reports/extra-moves.html). The open, randomly filled world hardly holds goals with real ones (reports/extra-maker.html), so these experiments make boards that do, reusing nothing of the maker: an exact breadth-first solver for a bounded grid (test/experiments/extra-gen-core.ts) and two generators on it (extra-gen-make.ts). A board succeeds when its goal needs 10 to 16 moves and has 3 or more extra moves, both verified exactly; one that runs out of time falls back to today's random placement.</p>
+<p class="sub"><b>Next:</b> players saw these rooms' edge as a closed ring of stuck blocks; <a href="open-gen.html">reports/open-gen.html</a> drops the seal and proves the goal exact in any surroundings instead, with the edge's blocks free to move.</p>
 
 <h2>The two approaches</h2>
 <ul>
