@@ -19,7 +19,7 @@
 // solution then maps onto a soft one of the same length, so it moves no world block more than
 // once (each such block counts 1 move, 0 extra) and its extra moves are R's, which the soft
 // search bounds from both sides.
-import { cellsAt, clone, type Grid, lockedSet, occupancy, solve, type Solve, span } from "./extra-gen-core";
+import { cellsAt, clone, type Grid, listPaths, lockedSet, occupancy, type Paths, solve, type Solve, span } from "./extra-gen-core";
 
 /** A move: block index (into the board), from, to; with the world blocks it went through. */
 export type SMove = [number, number, number, number[]];
@@ -33,6 +33,9 @@ export type Soft = {
   /** World blocks a shortest solution may go through, on some shortest solution. */
   tolls: number;
   solution: SMove[];
+  /** With `paths`: every shortest solution (the world blocks each move goes through with it), or
+   * a uniform sample of them, and how many there are. */
+  paths?: Paths<SMove>;
 };
 
 /** World blocks that could ever move: a free cell, the edge, a cell of R or another such block
@@ -120,7 +123,7 @@ class Table {
  * (red's move and one for each other block on the cells red must pass), so the result is exact
  * when the fewest is at most `bound` ("unsolvable" past it).
  */
-export function solveSoft(g: Grid, R: number[], target: number, { bound = 20, cap = 1_500_000, atLeast = 0 } = {}): Soft {
+export function solveSoft(g: Grid, R: number[], target: number, { bound = 20, cap = 1_500_000, atLeast = 0, paths = 0 } = {}): Soft {
   const inR = g.pieces.map(() => false);
   R.forEach((i) => (inR[i] = true));
   const occ = occupancy(g);
@@ -303,38 +306,48 @@ export function solveSoft(g: Grid, R: number[], target: number, { bound = 20, ca
       extraMax = Math.max(extraMax, e);
     }
   }
-  // One shortest solution, back from the first goal along tight edges.
-  const solution: SMove[] = [];
-  for (let t = goals[0]!; t !== 0; ) {
-    const [s, k] = into[t]!.find(([s]) => on[s])!;
+  const moveOf = (s: number, t: number, k: number): SMove => {
     const from = st.arena[s * size + k]! - off, to = st.arena[t * size + k]! - off;
     const went: number[] = [];
     for (let x = 0; x < T.length; x++) {
       const bit = (a: number) => st.arena[a * size + n + (x >> 3)]! & (1 << (x & 7));
       if (bit(t) && !bit(s)) went.push(T[x]!);
     }
-    solution.unshift([R[k]!, from, to, went]);
+    return [R[k]!, from, to, went];
+  };
+  // One shortest solution, back from the first goal along tight edges.
+  const solution: SMove[] = [];
+  for (let t = goals[0]!; t !== 0; ) {
+    const [s, k] = into[t]!.find(([s]) => on[s])!;
+    solution.unshift(moveOf(s, t, k));
     t = s;
   }
+  let listed: Paths<SMove> | undefined;
+  if (paths > 0 && budget >= 0) {
+    const out = new Map<number, [number, SMove][]>();
+    for (const t of order) for (const [s, k] of into[t]!) if (on[s]) (out.get(s) ?? out.set(s, []).get(s)!).push([t, moveOf(s, t, k)]);
+    listed = listPaths(0, (s) => out.get(s) ?? [], new Set(goals), paths);
+  }
   if (budget < 0) return { status: "cap", fewest, extraMin: -1, extraMax: -1, states: st.count, tolls, solution };
-  return { status: "ok", fewest, extraMin, extraMax, states: st.count, tolls, solution };
+  return { status: "ok", fewest, extraMin, extraMax, states: st.count, tolls, solution, paths: listed };
 }
 
 /** The upper bound: R alone moving, every other block a wall, the board's edge a wall. */
-export function solveFramed(g: Grid, R: number[], target: number, opts: { cap?: number; maxDepth?: number; bound?: number } = {}): Solve {
+export function solveFramed(g: Grid, R: number[], target: number, opts: { cap?: number; maxDepth?: number; bound?: number; paths?: number } = {}): Solve {
   const x: Grid = { W: g.W, H: g.H, wall: g.wall.slice(), pieces: [], pos: [] };
   g.pieces.forEach((p, i) => { if (!R.includes(i)) for (const c of cellsAt(g, p, g.pos[i]!)) x.wall[c] = 1; });
   for (const i of R) (x.pieces.push(g.pieces[i]!), x.pos.push(g.pos[i]!));
   const s = solve(x, 0, target, { edge: "wall", ...opts });
   s.solution = s.solution.map(([k, a, b]) => [R[k]!, a, b]);
+  if (s.paths) s.paths.list = s.paths.list.map((p) => p.map(([k, a, b]) => [R[k]!, a, b]));
   return s;
 }
 
 /** Both bounds on R's goal; exact when they agree. `bound`: look no further than this many
  * moves (exact for any goal that short). */
-export function checkOpen(g: Grid, R: number[], target: number, cap = 1_500_000, bound = Infinity) {
-  const up = solveFramed(g, R, target, { cap, bound, maxDepth: Math.min(60, bound + 1) });
-  const low = up.status === "ok" ? solveSoft(g, R, target, { bound: up.fewest, cap, atLeast: up.fewest }) : null;
+export function checkOpen(g: Grid, R: number[], target: number, cap = 1_500_000, bound = Infinity, paths = 0) {
+  const up = solveFramed(g, R, target, { cap, bound, maxDepth: Math.min(60, bound + 1), paths });
+  const low = up.status === "ok" ? solveSoft(g, R, target, { bound: up.fewest, cap, atLeast: up.fewest, paths }) : null;
   const exact = !!low && low.status === "ok" && low.fewest === up.fewest && low.extraMin === up.extraMin && low.extraMax === up.extraMax;
   return { up, low, exact };
 }

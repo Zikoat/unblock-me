@@ -3,7 +3,7 @@
 // log's moves and time, and each number's rank correlation with the verdicts' order and the
 // pairs it orders as the verdicts do.
 //   bun test/experiments/trial-features.ts
-import { readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { contractGoal, WISHES, WORLD_VERSION } from "../../src/contract";
 import { judge } from "../../src/judge";
 import { decisionTree, boardCells } from "../../src/decisions";
@@ -11,7 +11,8 @@ import { requestBoard } from "../../src/contract";
 import { TRIALS, type Trial } from "../../src/trials";
 import { MAKER_TRIALS } from "../../src/trials-maker";
 import { GEN_TRIALS } from "../../src/trials-gen";
-import { analyse, cellsAt, lockedSet, occupancy, span, type Grid, type Piece } from "./extra-gen-core";
+import { analyse, cellsAt, lockedSet, occupancy, span, type Grid } from "./extra-gen-core";
+import { gridOf, type Mv, play } from "./trial-grid";
 
 const all: Trial[] = [...TRIALS, ...MAKER_TRIALS, ...GEN_TRIALS];
 
@@ -22,36 +23,6 @@ const PAIRS: [string, string][] = [["8A", "8B"], ["12A", "12B"], ["16B", "16A"],
 // Pairs the quotes call only slightly apart ("a bit easier", "slightly easier"); the others are clear.
 const SLIGHT = new Set(["8A", "G1A"]);
 
-/** The trial's board inside its frame of walls as a Grid; ids to piece indices. */
-function gridOf(t: Trial) {
-  const xs = t.blocks.flatMap((b) => [b.x, b.x + b.w]), ys = t.blocks.flatMap((b) => [b.y, b.y + b.h]);
-  const ox = Math.min(...xs) + 1, oy = Math.min(...ys) + 1;
-  const W = Math.max(...xs) - ox - 1, H = Math.max(...ys) - oy - 1;
-  const g: Grid = { W, H, wall: new Uint8Array(W * H), pieces: [], pos: [] };
-  const index = new Map<string, number>();
-  for (const b of t.blocks) {
-    const x = b.x - ox, y = b.y - oy;
-    if (b.wall) {
-      if (x >= 0 && y >= 0 && x < W && y < H) g.wall[y * W + x] = 1;
-      continue;
-    }
-    if (b.w * b.h !== 2) throw new Error(`${t.label}: block ${b.id} is not 2x1`);
-    const h = b.w > b.h;
-    index.set(b.id!, g.pieces.length);
-    g.pieces.push({ h, lane: h ? y : x });
-    g.pos.push(h ? x : y);
-  }
-  const red = index.get(t.red)!, rp = g.pieces[red]!;
-  const target = rp.h ? t.target.x - ox : t.target.y - oy;
-  const proof = t.solution.map((m) => {
-    const i = index.get(m.id)!, p = g.pieces[i]!;
-    return [i, p.h ? m.from.x - ox : m.from.y - oy, p.h ? m.to.x - ox : m.to.y - oy] as Mv;
-  });
-  return { g, red, target, proof, index, ox, oy };
-}
-
-/** A move: piece index, from, to (lane positions). */
-type Mv = [number, number, number];
 
 /** Every slide of every piece in `which` on occupancy `occ` (0 empty). */
 function slidesOf(g: Grid, occ: Int16Array, pos: number[], which: number[], f: (i: number, to: number) => void) {
@@ -262,29 +233,6 @@ function measure(t: Trial) {
     solutions, sampled: solutions > SAMPLE, onShortest: layer.reduce((a, l) => a + l.length, 0),
     edge: [...edgeBlocks].filter((i) => canMove.has(i)).length, edgeAll: edgeBlocks.size, loose: canMove.size, locked,
   };
-}
-
-/** The play log: the session where the goal was reached. */
-function play(label: string) {
-  const files = readdirSync("play-data").filter((f) => f.startsWith(`trial-${label}-`));
-  for (const f of files) {
-    const log = JSON.parse(readFileSync(`play-data/${f}`, "utf8")).log as { t: number; e: string; id?: string; from?: { x: number; y: number }; to?: { x: number; y: number } }[];
-    const reached = log.find((e) => e.e === "reached");
-    if (!reached) continue;
-    const moves = log.filter((e) => e.e === "move"), undos = log.filter((e) => e.e === "undo").length;
-    const goal = log.find((e) => e.e === "goal")!;
-    // A take-back: a block moved straight back to where its last move started.
-    let back = 0;
-    const last = new Map<string, { x: number; y: number }>();
-    for (const m of moves) {
-      const f = last.get(m.id!);
-      if (f && f.x === m.to!.x && f.y === m.to!.y) back++;
-      last.set(m.id!, m.from!);
-    }
-    const blocks = new Set(moves.map((m) => m.id)).size;
-    return { moves: moves.length - undos, undos, back, blocks, extra: moves.length - blocks, think: (moves[0]!.t - goal.t) / 1000, time: (reached.t - goal.t) / 1000, solve: (reached.t - moves[0]!.t) / 1000 };
-  }
-  return null;
 }
 
 const rows = all.map((t) => {

@@ -180,6 +180,43 @@ class States {
   }
 }
 
+export type Paths<E> = { count: number; sampled: boolean; list: E[][] };
+
+/** The paths from `start` to a goal through a DAG whose every edge lies on one (the shortest
+ * solutions): all of them when there are at most `max`, else a uniform sample of `max` (seeded,
+ * so the same each run). */
+export function listPaths<E>(start: number, out: (s: number) => [number, E][], goals: Set<number>, max: number, seed = 12345): Paths<E> {
+  const ways = new Map<number, number>();
+  const count = (s: number): number => {
+    if (goals.has(s)) return 1;
+    let w = ways.get(s);
+    if (w === undefined) ways.set(s, (w = out(s).reduce((a, [t]) => a + count(t), 0)));
+    return w;
+  };
+  const total = count(start), list: E[][] = [];
+  if (total <= max) {
+    const walk = (s: number, path: E[]) => {
+      if (goals.has(s)) return void list.push(path);
+      for (const [t, e] of out(s)) walk(t, [...path, e]);
+    };
+    walk(start, []);
+    return { count: total, sampled: false, list };
+  }
+  const rand = rng(seed);
+  for (let k = 0; k < max; k++) {
+    const path: E[] = [];
+    for (let s = start; !goals.has(s); ) {
+      const es = out(s);
+      let r = rand() * count(s), j = 0;
+      for (; j < es.length - 1 && r >= count(es[j]![0]); j++) r -= count(es[j]![0]);
+      path.push(es[j]![1]);
+      s = es[j]![0];
+    }
+    list.push(path);
+  }
+  return { count: total, sampled: true, list };
+}
+
 /** A move: block index, from, to (lane positions). */
 export type GMove = [number, number, number];
 
@@ -197,6 +234,8 @@ export type Solve = {
   extraBfs: number;
   /** Cells some block passes or rests in on some shortest solution. */
   used: Uint8Array;
+  /** With `paths`: every shortest solution, or a uniform sample of them, and how many there are. */
+  paths?: Paths<GMove>;
 };
 
 export type SolveOptions = {
@@ -213,10 +252,12 @@ export type SolveOptions = {
    * true depth, so the fewest and extra moves are exact when the fewest is at most `bound`
    * ("unsolvable" past it). */
   bound?: number;
+  /** List the shortest solutions: all of them up to this many, else a uniform sample this big. */
+  paths?: number;
 };
 
 /** The fewest moves for block `red` to reach lane position `target`, exactly, and the extra moves. */
-export function solve(g: Grid, red: number, target: number, { edge = "wall", cap = 300_000, atLeast = 0, maxDepth = 60, quick = false, bound = Infinity }: SolveOptions = {}): Solve {
+export function solve(g: Grid, red: number, target: number, { edge = "wall", cap = 300_000, atLeast = 0, maxDepth = 60, quick = false, bound = Infinity, paths = 0 }: SolveOptions = {}): Solve {
   const occ = occupancy(g);
   const a = analyse(g, red, edge, occ);
   const fail = (status: Solve["status"], states = 0, fewest = -1): Solve => ({ status, fewest, extraMin: -1, extraMax: -1, states, relevant: a.relevant.length, sealed: a.sealed, solution: [], extraBfs: -1, used: new Uint8Array(0) });
@@ -351,7 +392,16 @@ export function solve(g: Grid, red: number, target: number, { edge = "wall", cap
       extraMax = fewest - least;
     }
   }
-  return { status: "ok", fewest, extraMin, extraMax, states: st.count, relevant: n, sealed: a.sealed, solution, extraBfs, used };
+  let listed: Paths<GMove> | undefined;
+  if (paths > 0) {
+    const out = new Map<number, [number, GMove][]>();
+    for (let d = 1; d <= fewest; d++) for (const [s, t, k] of edges[d]!) {
+      const e: [number, GMove] = [t, [R[k]!, st.arena[s * n + k]!, st.arena[t * n + k]!]];
+      (out.get(s) ?? out.set(s, []).get(s)!).push(e);
+    }
+    listed = listPaths(0, (s) => out.get(s) ?? [], new Set(goals), paths);
+  }
+  return { status: "ok", fewest, extraMin, extraMax, states: st.count, relevant: n, sealed: a.sealed, solution, extraBfs, used, paths: listed };
 }
 
 /** Every state reachable from the start (up to `cap`), and each block's fewest moves to each
