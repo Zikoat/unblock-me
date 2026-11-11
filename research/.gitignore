@@ -1,0 +1,8 @@
+# Originals: copyrighted or large, kept on the VM only (see raw/papers/MANIFEST-tar.txt, raw/FINDS.md)
+raw/papers/*.pdf
+raw/code/
+raw/data/
+raw/web/
+# First-pass conversion leftovers
+cleaned/**/*.raw.md
+cleaned/**/figs.log
