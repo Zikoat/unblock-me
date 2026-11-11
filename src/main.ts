@@ -21,6 +21,7 @@ import { GEN_TRIALS } from "./trials-gen";
 import { OPEN_TRIALS } from "./trials-open";
 import { OPEN_TRIALS_J } from "./trials-open-j";
 import { OPEN_TRIALS_K } from "./trials-open-k";
+import { ROOM_TRIALS } from "./trials-rooms";
 import { bayReached, GATE, GATE_GONE, inIsland, opensGate, isLast, islandCamera, islandGoals, islandRects, nextIslandGoal, squareAt, squareMiddle, squareOf } from "./island";
 import { fixedLayout, MAX_TRIES, MAX_WALLS, MIN_TRIES, randomLayout, TRIES, UNIT, WALLS, type Placed, type Ui } from "./layout";
 import { CARD, CUE_MS, draw, fading, islandCardRect, resetFades, RIPPLE_MS, SHAKE_MS, THROB_MS, redArrow, uiArrow, type Sparkle } from "./render";
@@ -88,8 +89,10 @@ let testbedNext = Number(new URLSearchParams(location.search).get("testbed")) ||
 // src/trials-open.ts and src/trials-open-j.ts, reports/open-gen.html; src/trials-open-k.ts,
 // reports/trial-mixed.html) with
 // its one goal, its label on screen; a reload starts it over.
-const trial = [...TRIALS, ...MAKER_TRIALS, ...GEN_TRIALS, ...OPEN_TRIALS, ...OPEN_TRIALS_J, ...OPEN_TRIALS_K].find((t) => t.label === new URLSearchParams(location.search).get("trial")) ?? null;
+const trial = [...TRIALS, ...MAKER_TRIALS, ...GEN_TRIALS, ...OPEN_TRIALS, ...OPEN_TRIALS_J, ...OPEN_TRIALS_K, ...ROOM_TRIALS].find((t) => t.label === new URLSearchParams(location.search).get("trial")) ?? null;
 let trialShown = false;
+/** How long after a playlist trial's goal is reached the next board loads. */
+const NEXT_TRIAL_MS = 6000;
 // ?board=<JSON list of placed blocks> opens exactly that board (for sharing a board, and
 // for tests). Nothing is stored while it is open (nor on the testbed or a trial).
 const shared = new URLSearchParams(location.search).get("board") ?? (testbed ? JSON.stringify(TESTBED.blocks) : trial ? JSON.stringify(trial.blocks) : null);
@@ -159,7 +162,9 @@ function load<T>(key: string, fallback: T): T {
 type LogEvent =
   | { e: "load"; commit: string }
   | { e: "error"; message: string; where: string }
-  | { e: "goal"; commit: string; id: string; target: Point; start?: Point; tries: number; walls?: number; seed: number; solution: number; moved: [string, number, number][]; judge?: Terms }
+  // `proof`: the maker's solution itself (id, from x y, to x y), so the play can be measured
+  // against it later without running the maker again (research/roadmap.md, the data pipeline).
+  | { e: "goal"; commit: string; id: string; target: Point; start?: Point; tries: number; walls?: number; seed: number; solution: number; proof?: [string, number, number, number, number][]; moved: [string, number, number][]; judge?: Terms }
   // A goal from the maker the Referee rejected (src/referee.ts): a bug. With what it was asked
   // (the Request, and the worker's near and effort), to replay; the goal counts as none found.
   | { e: "rejected"; rule: number; why: string; goal: contract.Goal; request: contract.Request; near: Point; level: number }
@@ -171,6 +176,8 @@ type LogEvent =
   | { e: "prefetched" }
   | { e: "reached"; id: string; used: number }
   | { e: "reset"; goal: string | null }
+  // The page hidden (another tab, the phone locked) and shown again: time away is not thinking.
+  | { e: "hide" | "show" }
   | { e: "density"; from: number; to: number; goal: string | null }
   | { e: "walls"; from: number; to: number; goal: string | null };
 const LOG_MAX = 3000;
@@ -468,7 +475,7 @@ function showGoal(goal: Goal | null): void {
     const before = squareOf(goal) === null ? undefined : scene.done.filter((d) => squareOf(d) === squareOf(goal)).at(-1);
     goal.begun = before?.ended ?? scene.history.length;
     // A snapshot of the board, so the goal can be measured again later.
-    log({ e: "goal", commit: __COMMIT__, id: goal.id, target: goal.target, start: goal.start, tries, walls, seed, solution: goal.solution.length, moved: [...scene.moved].map(([id, p]) => [id, p.x, p.y]), ...(goal.judged && { judge: goal.judged }) });
+    log({ e: "goal", commit: __COMMIT__, id: goal.id, target: goal.target, start: goal.start, tries, walls, seed, solution: goal.solution.length, proof: goal.solution.map((m) => [m.id, m.from.x, m.from.y, m.to.x, m.to.y]), moved: [...scene.moved].map(([id, p]) => [id, p.x, p.y]), ...(goal.judged && { judge: goal.judged }) });
   }
   // The last red block's soul flies to the new one, once its finish is over.
   if (!finish) sendSoul();
@@ -655,6 +662,9 @@ function reachGoal(now: number): void {
   goal.used = Math.max(1, goal.step || squareOf(goal) === null ? movesSince(goal.begun ?? 0) : squareMoves(squareOf(goal)!));
   logMoves();
   log({ e: "reached", id: goal.id, used: goal.used });
+  // A playlist trial goes on to the next board once the finish has played (its log is sent on
+  // the reach, and once more as the page goes).
+  if (trial?.next) setTimeout(() => location.replace(`?trial=${trial.next}`), NEXT_TRIAL_MS);
   scene.done.push(goal);
   scene.goal = null;
   // The way it slid in, for the landing's squash and jolt.
@@ -946,6 +956,7 @@ async function reloadOnNewBuild(): Promise<void> {
 }
 setInterval(reloadOnNewBuild, 1000);
 document.addEventListener("visibilitychange", reloadOnNewBuild);
+document.addEventListener("visibilitychange", () => log({ e: document.hidden ? "hide" : "show" }));
 
 /** Back where the view was when the page was last open (a reset clears it: centred). */
 function restoreCamera(): void {

@@ -1,4 +1,4 @@
-// The trial boards (src/trials.ts, src/trials-maker.ts, src/trials-gen.ts, src/trials-open.ts, src/trials-open-j.ts, src/trials-open-k.ts): every one's proof is a legal goal of
+// The trial boards (src/trials.ts, src/trials-maker.ts, src/trials-gen.ts, src/trials-open.ts, src/trials-open-j.ts, src/trials-open-k.ts, src/trials-rooms.ts): every one's proof is a legal goal of
 // its stated fewest moves on its board, and every label is unique.
 import { expect, test } from "bun:test";
 import { contractGoal, WISHES, WORLD_VERSION } from "../../src/contract";
@@ -9,8 +9,9 @@ import { GEN_TRIALS } from "../../src/trials-gen";
 import { OPEN_TRIALS } from "../../src/trials-open";
 import { OPEN_TRIALS_J } from "../../src/trials-open-j";
 import { OPEN_TRIALS_K } from "../../src/trials-open-k";
+import { ROOM_TRIALS } from "../../src/trials-rooms";
 
-const all = [...TRIALS, ...MAKER_TRIALS, ...GEN_TRIALS, ...OPEN_TRIALS, ...OPEN_TRIALS_J, ...OPEN_TRIALS_K];
+const all = [...TRIALS, ...MAKER_TRIALS, ...GEN_TRIALS, ...OPEN_TRIALS, ...OPEN_TRIALS_J, ...OPEN_TRIALS_K, ...ROOM_TRIALS];
 test("every trial's proof is legal and as long as its fewest", () => {
   for (const t of all) {
     const request = { version: 1, world: { seed: 0, density: 0, ui: {}, version: WORLD_VERSION, placed: t.blocks }, moved: {}, history: [], rampAim: null, wishes: WISHES, seed: 1 };
@@ -18,4 +19,6 @@ test("every trial's proof is legal and as long as its fewest", () => {
     expect([t.label, t.solution.length]).toEqual([t.label, t.fewest]);
   }
   expect(new Set(all.map((t) => t.label)).size).toBe(all.length);
+  // A playlist's next trial exists.
+  for (const t of all) if (t.next) expect([t.label, all.some((o) => o.label === t.next)]).toEqual([t.label, true]);
 });

@@ -6,7 +6,9 @@ import type { Point } from "./camera";
 import type { Placed } from "./layout";
 import type { Move } from "./rules";
 
-export type Trial = { label: string; blocks: Placed[]; red: string; target: Point; fewest: number; solution: Move[] };
+/** `next`: the trial the page goes on to once this one's goal is reached and its finish is over
+ * (a playlist, src/trials-rooms.ts). */
+export type Trial = { label: string; blocks: Placed[]; red: string; target: Point; fewest: number; solution: Move[]; next?: string };
 
 export const TRIALS: Trial[] = [
   {
