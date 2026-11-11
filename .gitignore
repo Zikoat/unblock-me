@@ -9,4 +9,7 @@ public.old/
 public.next.*
 bench/results/
 data/
-lab/out/
+# Research lives in ~/unblock-me-lab (a local repo, never pushed)
+research/
+lab/
+test/experiments/

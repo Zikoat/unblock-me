@@ -1,8 +1,9 @@
-// Builds dist/ (or --out <dir>): the app, and reports/ (Markdown) as pages. With --watch,
-// rebuilds whenever something in src/ or reports/ changes; open pages notice the new build
+// Builds dist/ (or --out <dir>): the app, and as pages reports/ and the lab's reports
+// (--lab-reports <dir>, by default ../unblock-me-lab/reports, if there). With --watch, rebuilds
+// whenever something in src/ or either reports folder changes; open pages notice the new build
 // id in build.txt and reload themselves. COMMIT overrides the commit it records (for a
 // build from an exported tree, which has no git).
-import { watch } from "node:fs";
+import { existsSync, watch } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { buildReports } from "./reports";
@@ -11,6 +12,8 @@ const root = join(import.meta.dir, "..");
 const src = join(root, "src");
 const out = process.argv.indexOf("--out");
 const outdir = out > 0 ? process.argv[out + 1]! : join(root, "dist");
+const lab = process.argv.indexOf("--lab-reports");
+const labReports = lab > 0 ? process.argv[lab + 1]! : join(root, "..", "unblock-me-lab", "reports");
 
 async function build(): Promise<void> {
   const id = Date.now().toString(36);
@@ -38,7 +41,7 @@ async function build(): Promise<void> {
   await Bun.write(join(outdir, "index.html"), Bun.file(join(src, "index.html")));
   // A standalone page for finding out how Telegram's in-app browser treats swipes.
   await Bun.write(join(outdir, "telegram-test.html"), Bun.file(join(src, "telegram-test.html")));
-  await buildReports(join(root, "reports"), join(outdir, "reports"));
+  await buildReports([join(root, "reports"), labReports], join(outdir, "reports"));
   // Written last, so a page only reloads once the new app is complete.
   await Bun.write(join(outdir, "build.txt"), id);
   console.log(`Built ${outdir} (${id})`);
@@ -55,5 +58,6 @@ if (process.argv.includes("--watch")) {
   };
   watch(src, { recursive: true }, rebuild);
   watch(join(root, "reports"), rebuild);
-  console.log(`Watching ${src} and reports/`);
+  if (existsSync(labReports)) watch(labReports, { recursive: true }, rebuild);
+  console.log(`Watching ${src}, reports/ and ${labReports}`);
 }

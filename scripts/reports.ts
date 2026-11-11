@@ -1,5 +1,6 @@
-// Reports: pages in reports/ go to dist/reports/, with a list of them. A report is an HTML
-// page (copied as it is) or Markdown (made into a page).
+// Reports: pages in reports/ (the goal spec) and in the research lab's reports/ (~/unblock-me-lab,
+// a local repo kept out of this public one) go to dist/reports/, with a list of them. A report
+// is an HTML page (copied as it is) or Markdown (made into a page).
 // The Markdown is the plain kind the analyses use: headings, paragraphs, lists, tables,
 // code blocks, **bold**, *italic*, `code` and [links](url).
 import { cp, mkdir, readdir, readFile, rm, stat } from "node:fs/promises";
@@ -98,12 +99,12 @@ ${body}
 </html>
 `;
 
-/** Write every report in `from` (Markdown) to `to` (HTML), and the list of them. */
-export async function buildReports(from: string, to: string): Promise<void> {
+/** Write every report in the `froms` folders (Markdown) to `to` (HTML), and the list of them. */
+export async function buildReports(froms: string[], to: string): Promise<void> {
   await rm(to, { recursive: true, force: true });
   await mkdir(to, { recursive: true });
   const reports: { file: string; title: string; changed: Date }[] = [];
-  for (const name of await readdir(from).catch(() => [])) {
+  for (const from of froms) for (const name of await readdir(from).catch(() => [])) {
     // A folder is a report's files (its pictures and films), copied as they are.
     if ((await stat(join(from, name))).isDirectory()) {
       await cp(join(from, name), join(to, name), { recursive: true });

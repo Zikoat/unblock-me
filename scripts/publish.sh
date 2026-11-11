@@ -2,6 +2,8 @@
 # Builds the public game (public/, served by scripts/serve-public.py) from the last commit,
 # so players only see committed work while dist/ follows every save. Run by the
 # post-commit hook (scripts/install-hooks.sh); swaps the new build in whole.
+# The research reports come from the last commit of the local lab repo (~/unblock-me-lab, never
+# pushed; its post-commit hook runs this script too), so /reports/ keeps serving them.
 # Publishes take turns (commits seconds apart once raced on one build folder and put a
 # half-built one live), and a build without the game's files is never swapped in.
 set -e
@@ -13,7 +15,12 @@ next=$(mktemp -d "$root/public.next.XXXXXX")
 trap 'rm -rf "$tree" "$next"' EXIT
 git -C "$root" archive HEAD | tar -x -C "$tree"
 ln -s "$root/node_modules" "$tree/node_modules"
-COMMIT=$(git -C "$root" rev-parse --short HEAD) "$HOME/.bun/bin/bun" "$tree/scripts/build.ts" --out "$next" >/dev/null
+lab="${UNBLOCK_LAB:-$root/../unblock-me-lab}"
+mkdir "$tree/.lab"
+if git -C "$lab" rev-parse -q --verify HEAD >/dev/null 2>&1; then
+  git -C "$lab" archive HEAD reports | tar -x -C "$tree/.lab"
+fi
+COMMIT=$(git -C "$root" rev-parse --short HEAD) "$HOME/.bun/bin/bun" "$tree/scripts/build.ts" --out "$next" --lab-reports "$tree/.lab/reports" >/dev/null
 for f in index.html app.js goal-worker.js build.txt; do
   [ -s "$next/$f" ] || { echo "Not published: the build has no $f" >&2; exit 1; }
 done

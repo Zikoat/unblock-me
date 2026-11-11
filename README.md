@@ -13,3 +13,7 @@ made by `bun bench/cases.ts`), checks every goal with the Referee, scores it wit
 after the Auditor's recount, keeps any record it beats (bench/records.json) and says whether
 it passes the Gate. Run it through scripts/capped.sh; the full set takes about 2 minutes for
 today's maker, 14 for the Reference.
+
+Research (papers, notes, experiments in test/experiments/, lab/, run data and most reports)
+lives on the VM in ~/unblock-me-lab, a local git repo that is never pushed. Its committed
+reports are still served at /reports/: the build and scripts/publish.sh take them in.

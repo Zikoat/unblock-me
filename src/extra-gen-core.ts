@@ -10,7 +10,7 @@
 // that reaches it runs on into the endless world, and if a block that matters has one the board
 // is "unsealed" and not solved; a sealed board's fewest and extra moves hold in the endless
 // world, whatever lies past the window.
-import { randomLayout, TRIES, WALLS } from "../../src/layout";
+import { randomLayout, TRIES, WALLS } from "./layout";
 
 /** A block, 2 cells long: horizontal (its row is `lane`) or vertical (its column). */
 export type Piece = { h: boolean; lane: number };

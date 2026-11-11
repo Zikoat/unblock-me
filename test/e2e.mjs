@@ -342,7 +342,7 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
   await fresh();
   await Promise.all([page.waitForURL("**/reports/"), tap(cell(0.5, 3.5))]);
   check((await page.textContent("h1")) === "Reports", `tapping the reports block opens the report list (${page.url()})`);
-  check(await page.evaluate(() => [...document.querySelectorAll("ul.list a")].some((a) => a.textContent.startsWith("Play analysis"))), "which lists the play analysis");
+  check(await page.evaluate(() => [...document.querySelectorAll("ul.list a")].some((a) => a.textContent.startsWith("Goal spec"))), "which lists the goal spec");
   await Promise.all([page.waitForURL(root), page.click("a.back")]);
   check(await page.evaluate(() => typeof unblock === "object"), "and its back link returns to the game");
 

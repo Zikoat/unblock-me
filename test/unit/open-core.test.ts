@@ -3,8 +3,8 @@
 // the true fewest, the upper never falls below it, and where they agree (fewest, least and most
 // extra moves) they equal the truth.
 import { expect, test } from "bun:test";
-import { cellsAt, randomRoom, rng, solve } from "../../test/experiments/extra-gen-core";
-import { checkOpen } from "../../test/experiments/open-core";
+import { cellsAt, randomRoom, rng, solve } from "../../src/extra-gen-core";
+import { checkOpen } from "../../src/open-core";
 
 test("the open bounds hold the true fewest and extra moves between them", () => {
   const next = rng(11);
