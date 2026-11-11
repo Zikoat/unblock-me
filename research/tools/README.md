@@ -13,6 +13,7 @@ Run them with `~/.venvs/research/bin/python -I` from outside `raw/` (downloads a
   top-left); `crop.py <pdf> <page> full <out.png> [dpi]` renders a whole page.
 - `blocks.py <pdf> <page>`: text blocks, images and drawings with their boxes, to find crop coordinates.
 - `peek.py <pdf>...`: title page text, to identify files.
+- `check.py <cleaned dir>`: checks every cleaned paper (front matter fields, image links, unused images, leftovers, raw_path).
 
 ## Cleaning a paper (the standard every `cleaned/<slug>/<slug>.md` follows)
 

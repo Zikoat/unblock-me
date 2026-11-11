@@ -1,5 +1,6 @@
 # Originals: copyrighted or large, kept on the VM only (see raw/papers/MANIFEST-tar.txt, raw/FINDS.md)
-raw/papers/*.pdf
+raw/papers/*
+!raw/papers/MANIFEST-tar.txt
 raw/code/
 raw/data/
 raw/web/
