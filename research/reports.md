@@ -36,7 +36,7 @@ Finish effects (landing hit, star bursts and the rest) have no report. They were
 
 The extra-moves line of work runs in this order: walls → extra-moves → extra-maker → extra-gen → trial-features → open-gen → trial-mixed. Trial boards are played at https://hockey-mandolin.exe.xyz/?trial=<label>. Each label is a blind pair, A against B (8A/8B, 12A/12B, 16A/16B, M1, G1, G2, H1–H3, J1, K1, K2). Play logs are in play-data/trial-*.json, almost all from one device (the user's).
 
-Latest state (2026-11-11, from chat, not in any report): over all 20 trial boards, extra moves track the user's verdicts only weakly (rho 0.30, down from 0.55 on the first 12). The K pairs split 1–1 on "mixed" come-backs. The agent's newest guess is that difficulty comes from how many blocks *look* relevant (open edges, world blocks that might matter). The user then asked for a state-space analysis of the boards plus a literature review (this research/ folder).
+Since 2026-11-11 the plan lives in [roadmap.md](roadmap.md), and candidate levels play as a logged playlist (?trial=R1 to R12, src/trials-rooms.ts, numbers in ../lab/out/rooms.json on the VM; no report page). State as of the K trials (from chat, not in any report): over all 20 trial boards, extra moves track the user's verdicts only weakly (rho 0.30, down from 0.55 on the first 12). The K pairs split 1–1 on "mixed" come-backs. The agent's newest guess is that difficulty comes from how many blocks *look* relevant (open edges, world blocks that might matter). The user then asked for a state-space analysis of the boards plus a literature review (this research/ folder).
 
 ### play-analysis
 - https://hockey-mandolin.exe.xyz/reports/play-analysis.html
