@@ -2,6 +2,8 @@
 
 ## Later
 
+The research plan is research/roadmap.md; what we need from you is research/for-the-user.md.
+
 In approximate priority order, highest first; the middle ones are not ordered among themselves.
 
 - In play, a goal the Referee rejects is asked for again once at another effort level (rejected again, none found); the spec asks the maker again with the next seed; waits on a maker that takes a seed.
@@ -10,7 +12,7 @@ In approximate priority order, highest first; the middle ones are not ordered am
 - Tuner runs: effort 0 is at quality worst 5% 0.3 to 0.4 (Gate 0.8; it misses goals only effort 2's wider search finds: aim off by one, track blocks, far reach), and effort 1 and 2 are untuned; the Bench's cases have no walls while the game now starts at 4%; waits on cases with walls.
 - Medals on long goals: the measure stops at its board budget and the proof's length stands as the fewest, so a player who finds a shorter way wins a medal the game should not give (most medals in play, test/experiments/medals.ts); a deeper search, or shorter proofs; waits on you picking it.
 - Island squares that teach tap-push and a half-way drag (a tap-push can't solve it; none turned up in a 5x5 search, a tap stops the red block on its target), and squares with several goals that are rated (the card scores only the last goal); subject a and b never learnt one or the other; waits on you playing the teaching squares.
-- Goals with real extra moves in the world (reports/extra-gen.html: rooms with them, made ahead or by annealing in about 1 s; reports/open-gen.html: exact in any surroundings without a seal, the edge's blocks free to move but about a third of its cells still walls, 2 to 4 minutes a room ahead of time; reports/trial-features.html: of the numbers measured on the trials, extra moves track the verdicts best; reports/trial-mixed.html: how mixed they are tracks no better so far): a patch overriding the world where a goal is placed, rooms from a shipped library, the Judge taking the patch's proved fewest; waits on the mixed-against-tidy trials (?trial=K1A to K2B).
+- Goals with real extra moves in the world (reports/extra-gen.html: rooms with them, made ahead or by annealing in about 1 s; reports/open-gen.html: exact in any surroundings without a seal, the edge's blocks free to move but about a third of its cells still walls, 2 to 4 minutes a room ahead of time; reports/trial-features.html: of the numbers measured on the trials, extra moves track the verdicts best; reports/trial-mixed.html: how mixed they are tracks no better so far): a patch overriding the world where a goal is placed, rooms from a shipped library, the Judge taking the patch's proved fewest; waits on the playlist's play logs (?trial=R1, research/roadmap.md) and the decoy test there.
 - Taps that move a block when the player meant to pan (subject b): fast swipes as pans, or similar; the log now has the data; waits on you picking it.
 - Playing far zoomed out (subject a, play data: phones at scale 0.2-0.6): cap the zoom, disable moves far out, or show it; waits on you picking it.
 - Stars: many 1-star results (a zen mode, stars shown only after a while, or hidden at 1 star); waits on a brainstorm.

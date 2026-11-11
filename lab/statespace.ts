@@ -152,6 +152,36 @@ function measure(t: Trial): Row {
     bits[s] = best + Math.log2(total / stay);
   }
   row.bits = bits[G.start]!;
+  // Blocks that look relevant (roadmap 4.2): free blocks (of the whole board, world included)
+  // whose reach crosses a cell some shortest solution sweeps; decoys are those no shortest
+  // solution moves. Red's own path cells count as swept.
+  {
+    const usedCells = new Set<number>(), movedBlocks = new Set<number>();
+    const redP = g.pieces[red]!;
+    for (let j = Math.min(g.pos[red]!, target); j <= Math.max(g.pos[red]!, target) + 1; j++) usedCells.add(redP.h ? redP.lane * g.W + j : j * g.W + redP.lane);
+    for (let s = 0; s < N; s++) {
+      if (!onOpt[s]) continue;
+      for (let e = G.off[s]!; e < G.off[s + 1]!; e++) {
+        const tt = G.adj[e]!;
+        if (!onOpt[tt] || G.dist[tt] !== G.dist[s]! - 1) continue;
+        const k = G.who[e]!, i = R[k]!, p = g.pieces[i]!, a = stateOf(G, s)[k]!, b = stateOf(G, tt)[k]!;
+        movedBlocks.add(i);
+        for (let j = Math.min(a, b); j <= Math.max(a, b) + 1; j++) usedCells.add(p.h ? p.lane * g.W + j : j * g.W + p.lane);
+      }
+    }
+    const a0 = analyse(g, red, "wall", occupancy(g));
+    let looks = 0, decoys = 0, decoysWorld = 0;
+    g.pieces.forEach((p, i) => {
+      if (a0.locked[i] || i === red) return;
+      const [lo, hi] = a0.extent[i]!;
+      let touches = false;
+      for (let j = lo; j <= hi + 1 && !touches; j++) if (usedCells.has(p.h ? p.lane * g.W + j : j * g.W + p.lane)) touches = true;
+      if (!touches) return;
+      looks++;
+      if (!movedBlocks.has(i)) { decoys++; if (!R.includes(i)) decoysWorld++; }
+    });
+    row.looksRelevant = looks; row.decoys = decoys; row.decoysWorld = decoysWorld; row.solutionBlocks = movedBlocks.size;
+  }
   // Moves from the start that stay optimal, out of all; and the first wrong-looking steps: the
   // fraction of 2-move sequences from the start that make no progress.
   let total0 = 0, stay0 = 0;

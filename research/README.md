@@ -6,6 +6,10 @@ specs and features (reports/, goal spec, Judge, stars…) may also be changed, r
 
 ## Start here
 
+0. [roadmap.md](roadmap.md): the plan (the question, evidence, data pipeline, next experiments);
+   [for-the-user.md](for-the-user.md): what we need from the user; [inconsistencies.md](inconsistencies.md).
+   Analysis scripts: `../lab/`.
+
 1. [context/README.md](context/README.md): what the user asked for and decided, by phase, with a
    timeline; [context/preferences.md](context/preferences.md) for their taste in levels.
 2. [reports.md](reports.md): every report in ../reports/, what it was for, its data, and whether the
