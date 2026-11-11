@@ -7,3 +7,5 @@ raw/web/
 # First-pass conversion leftovers
 cleaned/**/*.raw.md
 cleaned/**/figs.log
+# The user's own messages and chats, quoted verbatim: kept on the VM only (the repo is public)
+context/
