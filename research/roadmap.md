@@ -87,9 +87,21 @@ Measured on the trial boards (reports trial-features, trial-mixed, and `lab/stat
     from the goal in moves while the board gives no sign. The user's paths show this: on the
     boards they called hard, d* rose by up to 9 above the start (userMaxOff), and the last 4–5
     moves are always a straight downhill run. The work is in the setup, not the finish.
-- **Blocks that look relevant** (the user's newest hunch): not yet a board number. The play
-  log's "blocks moved that the proof never moves" is its behavioural shadow (K2A 9, G2B 5, K1B
-  5; the easy boards 0–1). A board-side candidate is in section 4.
+- **Room graphs of the open boards** (`ROOM=1 SLACK=4`, 22 boards, the room's blocks moving,
+  the world frozen, states on solutions of at most fewest + 4): the numbers that track both
+  the verdicts and the play logs are about *room to wander*: the share of states farther from
+  the goal than the start (farShare: ρ 0.37 with verdicts, 7/3 pairs; 0.56 with seconds, 0.66
+  with moves/fewest), the farthest state (maxDist: 0.35; 0.49; 0.56), greedy local minima
+  (0.34; 0.46; 0.41), and the erring-but-informed player's mean moves (softMean: 0.47; 0.45;
+  −0.18). K1A, K1B, K2A and J1B have farShare 0.4–0.8; the easy H2A, H3A, G1B and 12B under
+  0.05. First board-side candidates that beat extra moves on the same boards; n is small.
+- **Blocks that look relevant** (the user's newest hunch): the first board-side version (free
+  blocks whose reach crosses a cell some shortest solution sweeps; "decoys" = those no shortest
+  solution moves) **does not track anything** (ρ 0.04 with verdicts, −0.09 with seconds; H2A and
+  H2B, both easy, have as many decoys as K2A). The play log's "blocks moved that the proof never
+  moves" (K2A 9, G2B 5, K1B 5; easy boards 0–1) still does. So what looks relevant is not a
+  count of lanes crossing the solution; the next version should weight by distance from red's
+  path and by whether the block is in the way of a *likely* plan (Ho 2022), or be dropped.
 
 ### 2.3 The state space explodes on open boards (and what that means)
 
@@ -169,19 +181,20 @@ Collection is automatic and in the game; analysis runs later on the VM. Keep the
 ### 4.1 Measure (use now)
 
 A goal's **score** = fewest moves (the baseline), then **extra moves** on a shortest solution
-proved exact (open-core's two bounds agreeing), then the **simulated-player give-up rate** on
-the room graph as a tie-breaker. All three are computable on a phone only for rooms made ahead
+proved exact (open-core's two bounds agreeing), then **room to wander** (farShare) and the
+**erring player's mean moves** on the bounded room graph as tie-breakers (2.2). All three are computable on a phone only for rooms made ahead
 (the room graph is 30–300 k states; a phone does that in well under a second in WASM, several
 seconds in JS). On the open world with today's maker, only the fewest moves is trustworthy.
 
-### 4.2 Candidate board number for "blocks that look relevant" (untested)
+### 4.2 Candidate board numbers (from 2.2, to confirm on the playlist)
 
-Count the blocks a player would attend to, following Ho 2022's value-guided construal: blocks
-whose lane crosses red's path cells or the cells any shortest solution sweeps ("looks relevant"),
-split into those some shortest solution actually moves and those none does. The second count,
-**decoys**, should be what K2A had and G2B lacked. It is cheap (one pass over the board after a
-solve), and `lab/plays.ts`'s "offProof" is its behavioural counterpart to validate against.
-Expected: decoys ρ > 0.4 with the play ratio on the playlist. If it fails, drop it.
+1. **Room to wander** (farShare, maxDist on the bounded room graph): cheap once the room graph
+   exists (it is the same search the exactness check runs). Confirm on the playlist: ρ ≥ 0.4
+   with moves/fewest over 10+ reached boards keeps it; then make it a Judge wish for room goals.
+2. **Erring informed player** (softMean): same graph, 200 rollouts; keep as a tie-breaker.
+3. **Blocks that look relevant:** the lane-crossing count failed (2.2). Next version, only if
+   someone has a better definition: weight by how a fallible plan would use the block, not by
+   geometry alone; validate against `lab/plays.ts`'s offProof. Otherwise leave it.
 
 ### 4.3 Generators
 
@@ -214,8 +227,9 @@ Expected: decoys ρ > 0.4 with the play ratio on the playlist. If it fails, drop
 1. **Play the playlist** (`?trial=R1`): 12 boards, logged. Judge: `bun lab/plays.ts --label R`;
    compare moves/fewest and seconds against extra moves and against the room's "decoy" count
    (4.2) by rank. Needs about 10 reached boards from one player to say anything.
-2. **Decoy count** (4.2): implement in lab/, run on all 32 trial boards (20 + R), rank against
-   verdicts and play rows. Keep if ρ ≥ 0.4 and it orders K2A above K2B and J1B above J1A.
+2. **Room to wander on the playlist** (4.2): run `ROOM=1 SLACK=4 bun lab/statespace.ts` with
+   the R boards added (their rooms are in lab/out/rooms.json), rank farShare and softMean
+   against the play rows. Keep if ρ ≥ 0.4 with moves/fewest.
 3. **Simulated player calibration:** fit the greedy player's noise (25 %) and its heuristic to
    the user's logged paths (which move they took, given d* of each option; Olieslagers' model is
    the reference). Judge: held-out move prediction better than uniform over sensible moves.
