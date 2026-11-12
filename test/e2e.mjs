@@ -139,7 +139,7 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
   await tap(cell(-0.5, 3.5));
   await pass(page, 100);
   const text = await page.evaluate(() => document.body.innerText.trim());
-  check(/^\d+ fps · \d+[smhd] ago · [0-9a-f]{7,}\+?\nWorld goals solved: 0\nRamp target: 4 fewest moves\nAudio: [a-z]+ · \d+ tries · .+\nMaker: (idle|making, effort \d, \d+s|ready, \d+ moves, fitness [\d.]+)\nAhead: .+$/.test(text), `the fps toggle shows the debug counter: fps, build age and commit, world goals solved, the ramp's target and what the goal makers are doing ("${text}")`);
+  check(/^\d+ fps · \d+[smhd] ago · [0-9a-f]{7,}\+?\nWorld goals solved: 0\nRamp target: 4 fewest moves\nAudio: [a-z]+ · \d+ tries · .+\nDevice: [a-z]+ [a-z]+ \d\d\nPrint: ([a-z]+ [a-z]+ \d\d|…)\nMaker: (idle|making, effort \d, \d+s|ready, \d+ moves, fitness [\d.]+)\nAhead: .+$/.test(text), `the fps toggle shows the debug counter: fps, build age and commit, world goals solved, the ramp's target, this browser's device and fingerprint names, and what the goal makers are doing ("${text}")`);
   await pass(page, 1200);
   const idleFps = await page.evaluate(() => parseInt(document.querySelector("#fps").textContent));
   check(idleFps > 10, `with nothing moving the counter still counts frames (${idleFps} fps)`);
@@ -196,8 +196,10 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
   const stored = await page.evaluate(() => Object.fromEntries(Object.keys(localStorage).sort().map((k) => [k, localStorage.getItem(k)])));
   const { "unblock-me:v13:goal": storedGoal, "unblock-me:camera": storedCamera, "unblock-me:log": storedLog, "unblock-me:device": storedDevice, ...rest } = stored;
   check(/^[0-9a-f-]{36}$/.test(storedDevice), `the device id for automatic uploads survives the reset (${storedDevice})`);
+  // (The page's opening, logged once its fingerprint is known, may come before or after the goal.)
   const kinds = JSON.parse(storedLog ?? "[]").map((e) => e.e);
-  check(kinds.includes("move") && kinds.slice(-3).join() === "reset,load,goal", `the play log survives the reset, which it records, then the page load and the new goal (${kinds.join(",")})`);
+  const tail = kinds.slice(kinds.lastIndexOf("reset")).filter((k) => k !== "open").join();
+  check(kinds.includes("move") && kinds.includes("open") && tail === "reset,load,goal", `the play log survives the reset, which it records, then the page load, its opening and the new goal (${kinds.join(",")})`);
   check(!storedCamera || JSON.stringify(JSON.parse(storedCamera)) === JSON.stringify({ scale: 1, offsetX: 170, offsetY: 370 }), `and the stored view, if any, is the centred one (${storedCamera})`);
   check(JSON.stringify(rest) === JSON.stringify({
     "someone-else": "keep me",
