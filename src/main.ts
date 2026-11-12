@@ -179,6 +179,9 @@ type LogEvent =
   | { e: "reset"; goal: string | null }
   // The page hidden (another tab, the phone locked) and shown again: time away is not thinking.
   | { e: "hide" | "show" }
+  // The page opened: whether this browser's storage was empty (no device id: progress lost or
+  // a new player), its fingerprint (src/identity.ts), and how it was opened.
+  | { e: "open"; fresh: boolean; print: string; name: string; standalone: boolean; referrer: string; search: string }
   | { e: "density"; from: number; to: number; goal: string | null }
   | { e: "walls"; from: number; to: number; goal: string | null };
 const LOG_MAX = 3000;
@@ -206,6 +209,11 @@ const TRIAL_UPLOAD_EVERY = 5;
 let unsent = 0;
 /** This page's trial play (a reload starts the trial over, and a new file). */
 const trialSession = crypto.randomUUID().slice(0, 8);
+/** Whether this browser had no device id stored when the page opened. */
+let freshStorage = false;
+/** This browser's fingerprint (src/identity.ts) and its name, once computed. */
+let print = "";
+let printName = "…";
 const device = (() => {
   // A trial names the browser's device if it has one, storing nothing.
   if (trial) {
@@ -217,10 +225,13 @@ const device = (() => {
   }
   if (shared) return "";
   try {
-    const id = localStorage.getItem(DEVICE_KEY) ?? crypto.randomUUID();
+    const stored = localStorage.getItem(DEVICE_KEY);
+    freshStorage = stored === null;
+    const id = stored ?? crypto.randomUUID();
     localStorage.setItem(DEVICE_KEY, id);
     return id;
   } catch {
+    freshStorage = true;
     return crypto.randomUUID();
   }
 })();
@@ -1085,8 +1096,15 @@ const builtAt = parseInt(__BUILD_ID__, 36);
 // The fps counter, with how long ago the running code was built and from which commit.
 const frames: number[] = [];
 // Who this browser is, as names (src/identity.ts): its stored device id and its fingerprint.
-let printName = "…";
-void fingerprint().then((p) => (printName = nameOf(p)));
+// Once the fingerprint is known, log the opening and send it at once, so even a page opened and
+// left without a move shows up (and which browser it was, and whether its storage was empty).
+void fingerprint().then((p) => {
+  print = p;
+  printName = nameOf(p);
+  if (shared && !trial) return;
+  log({ e: "open", fresh: freshStorage, print, name: printName, standalone: matchMedia("(display-mode: standalone)").matches, referrer: document.referrer, search: location.search });
+  void upload();
+});
 function storedName(): string {
   try {
     const id = localStorage.getItem(DEVICE_KEY);
@@ -1318,12 +1336,12 @@ function playData() {
       stored[key] = value; // not JSON (the device id)
     }
   }
-  return { sentAt: new Date().toISOString(), build: builtAt, commit: __COMMIT__, device, userAgent: navigator.userAgent, screen: { width: innerWidth, height: innerHeight, dpr: devicePixelRatio }, stored };
+  return { sentAt: new Date().toISOString(), build: builtAt, commit: __COMMIT__, device, print, userAgent: navigator.userAgent, screen: { width: innerWidth, height: innerHeight, dpr: devicePixelRatio }, stored };
 }
 /** A trial's play (play-data/trial-<label>-<device>-<session>.json on the VM): its label, the
  * goal and every move, undo and reach with its time, and nothing of the player's progress. */
 function trialData() {
-  return { sentAt: new Date().toISOString(), build: builtAt, commit: __COMMIT__, device, trial: trial!.label, session: trialSession, userAgent: navigator.userAgent, screen: { width: innerWidth, height: innerHeight, dpr: devicePixelRatio }, log: playLog };
+  return { sentAt: new Date().toISOString(), build: builtAt, commit: __COMMIT__, device, print, trial: trial!.label, session: trialSession, userAgent: navigator.userAgent, screen: { width: innerWidth, height: innerHeight, dpr: devicePixelRatio }, log: playLog };
 }
 async function sendTrialData(): Promise<boolean> {
   logMoves();
