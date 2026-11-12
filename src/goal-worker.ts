@@ -1,6 +1,6 @@
 // Makes goals off the main thread, so the board stays responsive while it searches. A world
 // goal is a room (src/rooms.ts): the library's and the device's own rooms, paced, stamped on
-// untouched ground near the player; if none fits, the maker makes one as before.
+// untouched ground the player has not seen, near them; if none fits, the maker makes one as before.
 import { choices } from "./choices";
 import { makeGoalHard } from "./goal-search";
 import { fixedLayout, randomLayout, type Placed, type Stamp, type UiShown } from "./layout";
@@ -30,8 +30,9 @@ export type GoalRequest = {
   /** Rooms stamped so far. */
   rooms?: Stamp[];
   /** With rooms on: the rooms this device made (the library's are the worker's own), the
-   * world goal's number (for the pacing), and where no room may go (the island, the UI). */
-  roomsOn?: { made: Room[]; n: number; keepOut: Rect[] };
+   * world goal's number (for the pacing), where no room may go (the island, the UI, the view),
+   * and the tiles the player has seen (rooms.ts SEEN_TILE): no room changes a cell there. */
+  roomsOn?: { made: Room[]; n: number; keepOut: Rect[]; seen?: string[] };
 };
 
 self.onmessage = (event: MessageEvent<GoalRequest>) => {
@@ -40,7 +41,7 @@ self.onmessage = (event: MessageEvent<GoalRequest>) => {
   const map = new Map(moved);
   if (roomsOn && !placed) {
     const t0 = performance.now();
-    const made = roomGoal([...roomsOn.made, ...LIBRARY], roomsOn.n, near, { moved: map, layout, keepOut: [...roomsOn.keepOut, ...avoid], stamps: rooms }, { seed, tries, walls, ui });
+    const made = roomGoal([...roomsOn.made, ...LIBRARY], roomsOn.n, near, { moved: map, layout, keepOut: [...roomsOn.keepOut, ...avoid], stamps: rooms, seen: new Set(roomsOn.seen) }, { seed, tries, walls, ui });
     if (made) {
       const { goal } = made;
       goal.stamp = made.stamp;

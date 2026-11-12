@@ -2,7 +2,9 @@
 // into the endless board where the goal is placed, from the library shipped with the game
 // (src/rooms-library.json, made by the lab's lab/room-lib.ts) and the rooms this device made
 // in the background (src/room-worker.ts). What a room is, and why its numbers hold wherever it
-// goes: src/room-core.ts. If no room fits near the player, the maker makes the goal as before.
+// goes: src/room-core.ts. A room goes on ground the player has never seen (the view and a
+// margin round it, as tiles: src/main.ts markSeen), so a stamp never changes a cell they see or
+// saw: the nearest such ground within SEEN_RADIUS. If none fits, the maker makes the goal.
 //
 // Pacing: which room comes next (pace, pickRooms). Rule, by n = world goals reached so far:
 //  - The aim rises from AIM_FROM fewest moves to AIM_TO over RISE goals (about the old ramp),
@@ -63,13 +65,29 @@ export type RoomGoal = { goal: Goal; stamp: Stamp; fill: string; states: number 
 
 /** Where a room may go: its box (with a cell round it) clear of blocks the player has moved
  * (where they started and where they are), of the cells `keepOut` covers (the island, the UI,
- * earlier targets) and of other rooms. */
-export type Ground = { moved: ReadonlyMap<string, Point>; layout: Layout; keepOut: readonly Rect[]; stamps: readonly Stamp[] };
+ * earlier targets, the view), of other rooms, and of every tile in `seen` (the player has seen
+ * it: a stamp there would change blocks before their eyes, or blocks they remember). */
+export type Ground = { moved: ReadonlyMap<string, Point>; layout: Layout; keepOut: readonly Rect[]; stamps: readonly Stamp[]; seen?: ReadonlySet<string> };
+
+/** Seen ground is kept as tiles of SEEN_TILE x SEEN_TILE cells ("tx,ty"). */
+export const SEEN_TILE = 8;
+/** The tiles a rectangle of cells touches. */
+export function tilesOf(r: Rect): string[] {
+  const out: string[] = [];
+  const x0 = Math.floor(r.x / SEEN_TILE), y0 = Math.floor(r.y / SEEN_TILE);
+  const x1 = Math.floor((r.x + r.width - 1e-9) / SEEN_TILE), y1 = Math.floor((r.y + r.height - 1e-9) / SEEN_TILE);
+  for (let tx = x0; tx <= x1; tx++) for (let ty = y0; ty <= y1; ty++) out.push(`${tx},${ty}`);
+  return out;
+}
+/** The cells a stamp can change: its box and a cell round it (a world block sticking into the
+ * box goes, leaving its outside cell empty); nothing beyond (layout.ts stampParts). */
+export const stampReach = (s: { x: number; y: number; room: { W: number; H: number } }): Rect => ({ x: s.x - 1, y: s.y - 1, width: s.room.W + 2, height: s.room.H + 2 });
 
 function clear(box: Rect, g: Ground, taken: Set<string>): boolean {
   const pad = { x: box.x - 1, y: box.y - 1, width: box.width + 2, height: box.height + 2 };
   const hit = (r: Rect) => r.x < pad.x + pad.width && r.x + r.width > pad.x && r.y < pad.y + pad.height && r.y + r.height > pad.y;
   if (g.keepOut.some(hit)) return false;
+  if (g.seen?.size && tilesOf(pad).some((t) => g.seen!.has(t))) return false;
   for (const s of g.stamps) if (hit({ x: s.x, y: s.y, width: s.room.W, height: s.room.H })) return false;
   for (let x = box.x; x < box.x + box.width; x++) for (let y = box.y; y < box.y + box.height; y++) if (taken.has(`${x},${y}`)) return false;
   return true;
@@ -86,14 +104,26 @@ function movedCells(g: Ground): Set<string> {
   return taken;
 }
 
-/** The nearest place to `near` (within `radius` cells, box centre to it) where the room fits
- * on untouched ground, or null. Spirals out, so the same place on every device. */
-export function placeFor(room: Room, near: Point, g: Ground, radius = 14, taken = movedCells(g)): Point | null {
-  const cx = Math.floor(room.W / 2), cy = Math.floor(room.H / 2);
-  const spots: [number, number, number][] = [];
+/** Offsets within `radius`, nearest first (the same order everywhere). */
+const spirals = new Map<number, [number, number, number][]>();
+function spiral(radius: number): [number, number, number][] {
+  let spots = spirals.get(radius);
+  if (spots) return spots;
+  spots = [];
   for (let dx = -radius; dx <= radius; dx++) for (let dy = -radius; dy <= radius; dy++) spots.push([dx * dx + dy * dy, dx, dy]);
   spots.sort((a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2]);
-  for (const [d2, dx, dy] of spots) {
+  spirals.set(radius, spots);
+  return spots;
+}
+/** How far a room may go from the player: near when nothing is seen (tests), further when the
+ * ground round the player has been seen (the nearest unseen ground is often past the view). */
+export const RADIUS = 14, SEEN_RADIUS = 48;
+
+/** The nearest place to `near` (within `radius` cells, box centre to it) where the room fits
+ * on untouched, unseen ground, or null. Spirals out, so the same place on every device. */
+export function placeFor(room: Room, near: Point, g: Ground, radius = g.seen?.size ? SEEN_RADIUS : RADIUS, taken = movedCells(g)): Point | null {
+  const cx = Math.floor(room.W / 2), cy = Math.floor(room.H / 2);
+  for (const [d2, dx, dy] of spiral(radius)) {
     if (d2 < 4) continue; // not right on the player
     const at = { x: near.x + dx - cx, y: near.y + dy - cy };
     if (clear({ x: at.x, y: at.y, width: room.W, height: room.H }, g, taken)) return at;
@@ -182,7 +212,7 @@ export function roomGoal(pool: readonly Room[], n: number, near: Point, g: Groun
     for (const s of turns.slice(0, 4)) {
       tried++;
       const r = transform(room, s);
-      const at = placeFor(r, near, g, 14, taken);
+      const at = placeFor(r, near, g, undefined, taken);
       if (!at) continue;
       const k = g.stamps.length ? Math.max(...g.stamps.map((x) => x.k)) + 1 : 0;
       return { ...stampGoal(r, at, k, { ...world, rooms: g.stamps }, cap), pace: pace(n), tried };

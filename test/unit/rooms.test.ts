@@ -7,7 +7,7 @@ import { expect, test } from "bun:test";
 import { bestGoal, type Grid, randomRoom, rng, solve } from "../../src/extra-gen-core";
 import { checkRoom, checkStamped, type Fill, thin, transform, walledRoom } from "../../src/room-core";
 import { cellKinds, cellsOf, laneAt, type Room } from "../../src/room";
-import { LIBRARY, pace, pickRooms, roomGoal } from "../../src/rooms";
+import { LIBRARY, pace, pickRooms, roomGoal, SEEN_TILE, stampReach, tilesOf } from "../../src/rooms";
 import { randomLayout, type Stamp } from "../../src/layout";
 import { makeRoom } from "../../src/room-make";
 import { contractGoal, gameRequest } from "../../src/contract";
@@ -149,3 +149,44 @@ test("a device's room k is the same room everywhere, and exact", () => {
   const c = checkRoom(a.room!);
   expect([c.exact, c.fewest, c.extra]).toEqual([true, a.room!.f, a.room!.e]);
 }, 60_000);
+
+test("a room is stamped only on unseen ground: nothing in view changes, nothing beyond its reach", () => {
+  const layout = randomLayout(world.seed, { tries: world.tries, walls: world.walls, ...world.ui });
+  const cells = (l: ReturnType<typeof randomLayout>, r: { x: number; y: number; width: number; height: number }) => {
+    const m = new Map<string, string>();
+    for (const b of l.blocksIn(r)) for (let x = b.x; x < b.x + b.w; x++) for (let y = b.y; y < b.y + b.h; y++) m.set(`${x},${y}`, b.id);
+    return m;
+  };
+  const changed = (stamp: Stamp, r: { x: number; y: number; width: number; height: number }) => {
+    const a = cells(layout, r), b = cells(randomLayout(world.seed, { tries: world.tries, walls: world.walls, ...world.ui, rooms: [stamp] }), r);
+    return [...new Set([...a.keys(), ...b.keys()])].filter((k) => {
+      const [x, y] = k.split(",").map(Number) as [number, number];
+      return x >= r.x && y >= r.y && x < r.x + r.width && y < r.y + r.height && a.get(k) !== b.get(k);
+    });
+  };
+  // The camera looks at the spot the room would take without the view: a phone's view (7 x 14
+  // cells) round the player, and ground seen earlier off to one side.
+  const near = { x: 40, y: 40 };
+  const blind = roomGoal(LIBRARY, 3, near, { moved: new Map(), layout, keepOut: [], stamps: [] }, world)!;
+  const view = { x: near.x - 4, y: near.y - 7, width: 7, height: 14 };
+  expect(changed(blind.stamp, view).length).toBeGreaterThan(0); // (the bug: placed in view)
+  const seen = new Set([...tilesOf({ x: view.x - 3, y: view.y - 3, width: view.width + 6, height: view.height + 6 }), ...tilesOf({ x: near.x + 5, y: near.y - 20, width: 30, height: 30 })]);
+  const ground = { moved: new Map(), layout, keepOut: [], stamps: [] as Stamp[], seen };
+  const a = roomGoal(LIBRARY, 3, near, ground, world)!;
+  expect(a).not.toBeNull();
+  expect(JSON.stringify(a.goal)).toBe(JSON.stringify(roomGoal(LIBRARY, 3, near, ground, world)!.goal));
+  expect(tilesOf(stampReach(a.stamp)).some((t) => seen.has(t))).toBe(false);
+  expect(changed(a.stamp, view)).toEqual([]);
+  // Every seen tile unchanged, and no cell beyond the stamp's reach.
+  const big = { x: near.x - 80, y: near.y - 80, width: 160, height: 160 };
+  const all = changed(a.stamp, big);
+  expect(all.length).toBeGreaterThan(0);
+  const reach = stampReach(a.stamp);
+  for (const k of all) {
+    const [x, y] = k.split(",").map(Number) as [number, number];
+    expect(seen.has(`${Math.floor(x / SEEN_TILE)},${Math.floor(y / SEEN_TILE)}`)).toBe(false);
+    expect(x >= reach.x && y >= reach.y && x < reach.x + reach.width && y < reach.y + reach.height).toBe(true);
+  }
+  const request = gameRequest({ ...world, moved: new Map(), done: [], rooms: [a.stamp] });
+  expect(referee(request, contractGoal(a.goal))).toEqual({ ok: true });
+});
