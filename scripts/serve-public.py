@@ -11,7 +11,7 @@ import urllib.parse
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 PLAY_DATA = ROOT / "play-data"
-MAX_UPLOAD = 1_000_000  # bytes per upload
+MAX_UPLOAD = 8_000_000  # bytes per upload (the stored rooms made uploads pass 1 MB)
 MAX_FILES = 500  # uploads kept, all devices together
 MAX_TOTAL = 200_000_000  # bytes kept
 
