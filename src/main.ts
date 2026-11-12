@@ -16,6 +16,7 @@ import { judge, type Terms } from "./judge";
 import { Gestures, TAP_SLOP, type Input } from "./gestures";
 import { ISLAND_LEVELS } from "./island-levels";
 import { TRIALS } from "./trials";
+import { fingerprint, nameOf } from "./identity";
 import { MAKER_TRIALS } from "./trials-maker";
 import { GEN_TRIALS } from "./trials-gen";
 import { OPEN_TRIALS } from "./trials-open";
@@ -1083,6 +1084,17 @@ const builtAt = parseInt(__BUILD_ID__, 36);
 
 // The fps counter, with how long ago the running code was built and from which commit.
 const frames: number[] = [];
+// Who this browser is, as names (src/identity.ts): its stored device id and its fingerprint.
+let printName = "…";
+void fingerprint().then((p) => (printName = nameOf(p)));
+function storedName(): string {
+  try {
+    const id = localStorage.getItem(DEVICE_KEY);
+    return id ? nameOf(id) : "none stored";
+  } catch {
+    return "storage blocked";
+  }
+}
 function showFps(now: number): void {
   while (frames.length && frames[0]! <= now - 1000) frames.shift();
   // And the world's goals solved, the ramp's target for the goal being played (or next), and
@@ -1093,6 +1105,8 @@ function showFps(now: number): void {
     `World goals solved: ${worldGoals()}`,
     `Ramp target: ${target === undefined ? "none" : `${target} fewest moves`}`,
     `Audio: ${sfx.audioState()}`,
+    `Device: ${storedName()}`,
+    `Print: ${printName}`,
   ].join("\n");
 }
 setInterval(() => showFps(performance.now()), 500);
