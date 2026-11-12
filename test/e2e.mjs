@@ -916,6 +916,33 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
   await page.close();
 }
 
+// --- A playlist trial (src/trials-decoys.ts): once D1's goal is reached and its finish is over,
+// the page goes on to D2.
+{
+  const page = await clocked(await browser.newPage({ viewport: { width: 1280, height: 800 } }));
+  await page.goto(`${root}?trial=D1`);
+  await frame(page);
+  const g = await page.evaluate(() => unblock.scene.goal);
+  check(!!g && (await page.textContent("#trial")) === "Trial D1", `?trial=D1 opens with its goal (${g?.difficulty.moves} fewest)`);
+  for (const m of g.solution) {
+    const b = await page.evaluate((id) => unblock.scene.layout.byId(id), m.id);
+    const mid = { x: (m.from.x + m.to.x + b.w) / 2, y: (m.from.y + m.to.y + b.h) / 2 };
+    await page.evaluate(([mid, UNIT]) => { unblock.scene.camera = { scale: 1, offsetX: 640 - mid.x * UNIT, offsetY: 400 - mid.y * UNIT }; unblock.redraw(); }, [mid, UNIT]);
+    await frame(page);
+    const at = (p) => [640 + (p.x + b.w / 2 - mid.x) * UNIT, 400 + (p.y + b.h / 2 - mid.y) * UNIT];
+    await page.mouse.move(...at(m.from));
+    await page.mouse.down();
+    await page.mouse.move(...at(m.to), { steps: 10 });
+    await page.mouse.up();
+    await pass(page, 400);
+  }
+  await pass(page, 7000);
+  await page.waitForFunction(() => location.search === "?trial=D2", null, { timeout: 5000 }).catch(() => {});
+  check(await page.evaluate(() => location.search) === "?trial=D2" && (await page.textContent("#trial")) === "Trial D2", "its proof reaches the goal and the page goes on to D2");
+  await page.screenshot({ path: shots + "decoys-d2.png" });
+  await page.close();
+}
+
 // --- Rooms (src/rooms.ts): a world goal is a room stamped into the world near the player, its
 // numbers and proof logged with it; its proof reaches it; the next goal is another room; the
 // stamps are stored, so a reload shows the same world. ?rooms=0 gives the maker's goals.

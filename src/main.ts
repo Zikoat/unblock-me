@@ -23,6 +23,7 @@ import { OPEN_TRIALS } from "./trials-open";
 import { OPEN_TRIALS_J } from "./trials-open-j";
 import { OPEN_TRIALS_K } from "./trials-open-k";
 import { ROOM_TRIALS } from "./trials-rooms";
+import { DECOY_TRIALS } from "./trials-decoys";
 import type { Room } from "./room";
 import { pace as roomPace } from "./rooms";
 import { bayReached, GATE, GATE_GONE, inIsland, ISLAND_KEEP_OUT, opensGate, isLast, islandCamera, islandGoals, islandRects, nextIslandGoal, squareAt, squareMiddle, squareOf } from "./island";
@@ -100,7 +101,7 @@ let testbedNext = Number(new URLSearchParams(location.search).get("testbed")) ||
 // src/trials-open.ts and src/trials-open-j.ts, reports/open-gen.html; src/trials-open-k.ts,
 // reports/trial-mixed.html) with
 // its one goal, its label on screen; a reload starts it over.
-const trial = [...TRIALS, ...MAKER_TRIALS, ...GEN_TRIALS, ...OPEN_TRIALS, ...OPEN_TRIALS_J, ...OPEN_TRIALS_K, ...ROOM_TRIALS].find((t) => t.label === new URLSearchParams(location.search).get("trial")) ?? null;
+const trial = [...TRIALS, ...MAKER_TRIALS, ...GEN_TRIALS, ...OPEN_TRIALS, ...OPEN_TRIALS_J, ...OPEN_TRIALS_K, ...ROOM_TRIALS, ...DECOY_TRIALS].find((t) => t.label === new URLSearchParams(location.search).get("trial")) ?? null;
 let trialShown = false;
 /** How long after a playlist trial's goal is reached the next board loads. */
 const NEXT_TRIAL_MS = 6000;
