@@ -23,8 +23,10 @@ import { OPEN_TRIALS } from "./trials-open";
 import { OPEN_TRIALS_J } from "./trials-open-j";
 import { OPEN_TRIALS_K } from "./trials-open-k";
 import { ROOM_TRIALS } from "./trials-rooms";
-import { bayReached, GATE, GATE_GONE, inIsland, opensGate, isLast, islandCamera, islandGoals, islandRects, nextIslandGoal, squareAt, squareMiddle, squareOf } from "./island";
-import { fixedLayout, MAX_TRIES, MAX_WALLS, MIN_TRIES, randomLayout, TRIES, UNIT, WALLS, type Placed, type Ui } from "./layout";
+import type { Room } from "./room";
+import { pace as roomPace } from "./rooms";
+import { bayReached, GATE, GATE_GONE, inIsland, ISLAND_KEEP_OUT, opensGate, isLast, islandCamera, islandGoals, islandRects, nextIslandGoal, squareAt, squareMiddle, squareOf } from "./island";
+import { fixedLayout, MAX_TRIES, MAX_WALLS, MIN_TRIES, randomLayout, TRIES, UNIT, uiArea, WALLS, type Placed, type Stamp, type Ui } from "./layout";
 import { CARD, CUE_MS, draw, fading, islandCardRect, resetFades, RIPPLE_MS, SHAKE_MS, THROB_MS, redArrow, uiArrow, type Sparkle } from "./render";
 import { ease, slideDuration } from "./slide";
 import { blockAt, blocksIn, slideRange, type Move } from "./rules";
@@ -38,6 +40,11 @@ const SEED_KEY = "unblock-me:v13:seed";
 const MOVED_KEY = "unblock-me:v13:moved";
 const HISTORY_KEY = "unblock-me:v13:history";
 const GOAL_KEY = "unblock-me:v13:goal";
+// The rooms stamped into this world (src/rooms.ts), with the seed, density and walls they
+// belong to; none before rooms (an old save loads as it was).
+const ROOMS_KEY = "unblock-me:v13:rooms";
+// Rooms this device made in the background (src/room-worker.ts): kept across resets.
+const MADE_KEY = "unblock-me:rooms-made";
 const BORDER_KEY = "unblock-me:border";
 const FPS_KEY = "unblock-me:fps"; // whether the fps counter shows
 const TRIES_KEY = "unblock-me:tries";
@@ -78,6 +85,9 @@ const TESTBED = {
 // ?island=0 leaves the island out: the generated world from the start, as before it (for
 // tests of the world itself).
 const withIsland = new URLSearchParams(location.search).get("island") !== "0";
+// World goals are rooms (src/rooms.ts) for everyone; ?rooms=0 leaves them out, for tests of
+// the maker on the plain world.
+const withRooms = new URLSearchParams(location.search).get("rooms") !== "0";
 /** A soul style to always use (`?soul=`, reports/soul.html), or each picked as it goes. */
 const forcedSoul = SOUL_STYLES.find((st) => st === new URLSearchParams(location.search).get("soul")) ?? null;
 /** How many world goals have to be reached before souls may be flames or glints, not only
@@ -165,7 +175,12 @@ type LogEvent =
   | { e: "error"; message: string; where: string }
   // `proof`: the maker's solution itself (id, from x y, to x y), so the play can be measured
   // against it later without running the maker again (research/roadmap.md, the data pipeline).
-  | { e: "goal"; commit: string; id: string; target: Point; start?: Point; tries: number; walls?: number; seed: number; solution: number; proof?: [string, number, number, number, number][]; moved: [string, number, number][]; judge?: Terms }
+  // `how`: a room's (with which room, its numbers as stamped and the room's own, the fill, the
+  // pacing's aim, and the stamp), the maker's, the island's or a trial's.
+  | { e: "goal"; commit: string; id: string; target: Point; start?: Point; tries: number; walls?: number; seed: number; solution: number; proof?: [string, number, number, number, number][]; moved: [string, number, number][]; judge?: Terms; how?: "room" | "maker" | "island" | "trial"; n?: number; room?: Goal["room"]; stamp?: { k: number; x: number; y: number; W: number; H: number; fill: boolean | string[] } }
+  // A room this device made in the background (src/room-worker.ts): its number, fewest and extra
+  // moves, how long it took and how many random rooms it tried.
+  | { e: "roomMade"; k: number; f?: number; x?: number; ms: number; tries: number }
   // A goal from the maker the Referee rejected (src/referee.ts): a bug. With what it was asked
   // (the Request, and the worker's near and effort), to replay; the goal counts as none found.
   | { e: "rejected"; rule: number; why: string; goal: contract.Goal; request: contract.Request; near: Point; level: number }
@@ -273,6 +288,7 @@ function save(): void {
     localStorage.setItem(HISTORY_KEY, JSON.stringify(scene.history));
     // A goal belongs to one seed and density (and wall share).
     localStorage.setItem(GOAL_KEY, JSON.stringify({ seed, tries, walls, goal: scene.goal, done: scene.done }));
+    localStorage.setItem(ROOMS_KEY, JSON.stringify({ seed, tries, walls, stamps }));
     localStorage.setItem(LOG_KEY, JSON.stringify(playLog));
   } catch {
     // Private mode or full storage: changes just don't survive a reload.
@@ -293,8 +309,15 @@ const moved = load<[string, number, number][]>(MOVED_KEY, []);
 const storedGoal = load<{ seed: number; tries: number; walls?: number; goal: Goal | null; done?: Goal[] } | null>(GOAL_KEY, null);
 // (An island goal fits only a page with the island.)
 const goalsFit = storedGoal?.seed === seed && storedGoal.tries === tries && (storedGoal.walls ?? 0) === walls && (withIsland || squareOf(storedGoal.goal) === null);
+const storedRooms = load<{ seed: number; tries: number; walls: number; stamps: Stamp[] } | null>(ROOMS_KEY, null);
+/** The rooms stamped into this world so far (src/rooms.ts), oldest first. */
+let stamps: Stamp[] = storedRooms && storedRooms.seed === seed && storedRooms.tries === tries && storedRooms.walls === walls ? storedRooms.stamps : [];
+/** Rooms this device made in the background (src/room-worker.ts), and the next one's number. */
+const made = load<{ next: number; rooms: Room[] }>(MADE_KEY, { next: 0, rooms: [] });
+/** The world's layout: the seed's, the rooms stamped into it. */
+const worldOf = () => randomLayout(seed, { tries, walls, ...shownUi, rooms: stamps });
 const scene = newScene(innerWidth, innerHeight, {
-  layout: randomLayout(seed, { tries, walls, ...shownUi }),
+  layout: worldOf(),
   moved: new Map(moved.map(([id, x, y]) => [id, { x, y }])),
   history: load<Move[]>(HISTORY_KEY, []),
   border: load<boolean>(BORDER_KEY, false),
@@ -403,7 +426,7 @@ function requestGoal(near: Point = viewCentre(scene.camera, scene.width, scene.h
     ahead.wanted = ahead.asked;
     return;
   }
-  const request: GoalRequest = { job: ++job, seed, tries, walls, ui: shownUi, placed, near, moved: [...scene.moved], level: 0, exclude, avoid: targetsOf(scene.done), target: rampTarget(worldGoals()) };
+  const request: GoalRequest = { job: ++job, seed, tries, walls, ui: shownUi, placed, near, moved: [...scene.moved], level: 0, exclude, avoid: targetsOf(scene.done), target: rampTarget(worldGoals()), ...roomsPart(worldGoals()) };
   sent = request;
   asked = { request: asRequest(request, scene.done), near, level: 0 };
   asking(0, worker, request);
@@ -415,7 +438,15 @@ let sent: GoalRequest | null = null;
 type Asked = { request: contract.Request; near: Point; level: number };
 let asked: Asked | null = null;
 const asRequest = (r: GoalRequest, done: readonly { id: string; target: Point }[]) =>
-  contract.gameRequest({ seed: r.seed, tries: r.tries, walls: r.walls, ui: r.ui, placed: r.placed, moved: new Map(r.moved), done, rampAim: r.target });
+  contract.gameRequest({ seed: r.seed, tries: r.tries, walls: r.walls, ui: r.ui, placed: r.placed, moved: new Map(r.moved), done, rampAim: r.target, rooms: r.rooms });
+/** The rooms part of a request for the n-th world goal: the rooms stamped so far and, with
+ * rooms on, this device's own rooms and where no room may go (the island, the UI round the
+ * start). */
+function roomsPart(n: number): Pick<GoalRequest, "rooms" | "roomsOn"> {
+  const ui = uiArea(shownUi);
+  const keepOut = [...(withIsland ? ISLAND_KEEP_OUT : []), ...(ui ? [ui] : []), { x: -2, y: -2, width: 5, height: 5 }];
+  return { rooms: stamps, ...(withRooms && !placed && { roomsOn: { made: made.rooms, n, keepOut } }) };
+}
 /** For tests: a change made to the next goals a worker sends (this many), before they are checked. */
 let tamper: { change: (goal: Goal) => void; times: number } | null = null;
 /** A goal from a worker, checked by the Referee (an assertion: a rejected goal is a bug,
@@ -428,13 +459,15 @@ function checked(goal: Goal | null, by: Asked | null): Checked {
     tamper.change(goal);
     if (--tamper.times <= 0) tamper = null;
   }
-  const made = contract.contractGoal(goal), board = contract.requestBoard(by.request);
-  const verdict = referee(by.request, made, board);
+  // A room's goal is checked on the world with its room stamped.
+  const request = goal.stamp ? { ...by.request, world: { ...by.request.world, rooms: [...(by.request.world.rooms ?? []), goal.stamp] } } : by.request;
+  const made = contract.contractGoal(goal), board = contract.requestBoard(request);
+  const verdict = referee(request, made, board);
   if (!verdict.ok) {
-    log({ e: "rejected", rule: verdict.rule, why: verdict.why, goal: made, ...by });
+    log({ e: "rejected", rule: verdict.rule, why: verdict.why, goal: made, ...by, request });
     return { goal: null, rule: verdict.rule };
   }
-  goal.judged = judge(by.request, made, { board });
+  goal.judged = judge(request, made, { board });
   return { goal };
 }
 /** How many world goals (off the island) were reached: the next one's place on the ramp. */
@@ -478,6 +511,14 @@ function showGoal(goal: Goal | null): void {
     if (red && at) scene.camera = { scale: s, offsetX: scene.width / 2 - (at.x + red.w / 2) * UNIT * s, offsetY: scene.height / 2 - (at.y + red.h / 2) * UNIT * s };
   }
   if (goal) cutToGoal = false;
+  // A room's goal stamps its room into the world (on ground nobody has touched, so no move
+  // changes): from now on it is part of the world.
+  const stamp = goal?.stamp;
+  if (goal && stamp) {
+    delete goal.stamp;
+    stamps = [...stamps, stamp];
+    scene.layout = worldOf();
+  }
   scene.goal = goal;
   goalShownAt = performance.now();
   if (goal) {
@@ -487,7 +528,8 @@ function showGoal(goal: Goal | null): void {
     const before = squareOf(goal) === null ? undefined : scene.done.filter((d) => squareOf(d) === squareOf(goal)).at(-1);
     goal.begun = before?.ended ?? scene.history.length;
     // A snapshot of the board, so the goal can be measured again later.
-    log({ e: "goal", commit: __COMMIT__, id: goal.id, target: goal.target, start: goal.start, tries, walls, seed, solution: goal.solution.length, proof: goal.solution.map((m) => [m.id, m.from.x, m.from.y, m.to.x, m.to.y]), moved: [...scene.moved].map(([id, p]) => [id, p.x, p.y]), ...(goal.judged && { judge: goal.judged }) });
+    const how = trial || testbed ? "trial" : squareOf(goal) !== null ? "island" : goal.room ? "room" : "maker";
+    log({ e: "goal", commit: __COMMIT__, id: goal.id, target: goal.target, start: goal.start, tries, walls, seed, solution: goal.solution.length, proof: goal.solution.map((m) => [m.id, m.from.x, m.from.y, m.to.x, m.to.y]), moved: [...scene.moved].map(([id, p]) => [id, p.x, p.y]), ...(goal.judged && { judge: goal.judged }), how, ...(how !== "island" && how !== "trial" && { n: worldGoals() }), ...(goal.room && { room: goal.room }), ...(stamp && { stamp: { k: stamp.k, x: stamp.x, y: stamp.y, W: stamp.room.W, H: stamp.room.H, fill: stamp.fill } }) });
   }
   // The last red block's soul flies to the new one, once its finish is over.
   if (!finish) sendSoul();
@@ -522,7 +564,7 @@ function targetsOf(goals: Goal[]): Rect[] {
   });
 }
 function boardKey(moved: ReadonlyMap<string, Point>, exclude: string[], near: Point): string {
-  return JSON.stringify([seed, tries, walls, placed, [...moved].sort(([a], [b]) => (a < b ? -1 : 1)), exclude, near]);
+  return JSON.stringify([seed, tries, walls, placed, stamps.length, made.rooms.length, [...moved].sort(([a], [b]) => (a < b ? -1 : 1)), exclude, near]);
 }
 /** The moves that matter to the world's first goal: those off the island, and the last
  * square's blocker (its red block ends on its target, the rest are walled in). */
@@ -542,7 +584,7 @@ function prefetchFirst(): void {
   while (inIsland(near)) near = { x: near.x + 1, y: near.y };
   const exclude = all.map((g) => g.id);
   ahead.asked = boardKey(worldMoved(moved), exclude, near);
-  const request: GoalRequest = { job: ++ahead.job, seed, tries, walls, ui: shownUi, placed, near, moved: [...moved], level: 3, exclude, avoid: targetsOf(all), target: rampTarget(0) };
+  const request: GoalRequest = { job: ++ahead.job, seed, tries, walls, ui: shownUi, placed, near, moved: [...moved], level: 3, exclude, avoid: targetsOf(all), target: rampTarget(0), ...roomsPart(0) };
   ahead.contract = { request: asRequest(request, all), near, level: 3 };
   asking(1, ahead.worker, request);
 }
@@ -561,7 +603,7 @@ function lookAhead(): void {
   const key = boardKey(moved, exclude, goal.target);
   if (key === ahead.asked || ahead.ready?.key === key) return;
   ahead.asked = key;
-  const request: GoalRequest = { job: ++ahead.job, seed, tries, walls, ui: shownUi, placed, near: goal.target, moved: [...moved], level: 2, exclude, avoid: targetsOf([...scene.done, goal]), target: rampTarget(worldGoals() + 1) };
+  const request: GoalRequest = { job: ++ahead.job, seed, tries, walls, ui: shownUi, placed, near: goal.target, moved: [...moved], level: 2, exclude, avoid: targetsOf([...scene.done, goal]), target: rampTarget(worldGoals() + 1), ...roomsPart(worldGoals() + 1) };
   ahead.contract = { request: asRequest(request, [...scene.done, goal]), near: goal.target, level: 2 };
   asking(1, ahead.worker, request);
 }
@@ -573,6 +615,33 @@ ahead.worker.onmessage = (event: MessageEvent<Reply>) => {
   ahead.ready = { key: ahead.asked, goal: made.goal, rejected: made.rule !== undefined };
   if (ahead.wanted && ahead.wanted === ahead.asked) requestGoal(finish?.next);
 };
+// The room maker (src/room-worker.ts): one room at a time in the background, whenever neither
+// goal maker is busy and the page shows, ROOM_PAUSE_MS apart, up to MADE_MAX rooms kept. Room
+// k is the same on every device. Its rooms join the library's for the next goals.
+const MADE_MAX = 200, ROOM_PAUSE_MS = 3000;
+let roomWorker: Worker | null = null, roomBusy = false;
+function makeRoomWhenIdle(): void {
+  if (!withRooms || shared || testbed || trial || roomBusy || forgetting || made.rooms.length >= MADE_MAX) return;
+  if (document.hidden || placed || makers.some((m) => m.pending > 0)) return void setTimeout(makeRoomWhenIdle, ROOM_PAUSE_MS);
+  roomWorker ??= new Worker("room-worker.js");
+  roomBusy = true;
+  roomWorker.onmessage = (event: MessageEvent<{ k: number; room: Room | null; tries: number; ms: number }>) => {
+    const { k, room, tries: t, ms } = event.data;
+    roomBusy = false;
+    made.next = k + 1;
+    if (room) made.rooms.push(room);
+    if (!placed) log({ e: "roomMade", k, ...(room && { f: room.f, x: room.e }), ms, tries: t });
+    try {
+      if (!forgetting) localStorage.setItem(MADE_KEY, JSON.stringify(made));
+    } catch {
+      // No storage: the rooms last as long as the page.
+    }
+    setTimeout(makeRoomWhenIdle, ROOM_PAUSE_MS);
+  };
+  roomWorker.postMessage({ k: made.next });
+}
+setTimeout(makeRoomWhenIdle, 5000);
+
 if (testbed || trial) {
   // The testbed and a trial show their first goal once the board is in place (below).
 } else if (!scene.goal) requestGoal();
@@ -816,7 +885,8 @@ const gestures = new Gestures(scene, {
       if (next !== tries) {
         log({ e: "density", from: tries, to: next, goal: scene.goal?.id ?? null });
         tries = next;
-        relayout(scene, randomLayout(seed, { tries, walls, ...shownUi }));
+        stamps = [];
+        relayout(scene, worldOf());
         logged = 0; // a new board starts a new history
       }
       if (done && !scene.goal) requestGoal();
@@ -827,7 +897,8 @@ const gestures = new Gestures(scene, {
       if (next !== walls) {
         log({ e: "walls", from: walls, to: next, goal: scene.goal?.id ?? null });
         walls = next;
-        relayout(scene, randomLayout(seed, { tries, walls, ...shownUi }));
+        stamps = [];
+        relayout(scene, worldOf());
         logged = 0; // a new board starts a new history
       }
       if (done && !scene.goal) requestGoal();
@@ -849,6 +920,7 @@ function forgetEverything(): void {
     localStorage.setItem(LOG_KEY, kept);
     localStorage.setItem(DEVICE_KEY, device);
     localStorage.setItem(DEBUG_KEY, JSON.stringify(debugOn));
+    localStorage.setItem(MADE_KEY, JSON.stringify(made));
   } catch {
     // No storage: nothing to keep.
   }
@@ -1119,11 +1191,13 @@ function showFps(now: number): void {
   while (frames.length && frames[0]! <= now - 1000) frames.shift();
   // And the world's goals solved, the ramp's target for the goal being played (or next), and
   // how sound is doing.
-  const target = rampTarget(worldGoals());
+  const target = rampTarget(worldGoals()), p = roomPace(worldGoals());
   fpsText.textContent = [
     `${frames.length} fps · ${ago(Date.now() - builtAt)} · ${__COMMIT__}`,
     `World goals solved: ${worldGoals()}`,
-    `Ramp target: ${target === undefined ? "none" : `${target} fewest moves`}`,
+    withRooms && !placed
+      ? `Pace: ${p.fewest} fewest, ${p.extra} extra${p.spike ? ", spike" : p.easy ? ", easy" : ""} · rooms ${stamps.length} placed, ${made.rooms.length} made here`
+      : `Ramp target: ${target === undefined ? "none" : `${target} fewest moves`}`,
     `Audio: ${sfx.audioState()}`,
     `Device: ${storedName()}`,
     `Print: ${printName}`,

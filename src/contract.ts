@@ -5,7 +5,7 @@
 import { Board } from "./board";
 import type { Point } from "./camera";
 import type { Goal as GameGoal } from "./goal";
-import { CHUNK, fixedLayout, randomLayout, type Layout, type Placed, type UiShown } from "./layout";
+import { CHUNK, fixedLayout, randomLayout, type Layout, type Placed, type Stamp, type UiShown } from "./layout";
 import type { Move as GameMove } from "./rules";
 
 /** The contract's version: bumped when a field changes meaning. */
@@ -43,6 +43,8 @@ export type World = {
   version: number;
   /** An exact board instead of the random one (one placed by a test). */
   placed?: Placed[];
+  /** Rooms stamped into the random world (src/rooms.ts), oldest first; none when absent. */
+  rooms?: Stamp[];
 };
 
 /** The blocks the player has moved, where they are now, indexed by the 4x4 chunk (layout.ts
@@ -100,7 +102,7 @@ export function movedMap(moved: Moved): Map<string, Point> {
 
 /** The world's layout (blocks where they start). */
 export function worldLayout(world: World): Layout {
-  return world.placed ? fixedLayout(world.placed) : randomLayout(world.seed, { tries: world.density, walls: world.walls ?? 0, ...world.ui });
+  return world.placed ? fixedLayout(world.placed) : randomLayout(world.seed, { tries: world.density, walls: world.walls ?? 0, ...world.ui, rooms: world.rooms ?? [] });
 }
 
 /** The board a Request is about: the world with the player's moves. */
@@ -127,10 +129,11 @@ export function gameRequest(game: {
   moved: ReadonlyMap<string, Point>;
   done: readonly { id: string; target: Point }[];
   rampAim?: number;
+  rooms?: readonly Stamp[];
 }): Request {
   return {
     version: CONTRACT,
-    world: { seed: game.seed, density: game.tries, ...(game.walls && { walls: game.walls }), ui: { ...game.ui }, version: WORLD_VERSION, ...(game.placed && { placed: game.placed }) },
+    world: { seed: game.seed, density: game.tries, ...(game.walls && { walls: game.walls }), ui: { ...game.ui }, version: WORLD_VERSION, ...(game.placed && { placed: game.placed }), ...(game.rooms?.length && { rooms: [...game.rooms] }) },
     moved: movedIndex(game.moved),
     history: game.done.map((g) => ({ red: g.id, target: { x: g.target.x, y: g.target.y } })),
     rampAim: game.rampAim ?? null,

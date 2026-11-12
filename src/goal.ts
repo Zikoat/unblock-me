@@ -4,7 +4,7 @@ import type { Point, Rect } from "./camera";
 import type { Difficulty } from "./difficulty";
 import type { Terms } from "./judge";
 import { medalWon } from "./stars";
-import { UNIT, type Block } from "./layout";
+import { UNIT, type Block, type Stamp } from "./layout";
 import type { Move } from "./rules";
 
 export type Goal = {
@@ -36,6 +36,13 @@ export type Goal = {
   /** An early island goal: no stars while it is played, and its finish is the full one
    * however many moves it took (src/island.ts). */
   unrated?: boolean;
+  /** A room's goal (src/rooms.ts): which room (its library id, turned), where from, its numbers
+   * as stamped (f fewest, e and E the least and most extra moves; measured again when the world
+   * filled its reserved cells, `fill`), and the room's own; k: its stamp. */
+  room?: { id: string; from?: string; f: number; e: number; E: number; roomF: number; roomE: number; roomEMax: number; fill: string; k: number; pace?: { fewest: number; extra: number; spike: boolean; easy: boolean }; ms?: number; states?: number };
+  /** The stamp that puts the room in the world, until the goal is shown (then it is the
+   * world's: src/main.ts). */
+  stamp?: Stamp;
   /** An island square's goal with more to come in it: reached, it sparkles and the next one
    * follows, no finish nor stars. */
   step?: boolean;

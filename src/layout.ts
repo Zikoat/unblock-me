@@ -1,5 +1,6 @@
 import type { Rect } from "./camera";
 import { ISLAND_KEEP_OUT, islandBlocks } from "./island";
+import { cellKinds, type Room } from "./room";
 
 /** A 1x1 control on the board: it never slides, a tap runs it. */
 export type Ui = "home" | "reset" | "fullscreen" | "reports" | "density" | "walls" | "border" | "upload" | "fps" | "testbed" | "levels";
@@ -86,6 +87,35 @@ export const TRIES = 12;
 export const MIN_TRIES = 1;
 export const MAX_TRIES = 30;
 
+/** A room stamped into the world (src/rooms.ts): the room (turned already) with its box's
+ * top-left cell at x, y; its blocks are "room <k> <i>", its walls "room <k> w<j>". `fill`: the
+ * world's generation fills its reserved (swept) cells too, not only its free ones (true), or
+ * only with these of its blocks (their ids), or not at all (false); it was measured again with
+ * that fill (room-core.ts checkStamped). */
+export type Stamp = { k: number; room: Room; x: number; y: number; fill: boolean | string[] };
+
+/** The blocks a stamp puts down, and whether a generated block may stay (it covers no set
+ * cell, and no reserved cell unless the fill is kept there and the block is wholly inside the
+ * box). */
+export function stampParts(st: Stamp): { blocks: Block[]; keeps: (b: { id: string; x: number; y: number; w: number; h: number }) => boolean; box: Rect } {
+  const { room, x: ox, y: oy } = st, kinds = cellKinds(room);
+  const blocks: Block[] = room.b.map(([x, y, h], i) => toBlock({ x: ox + x, y: oy + y, w: h ? 2 : 1, h: h ? 1 : 2 }, `room ${st.k} ${i}`));
+  room.w.forEach(([x, y], j) => blocks.push(toBlock({ x: ox + x, y: oy + y, w: 1, h: 1, wall: true }, `room ${st.k} w${j}`)));
+  const box = { x: ox, y: oy, width: room.W, height: room.H };
+  const keeps = (b: { id: string; x: number; y: number; w: number; h: number }) => {
+    if (!intersects(b, { x: ox, y: oy, width: room.W, height: room.H })) return true;
+    const inside = b.x >= ox && b.y >= oy && b.x + b.w <= ox + room.W && b.y + b.h <= oy + room.H;
+    for (let x = b.x; x < b.x + b.w; x++) for (let y = b.y; y < b.y + b.h; y++) {
+      const lx = x - ox, ly = y - oy;
+      if (lx < 0 || ly < 0 || lx >= room.W || ly >= room.H) continue;
+      const k = kinds[ly * room.W + lx];
+      if (k === "s" || k === "w" || (k === "r" && (!inside || !(st.fill === true || (Array.isArray(st.fill) && st.fill.includes(b.id)))))) return false;
+    }
+    return true;
+  };
+  return { blocks, keeps, box };
+}
+
 /** Mixed into the seed for the walls' own random stream. */
 const WALL_SALT = 0x5bd1e995;
 
@@ -120,7 +150,9 @@ function chunkSeed(seed: number, cx: number, cy: number): number {
  * stream of their own, so with none the blocks are exactly as before and with some they are
  * the same draws minus those that would cover a wall. None touch the island, even at a corner
  * (its walls would join them into an odd shape). */
-export function randomLayout(seed: number, { tries = TRIES, walls = 0, ...shown }: { tries?: number; walls?: number } & UiShown = {}): Layout {
+export function randomLayout(seed: number, { tries = TRIES, walls = 0, rooms = [], ...shown }: { tries?: number; walls?: number; rooms?: readonly Stamp[] } & UiShown = {}): Layout {
+  const stamps = rooms.map(stampParts);
+  const roomBlocks = new Map(stamps.flatMap((s) => s.blocks.map((b) => [b.id, b] as const)));
   // The UI blocks and the island are fixed; the random blocks keep out of their areas.
   const ui = [...uiBlocks(shown), ...(shown.island ? islandBlocks() : [])].map((p) => toBlock(p, p.id!));
   const area = uiArea(shown), island = shown.island ? ISLAND_KEEP_OUT : [];
@@ -159,14 +191,17 @@ export function randomLayout(seed: number, { tries = TRIES, walls = 0, ...shown 
       cells.forEach((c) => taken.add(c));
       blocks.push(candidate);
     }
+    // Stamped rooms take their cells (src/rooms.ts): generated blocks on them are left out.
+    const kept = stamps.length ? blocks.filter((b) => stamps.every((s) => s.keeps(b))) : blocks;
     if (cache.size > 5000) cache.clear();
-    cache.set(key, blocks);
-    return blocks;
+    cache.set(key, kept);
+    return kept;
   }
 
   return {
     blocksIn(area) {
       const found = ui.filter((b) => intersects(b, area));
+      for (const s of stamps) if (intersects({ x: s.box.x, y: s.box.y, w: s.box.width, h: s.box.height }, area)) for (const b of s.blocks) if (intersects(b, area)) found.push(b);
       for (let cx = Math.floor(area.x / CHUNK); cx <= Math.floor((area.x + area.width) / CHUNK); cx++) {
         for (let cy = Math.floor(area.y / CHUNK); cy <= Math.floor((area.y + area.height) / CHUNK); cy++) {
           for (const b of chunk(cx, cy)) if (intersects(b, area)) found.push(b);
@@ -177,6 +212,7 @@ export function randomLayout(seed: number, { tries = TRIES, walls = 0, ...shown 
     byId(id) {
       const control = ui.find((b) => b.id === id);
       if (control) return control;
+      if (id.startsWith("room ")) return roomBlocks.get(id);
       const [cx, cy] = id.split(",").map(Number) as [number, number];
       return chunk(cx, cy).find((b) => b.id === id);
     },

@@ -139,7 +139,7 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
   await tap(cell(-0.5, 3.5));
   await pass(page, 100);
   const text = await page.evaluate(() => document.body.innerText.trim());
-  check(/^\d+ fps · \d+[smhd] ago · [0-9a-f]{7,}\+?\nWorld goals solved: 0\nRamp target: 4 fewest moves\nAudio: [a-z]+ · \d+ tries · .+\nDevice: [a-z]+ [a-z]+ \d\d\nPrint: ([a-z]+ [a-z]+ \d\d|…)\nMaker: (idle|making, effort \d, \d+s|ready, \d+ moves, fitness [\d.]+)\nAhead: .+$/.test(text), `the fps toggle shows the debug counter: fps, build age and commit, world goals solved, the ramp's target, this browser's device and fingerprint names, and what the goal makers are doing ("${text}")`);
+  check(/^\d+ fps · \d+[smhd] ago · [0-9a-f]{7,}\+?\nWorld goals solved: 0\n(Ramp target: 4 fewest moves|Pace: 5 fewest, 0 extra · rooms \d+ placed, \d+ made here)\nAudio: [a-z]+ · \d+ tries · .+\nDevice: [a-z]+ [a-z]+ \d\d\nPrint: ([a-z]+ [a-z]+ \d\d|…)\nMaker: (idle|making, effort \d, \d+s|ready, \d+ moves, fitness [\d.]+)\nAhead: .+$/.test(text), `the fps toggle shows the debug counter: fps, build age and commit, world goals solved, the pacing's aim, this browser's device and fingerprint names, and what the goal makers are doing ("${text}")`);
   await pass(page, 1200);
   const idleFps = await page.evaluate(() => parseInt(document.querySelector("#fps").textContent));
   check(idleFps > 10, `with nothing moving the counter still counts frames (${idleFps} fps)`);
@@ -194,7 +194,9 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
   check(await page.evaluate(() => unblock.scene.camera.offsetX === 170 && unblock.scene.camera.offsetY === 370 && unblock.scene.camera.scale === 1), "and the view centred");
   await page.evaluate(() => unblock.goalReady());
   const stored = await page.evaluate(() => Object.fromEntries(Object.keys(localStorage).sort().map((k) => [k, localStorage.getItem(k)])));
-  const { "unblock-me:v13:goal": storedGoal, "unblock-me:camera": storedCamera, "unblock-me:log": storedLog, "unblock-me:device": storedDevice, ...rest } = stored;
+  const { "unblock-me:v13:goal": storedGoal, "unblock-me:camera": storedCamera, "unblock-me:log": storedLog, "unblock-me:device": storedDevice, "unblock-me:v13:rooms": storedRooms, "unblock-me:rooms-made": storedMade, ...rest } = stored;
+  // (The first goal's room, stamped into the new world; the device's own rooms survive.)
+  check(JSON.parse(storedRooms ?? "{}").seed === seedAfter && !!storedMade, `the rooms stamped belong to the new seed, the device's rooms are kept (${storedRooms?.slice(0, 40)})`);
   check(/^[0-9a-f-]{36}$/.test(storedDevice), `the device id for automatic uploads survives the reset (${storedDevice})`);
   // (The page's opening, logged once its fingerprint is known, may come before or after the goal.)
   const kinds = JSON.parse(storedLog ?? "[]").map((e) => e.e);
@@ -911,6 +913,63 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
   await pass(page, 7000);
   await page.waitForFunction(() => location.search === "?trial=R2", null, { timeout: 5000 }).catch(() => {});
   check(await page.evaluate(() => location.search) === "?trial=R2" && (await page.textContent("#trial")) === "Trial R2", "its proof reaches the goal and the page goes on to R2");
+  await page.close();
+}
+
+// --- Rooms (src/rooms.ts): a world goal is a room stamped into the world near the player, its
+// numbers and proof logged with it; its proof reaches it; the next goal is another room; the
+// stamps are stored, so a reload shows the same world. ?rooms=0 gives the maker's goals.
+{
+  const page = await clocked(await browser.newPage({ viewport: { width: 1280, height: 800 } }));
+  await page.goto(url);
+  await page.evaluate(() => { unblock.forget(); localStorage.setItem("unblock-me:v13:seed", "20261112"); });
+  await page.goto(url);
+  await frame(page);
+  await page.evaluate(() => unblock.goalReady());
+  const g = await page.evaluate(() => unblock.scene.goal);
+  const logged = await page.evaluate(() => unblock.playLog.filter((e) => e.e === "goal").at(-1));
+  check(!!g?.room && g.id === "room 0 0" && g.solution.length === g.room.f && g.difficulty.moves === g.room.f, `the first world goal is a room (${g?.room?.id}, ${g?.room?.f} fewest, ${g?.room?.e} extra, fill ${g?.room?.fill})`);
+  check(logged?.how === "room" && logged.room?.id === g.room.id && logged.stamp?.k === 0 && logged.proof?.length === g.room.f && logged.n === 0, "its log entry says which room, its numbers, the stamp and the proof");
+  const roomBlocks = await page.evaluate(() => unblock.scene.layout.blocksIn({ x: -40, y: -40, width: 80, height: 80 }).filter((b) => b.id.startsWith("room 0 ")).length);
+  check(roomBlocks > 4, `its blocks are in the world (${roomBlocks})`);
+  const red = await page.evaluate((id) => unblock.scene.layout.byId(id), g.id);
+  await page.evaluate(([p, UNIT]) => { unblock.scene.camera = { scale: 0.8, offsetX: 640 - (p.x + 1) * UNIT * 0.8, offsetY: 400 - (p.y + 1) * UNIT * 0.8 }; unblock.redraw(); }, [red, UNIT]);
+  await frame(page);
+  await page.screenshot({ path: shots + "room-1-stamped.png" });
+  for (const m of g.solution) {
+    const b = await page.evaluate((id) => unblock.scene.layout.byId(id), m.id);
+    const mid = { x: (m.from.x + m.to.x + b.w) / 2, y: (m.from.y + m.to.y + b.h) / 2 };
+    await page.evaluate(([mid, UNIT]) => { unblock.scene.camera = { scale: 1, offsetX: 640 - mid.x * UNIT, offsetY: 400 - mid.y * UNIT }; unblock.redraw(); }, [mid, UNIT]);
+    await frame(page);
+    const at = (p) => [640 + (p.x + b.w / 2 - mid.x) * UNIT, 400 + (p.y + b.h / 2 - mid.y) * UNIT];
+    await page.mouse.move(...at(m.from));
+    await page.mouse.down();
+    await page.mouse.move(...at(m.to), { steps: 10 });
+    await page.mouse.up();
+    await pass(page, 400);
+  }
+  check(await page.evaluate(() => unblock.scene.done.length === 1), "its proof reaches it");
+  await page.screenshot({ path: shots + "room-2-reached.png" });
+  await pass(page, 12000);
+  await page.evaluate(() => unblock.goalReady());
+  const g2 = await page.evaluate(() => unblock.scene.goal);
+  check(g2?.room?.k === 1 && g2.id === "room 1 0", `the next goal is another room (${g2?.room?.id}, ${g2?.room?.f} fewest)`);
+  await page.evaluate(([p, UNIT]) => { unblock.scene.camera = { scale: 0.6, offsetX: 640 - p.x * UNIT * 0.6, offsetY: 400 - p.y * UNIT * 0.6 }; unblock.redraw(); }, [g2.target, UNIT]);
+  await frame(page);
+  await page.screenshot({ path: shots + "room-3-next.png" });
+  const before = await page.evaluate(() => JSON.stringify(unblock.scene.layout.blocksIn({ x: -40, y: -40, width: 80, height: 80 }).map((b) => [b.id, b.x, b.y]).sort()));
+  await page.reload();
+  await frame(page);
+  const after = await page.evaluate(() => JSON.stringify(unblock.scene.layout.blocksIn({ x: -40, y: -40, width: 80, height: 80 }).map((b) => [b.id, b.x, b.y]).sort()));
+  check(before === after && (await page.evaluate(() => unblock.scene.goal?.id)) === "room 1 0", "a reload shows the same world and the same goal");
+  await page.goto(`${url}&rooms=0`);
+  await page.evaluate(() => { unblock.forget(); localStorage.setItem("unblock-me:v13:seed", "20261112"); });
+  await page.goto(`${url}&rooms=0`);
+  await frame(page);
+  await page.evaluate(() => unblock.goalReady());
+  check(await page.evaluate(() => !unblock.scene.goal?.room && unblock.playLog.filter((e) => e.e === "goal").at(-1)?.how === "maker"), "?rooms=0: the maker's goal");
+  await page.goto(`${root}levels/`);
+  check((await page.locator('a[href="../?trial=R1"]').count()) === 1 && (await page.locator('a[href="../?testbed"]').count()) === 1, "the levels page lists the playlists and the testbed");
   await page.close();
 }
 

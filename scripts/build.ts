@@ -31,14 +31,14 @@ async function build(): Promise<void> {
     minify: true,
     define: { __BUILD_ID__: JSON.stringify(id), __COMMIT__: JSON.stringify(commit) },
   });
-  const worker = await Bun.build({
-    entrypoints: [join(src, "goal-worker.ts")],
+  const workers = await Promise.all(["goal-worker", "room-worker"].map((name) => Bun.build({
+    entrypoints: [join(src, `${name}.ts`)],
     outdir,
     target: "browser",
-    naming: "goal-worker.js",
+    naming: `${name}.js`,
     minify: true,
-  });
-  for (const r of [result, worker]) if (!r.success) throw new Error(r.logs.map((log) => log.message).join("\n"));
+  })));
+  for (const r of [result, ...workers]) if (!r.success) throw new Error(r.logs.map((log) => log.message).join("\n"));
   await Bun.write(join(outdir, "index.html"), Bun.file(join(src, "index.html")));
   // A standalone page for finding out how Telegram's in-app browser treats swipes.
   await Bun.write(join(outdir, "telegram-test.html"), Bun.file(join(src, "telegram-test.html")));
