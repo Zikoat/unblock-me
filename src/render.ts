@@ -293,6 +293,7 @@ export function draw(
     else if (block.ui === "upload") uploadIcon(ctx, block);
     else if (block.ui === "reports") reportsIcon(ctx, block);
     else if (block.ui === "testbed") testbedIcon(ctx, block);
+    else if (block.ui === "levels") levelsIcon(ctx, block);
     else if (block.ui === "fps") fpsIcon(ctx, block, fps);
     else if (block.ui === "density") densityIcon(ctx, block, density);
     else if (block.ui === "walls") wallsIcon(ctx, block, walls);
@@ -905,6 +906,21 @@ function reportsIcon(ctx: CanvasRenderingContext2D, block: Block): void {
     ctx.roundRect(left + i * (bar + gap), base - height * UNIT, bar, height * UNIT, [2, 2, 0, 0]);
     ctx.fill();
   });
+}
+
+/** A list (three rows, a dot before each): the levels page. */
+function levelsIcon(ctx: CanvasRenderingContext2D, block: Block): void {
+  const x = block.x * UNIT, y = block.y * UNIT, u = UNIT;
+  ctx.fillStyle = COLORS.icon;
+  for (const k of [0, 1, 2]) {
+    const cy = y + (0.32 + 0.18 * k) * u;
+    ctx.beginPath();
+    ctx.arc(x + 0.3 * u, cy, 0.045 * u, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.roundRect(x + 0.4 * u, cy - 0.035 * u, 0.32 * u, 0.07 * u, 2);
+    ctx.fill();
+  }
 }
 
 /** A lab flask: the testbed. */

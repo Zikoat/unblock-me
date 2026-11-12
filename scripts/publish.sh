@@ -21,7 +21,7 @@ if git -C "$lab" rev-parse -q --verify HEAD >/dev/null 2>&1; then
   git -C "$lab" archive HEAD reports | tar -x -C "$tree/.lab"
 fi
 COMMIT=$(git -C "$root" rev-parse --short HEAD) "$HOME/.bun/bin/bun" "$tree/scripts/build.ts" --out "$next" --lab-reports "$tree/.lab/reports" >/dev/null
-for f in index.html app.js goal-worker.js build.txt; do
+for f in index.html app.js goal-worker.js levels/index.html build.txt; do
   [ -s "$next/$f" ] || { echo "Not published: the build has no $f" >&2; exit 1; }
 done
 chmod 755 "$next"

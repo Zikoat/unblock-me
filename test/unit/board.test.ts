@@ -395,7 +395,7 @@ describe("taps on the background", () => {
 });
 
 describe("UI blocks", () => {
-  // The fullscreen block (1,0); with the debug UI an empty row, then density (-1,2), border
+  // The fullscreen block (1,0); with the debug UI the levels block (-1,0) in its row, an empty row, then density (-1,2), border
   // (0,2), upload (1,2); fps (-1,3), reports (0,3), home (1,3); reset (-1,4), testbed (0,4), walls (1,4).
   const ui = () => UI_BLOCKS.map((b) => ({ ...b }));
   const spots = [
@@ -405,6 +405,7 @@ describe("UI blocks", () => {
   test("they are 1x1: a row for the game, a gap, and a row of debug blocks", () => {
     expect(ui().map((b) => [b.id, b.x, b.y, b.w, b.h])).toEqual([
       ["fullscreen", 1, 0, 1, 1],
+      ["levels", -1, 0, 1, 1],
       ["density", -1, 2, 1, 1], ["border", 0, 2, 1, 1], ["upload", 1, 2, 1, 1], ["fps", -1, 3, 1, 1], ["reports", 0, 3, 1, 1], ["home", 1, 3, 1, 1], ["reset", -1, 4, 1, 1], ["testbed", 0, 4, 1, 1], ["walls", 1, 4, 1, 1],
     ]);
   });
@@ -471,7 +472,7 @@ describe("UI blocks", () => {
     expect(scene.border).toBe(false);
     // Centred on the middle of the reset block.
     expect(toScreen(scene.camera, { x: UNIT / 2, y: UNIT / 2 })).toEqual({ x: 600, y: 600 });
-    expect(visibleBlocks(scene).map((b) => b.id).sort()).toEqual(["border", "density", "fps", "fullscreen", "home", "new", "reports", "reset", "testbed", "upload", "walls"]);
+    expect(visibleBlocks(scene).map((b) => b.id).sort()).toEqual(["border", "density", "fps", "fullscreen", "home", "levels", "new", "reports", "reset", "testbed", "upload", "walls"]);
   });
 });
 

@@ -2,7 +2,7 @@
 // by test/experiments/open-gen-trials.ts): a room with many extra moves against one with none at
 // the same fewest, both opened up, on the room and 3 cells of the world round it; ?trial=J1A etc.
 // Which is which is only in the report.
-import type { Trial } from "./trials";
+import type { Levels, Trial } from "./trials";
 
 export const OPEN_TRIALS_J: Trial[] = [
   {
@@ -16,3 +16,6 @@ export const OPEN_TRIALS_J: Trial[] = [
     solution: [{id:"b35",from:{x:-2,y:2},to:{x:-3,y:2}},{id:"b39",from:{x:0,y:2},to:{x:-1,y:2}},{id:"b41",from:{x:-3,y:0},to:{x:-3,y:-1}},{id:"b42",from:{x:-2,y:1},to:{x:-3,y:1}},{id:"b34",from:{x:0,y:1},to:{x:-1,y:1}},{id:"b43",from:{x:1,y:-1},to:{x:1,y:1}},{id:"b37",from:{x:1,y:-3},to:{x:1,y:-2}},{id:"b38",from:{x:-1,y:-3},to:{x:1,y:-3}},{id:"b44",from:{x:-3,y:-3},to:{x:-1,y:-3}},{id:"b46",from:{x:2,y:0},to:{x:2,y:-2}},{id:"b45",from:{x:-1,y:0},to:{x:1,y:0}},{id:"b40",from:{x:0,y:-2},to:{x:0,y:-1}},{id:"b36",from:{x:-3,y:-2},to:{x:-1,y:-2}},{id:"b33",from:{x:-2,y:-1},to:{x:-2,y:-3}}],
   },
 ];
+
+/** For the levels page (scripts/levels.ts). */
+export const LEVELS: Levels = { date: "2026-11-10", about: "A blind pair of opened rooms at 14 fewest moves." };

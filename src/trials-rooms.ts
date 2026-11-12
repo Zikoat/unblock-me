@@ -1,7 +1,7 @@
 // Candidate levels for normal play, chained (lab/playlist.ts, research/roadmap.md): opened rooms
 // with real come-back moves from the library, each with 3 cells of the world round it; ?trial=R1
 // plays on to R2 and so on, each board's play logged on its own. Their numbers: lab/out/rooms.json.
-import type { Trial } from "./trials";
+import type { Levels, Trial } from "./trials";
 
 export const ROOM_TRIALS: Trial[] = [
   { label: "R1", red: "b34", target: {"x":1,"y":0}, fewest: 11, next: "R2",
@@ -53,3 +53,6 @@ export const ROOM_TRIALS: Trial[] = [
     solution: [{"id":"b31","from":{"x":1,"y":0},"to":{"x":-1,"y":0}},{"id":"b41","from":{"x":1,"y":-2},"to":{"x":1,"y":1}},{"id":"b31","from":{"x":-1,"y":0},"to":{"x":1,"y":0}},{"id":"b32","from":{"x":0,"y":-2},"to":{"x":0,"y":-1}},{"id":"b33","from":{"x":-1,"y":-3},"to":{"x":-1,"y":1}},{"id":"b36","from":{"x":-3,"y":-2},"to":{"x":1,"y":-2}},{"id":"b32","from":{"x":0,"y":-1},"to":{"x":0,"y":-2}},{"id":"b35","from":{"x":-3,"y":-1},"to":{"x":-3,"y":-2}},{"id":"b39","from":{"x":-2,"y":-1},"to":{"x":-2,"y":-2}},{"id":"b31","from":{"x":1,"y":0},"to":{"x":-3,"y":0}}],
   },
 ];
+
+/** For the levels page (scripts/levels.ts). */
+export const LEVELS: Levels = { date: "2026-11-11", about: "Playlist: twelve library rooms with come-back moves, opened into the world, one after another." };

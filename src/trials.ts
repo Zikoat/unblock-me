@@ -8,6 +8,10 @@ import type { Move } from "./rules";
 
 /** `next`: the trial the page goes on to once this one's goal is reached and its finish is over
  * (a playlist, src/trials-rooms.ts). */
+/** A trials file's line on the levels page (/levels/, scripts/levels.ts): when it was made and
+ * what it is, in a line (never which side of a blind pair is which). */
+export type Levels = { date: string; about: string };
+
 export type Trial = { label: string; blocks: Placed[]; red: string; target: Point; fewest: number; solution: Move[]; next?: string };
 
 export const TRIALS: Trial[] = [
@@ -42,3 +46,6 @@ export const TRIALS: Trial[] = [
     solution: [{id:"b2",from:{x:2,y:-2},to:{x:2,y:-3}},{id:"b7",from:{x:0,y:-1},to:{x:2,y:-1}},{id:"b16",from:{x:-2,y:-1},to:{x:0,y:-1}},{id:"b1",from:{x:-1,y:0},to:{x:-1,y:-1}},{id:"b11",from:{x:-1,y:2},to:{x:-1,y:1}},{id:"b14",from:{x:0,y:3},to:{x:-3,y:3}},{id:"b11",from:{x:-1,y:1},to:{x:-1,y:2}},{id:"b1",from:{x:-1,y:-1},to:{x:-1,y:0}},{id:"b16",from:{x:0,y:-1},to:{x:-2,y:-1}},{id:"b12",from:{x:2,y:3},to:{x:0,y:3}},{id:"b6",from:{x:2,y:1},to:{x:2,y:2}},{id:"b7",from:{x:2,y:-1},to:{x:0,y:-1}},{id:"b2",from:{x:2,y:-3},to:{x:2,y:0}},{id:"b7",from:{x:0,y:-1},to:{x:2,y:-1}},{id:"b8",from:{x:1,y:-3},to:{x:1,y:-2}},{id:"b13",from:{x:-1,y:-3},to:{x:1,y:-3}}],
   },
 ];
+
+/** For the levels page (scripts/levels.ts). */
+export const LEVELS: Levels = { date: "2026-11-09", about: "Blind pairs at 8, 12 and 16 fewest moves, walled rooms: do come-back moves make a goal harder?" };

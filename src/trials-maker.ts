@@ -2,7 +2,7 @@
 // made by test/experiments/maker-trials.ts): on one board each pair, the goal the maker picked
 // before and the one it picks now, both about 12 moves; ?trial=M1A etc. Which is which is only
 // in the report.
-import type { Trial } from "./trials";
+import type { Levels, Trial } from "./trials";
 
 export const MAKER_TRIALS: Trial[] = [
   {
@@ -16,3 +16,6 @@ export const MAKER_TRIALS: Trial[] = [
     solution: [{id:"0,0,8",from:{x:1,y:2},to:{x:1,y:1}},{id:"0,0,2",from:{x:0,y:2},to:{x:0,y:1}},{id:"-1,0,6",from:{x:-4,y:2},to:{x:-4,y:1}},{id:"-2,0,2",from:{x:-7,y:2},to:{x:-7,y:4}},{id:"-3,0,0",from:{x:-9,y:2},to:{x:-9,y:4}},{id:"-3,0,7",from:{x:-12,y:1},to:{x:-13,y:1}},{id:"-3,0,1",from:{x:-11,y:2},to:{x:-11,y:1}},{id:"-4,-1,0",from:{x:-15,y:-1},to:{x:-16,y:-1}},{id:"-4,0,1",from:{x:-14,y:0},to:{x:-14,y:-1}},{id:"-4,0,0",from:{x:-14,y:2},to:{x:-14,y:1}},{id:"-1,0,3",from:{x:-2,y:3},to:{x:-16,y:3}},{id:"0,0,3",from:{x:2,y:3},to:{x:-14,y:3}}],
   },
 ];
+
+/** For the levels page (scripts/levels.ts). */
+export const LEVELS: Levels = { date: "2026-11-09", about: "A blind pair on one board, about 12 moves: the maker before and after it weighed extra moves." };

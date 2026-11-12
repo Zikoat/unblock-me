@@ -797,6 +797,8 @@ const gestures = new Gestures(scene, {
       location.href = "reports/";
     } else if (ui === "testbed") {
       location.href = "?testbed";
+    } else if (ui === "levels") {
+      location.href = "levels/";
     } else if (ui === "upload") {
       void sendPlayData();
     } else if (ui === "fps") {
@@ -1315,6 +1317,7 @@ function tooltip(ui: Ui): string | null {
     case "reset": return "Reset";
     case "fps": return "Debug: Show or hide the fps counter";
     case "reports": return "Reports";
+    case "levels": return "Debug: Custom levels, the trials and playlists";
     case "testbed": return "Debug: The testbed, a small board for trying the finish's animations";
     case "upload": return "Debug: Send play data to the VM for analysis";
     case "walls": return "Walls: drag sideways for more or fewer fixed cells (a new board)";

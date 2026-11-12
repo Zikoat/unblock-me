@@ -2,7 +2,7 @@
 // test/experiments/open-pull-trials.ts): two open rooms with about the same fewest and extra
 // moves, one with mixed come-backs and one a tidy wave, some with world blocks pulled in; on the
 // room and 3 cells of the world round it; ?trial=K1A etc. Which is which is only in the report.
-import type { Trial } from "./trials";
+import type { Levels, Trial } from "./trials";
 
 export const OPEN_TRIALS_K: Trial[] = [
   {
@@ -26,3 +26,6 @@ export const OPEN_TRIALS_K: Trial[] = [
     solution: [{id:"b32",from:{x:-2,y:-2},to:{x:-1,y:-2}},{id:"b31",from:{x:-2,y:-1},to:{x:-2,y:-3}},{id:"b41",from:{x:-1,y:-1},to:{x:-2,y:-1}},{id:"b35",from:{x:1,y:-1},to:{x:0,y:-1}},{id:"b36",from:{x:2,y:0},to:{x:2,y:-3}},{id:"b35",from:{x:0,y:-1},to:{x:1,y:-1}},{id:"b40",from:{x:0,y:0},to:{x:1,y:0}},{id:"b34",from:{x:0,y:1},to:{x:0,y:-1}},{id:"b39",from:{x:-3,y:1},to:{x:1,y:1}},{id:"b34",from:{x:0,y:-1},to:{x:0,y:0}},{id:"b41",from:{x:-2,y:-1},to:{x:-1,y:-1}},{id:"b31",from:{x:-2,y:-3},to:{x:-2,y:0}}],
   },
 ];
+
+/** For the levels page (scripts/levels.ts). */
+export const LEVELS: Levels = { date: "2026-11-10", about: "Blind pairs of opened rooms with about the same fewest and extra moves, some with world blocks pulled in." };

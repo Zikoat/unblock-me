@@ -7,6 +7,7 @@ import { existsSync, watch } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { buildReports } from "./reports";
+import { levelsPage } from "./levels";
 
 const root = join(import.meta.dir, "..");
 const src = join(root, "src");
@@ -42,6 +43,9 @@ async function build(): Promise<void> {
   // A standalone page for finding out how Telegram's in-app browser treats swipes.
   await Bun.write(join(outdir, "telegram-test.html"), Bun.file(join(src, "telegram-test.html")));
   await buildReports([join(root, "reports"), labReports], join(outdir, "reports"));
+  // The custom levels (the debug UI's list block), from src/trials*.ts.
+  await mkdir(join(outdir, "levels"), { recursive: true });
+  await Bun.write(join(outdir, "levels", "index.html"), await levelsPage());
   // Written last, so a page only reloads once the new app is complete.
   await Bun.write(join(outdir, "build.txt"), id);
   console.log(`Built ${outdir} (${id})`);

@@ -2,7 +2,7 @@
 // test/experiments/extra-gen-trials.ts): a room generator's goal (G1) and a constructive one's (G2),
 // each against a goal with none at the same fewest, opened up into the world round it;
 // ?trial=G1A etc. Which is which is only in the report.
-import type { Trial } from "./trials";
+import type { Levels, Trial } from "./trials";
 
 export const GEN_TRIALS: Trial[] = [
   {
@@ -26,3 +26,6 @@ export const GEN_TRIALS: Trial[] = [
     solution: [{id:"b6",from:{x:2,y:-3},to:{x:1,y:-3}},{id:"b5",from:{x:3,y:-2},to:{x:3,y:-3}},{id:"b19",from:{x:-2,y:0},to:{x:-2,y:-1}},{id:"b20",from:{x:-3,y:-2},to:{x:-3,y:-3}},{id:"b16",from:{x:-3,y:0},to:{x:-3,y:-1}},{id:"b18",from:{x:-1,y:1},to:{x:-3,y:1}},{id:"b2",from:{x:0,y:2},to:{x:0,y:1}},{id:"b4",from:{x:-1,y:2},to:{x:-1,y:1}},{id:"b7",from:{x:1,y:3},to:{x:-1,y:3}},{id:"b1",from:{x:2,y:0},to:{x:2,y:2}},{id:"b9",from:{x:1,y:1},to:{x:1,y:2}},{id:"b10",from:{x:1,y:-1},to:{x:1,y:0}},{id:"b12",from:{x:2,y:-2},to:{x:2,y:0}},{id:"b0",from:{x:-1,y:-1},to:{x:2,y:-1}}],
   },
 ];
+
+/** For the levels page (scripts/levels.ts). */
+export const LEVELS: Levels = { date: "2026-11-09", about: "Blind pairs of generated goals in the world: a room generator's and a constructive one's, each against another at the same fewest." };
