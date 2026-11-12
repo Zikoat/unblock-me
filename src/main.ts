@@ -1549,6 +1549,12 @@ function playData() {
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i)!;
     if (!key.startsWith("unblock-me:") || key === VIEW_CHECK_KEY) continue;
+    // The device's own rooms (up to MADE_MAX, about 0.4 kB each) only by id and numbers: room
+    // k is the same on every device (room-make.ts), and the stamped ones are stored in full.
+    if (key === MADE_KEY) {
+      stored[key] = { next: made.next, rooms: made.rooms.map((r) => [r.id, r.f, r.e]) };
+      continue;
+    }
     const value = localStorage.getItem(key);
     try {
       stored[key] = JSON.parse(value ?? "null");
