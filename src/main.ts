@@ -539,27 +539,40 @@ function requestGoal(near: Point = viewCentre(scene.camera, scene.width, scene.h
   // search looks only round `near`, and no island block may be the red block).
   if (withIsland) while (inIsland(near)) near = { x: near.x + 1, y: near.y };
   const exclude = scene.done.map((g) => g.id);
-  // Made already while the red block was one move away, or (the world's first) while the
-  // island was played: no wait.
+  // Made ahead while the goal before was played (or, the world's first, while the island
+  // was): no wait.
   const key = boardKey(scene.moved, exclude, near);
   const first = withIsland && worldGoals() === 0 ? boardKey(worldMoved(scene.moved), exclude, near) : null;
-  const madeAhead = ahead.ready && (ahead.ready.key === key || ahead.ready.key === first);
-  if (madeAhead && !ahead.ready!.rejected) {
-    if (ahead.ready!.key === first) log({ e: "prefetched" });
-    showGoal(ahead.ready!.goal);
+  const follows = first !== null ? "first" : followKey(scene.done.at(-1));
+  // (A room's goal, made on the board as it was then, is still good if nothing has moved into
+  // its room's reach since and its ground is still unseen; the Referee checks it again on the
+  // board as it is now. The maker's fits only the board it was made on.)
+  const ready = ahead.ready, exact = !!ready && (ready.key === key || ready.key === first);
+  const usable = !!ready && !ready.rejected && (ready.goal?.stamp
+    ? ready.for === follows && roomFits(ready.goal) && (exact || !!checked(ready.goal, { request: asRequest(nowRequest(near, job), scene.done), near, level: 2 }, true).goal)
+    : exact);
+  if (usable) {
+    if (first !== null) log({ e: "prefetched" });
+    showGoal(ready.goal);
     return;
   }
   // (One made ahead that the Referee rejected is asked for again, the quick way, below.)
-  // Still being made ahead, and a finish to play meanwhile: it shows as soon as it is made,
-  // or the finish's end asks the quick way.
-  if (patient && !madeAhead && (ahead.asked === key || ahead.asked === first)) {
-    ahead.wanted = ahead.asked;
+  // Still being made ahead, and a finish to play meanwhile: it shows as soon as it is made
+  // (a room's: a second maker would only do the same work again, slower; the maker's goal
+  // made ahead is asked for the quick way once the finish is over).
+  if (patient && ahead.busy && ahead.for === follows) {
+    ahead.wanted = near;
+    pauseRooms();
     return;
   }
-  const request: GoalRequest = { job: ++job, seed, tries, walls, ui: shownUi, placed, near, moved: [...scene.moved], level: 0, exclude, avoid: targetsOf(scene.done), target: rampTarget(worldGoals()), ...roomsPart(worldGoals()) };
+  const request = nowRequest(near, ++job);
   sent = request;
   asked = { request: asRequest(request, scene.done), near, level: 0 };
   asking(0, worker, request);
+}
+/** The quick way's request for a goal near `near` on the board as it is now. */
+function nowRequest(near: Point, job: number): GoalRequest {
+  return { job, seed, tries, walls, ui: shownUi, placed, near, moved: [...scene.moved], level: 0, exclude: scene.done.map((g) => g.id), avoid: targetsOf(scene.done), target: rampTarget(worldGoals()), ...roomsPart(worldGoals()) };
 }
 /** The request the worker was last sent, to ask again if its goal is rejected. */
 let sent: GoalRequest | null = null;
@@ -580,15 +593,17 @@ function roomsPart(n: number): Pick<GoalRequest, "rooms" | "roomsOn"> {
   // (A room held back HELD_MAX times running: the maker's goal, which changes no cell.)
   return { rooms: stamps, ...(withRooms && !placed && held < HELD_MAX && { roomsOn: { made: made.rooms, n, keepOut, seen: [...seen] } }) };
 }
-/** For tests: a change made to the next goals a worker sends (this many), before they are checked. */
-let tamper: { change: (goal: Goal) => void; times: number } | null = null;
+/** For tests: a change made to the next goals a worker sends (this many; only the quick
+ * way's, or only those made ahead, if `by` says), before they are checked. */
+let tamper: { change: (goal: Goal) => void; times: number; by?: "maker" | "ahead" } | null = null;
 /** A goal from a worker, checked by the Referee (an assertion: a rejected goal is a bug,
  * logged with its Request, and counts as none found, with the rule it broke) and scored by
  * the Judge. */
 type Checked = { goal: Goal | null; rule?: number };
-function checked(goal: Goal | null, by: Asked | null): Checked {
+function checked(goal: Goal | null, by: Asked | null, again = false): Checked {
   if (!goal || !by) return { goal };
-  if (tamper) {
+  // (Not when one made ahead is checked again on the board as it is now.)
+  if (tamper && !again && (!tamper.by || (tamper.by === "ahead") === by.level >= 2)) {
     tamper.change(goal);
     if (--tamper.times <= 0) tamper = null;
   }
@@ -641,7 +656,7 @@ function showGoal(goal: Goal | null): void {
   if (goal?.stamp && stampShows(goal.stamp)) return holdStamp(goal);
   held = 0;
   job++; // anything still on its way is stale
-  ahead.wanted = "";
+  ahead.wanted = null;
   // Past the island's last square, the view cuts to the world's first red block.
   if (cutToGoal && goal) {
     const red = scene.layout.byId(goal.id), at = whereIs(scene, goal.id), s = scene.camera.scale;
@@ -682,19 +697,45 @@ function showGoal(goal: Goal | null): void {
   goalWaiters = [];
 };
 
-// The next goal is made ahead (trying harder: level 2), on its own worker, whenever the red block is one move from its
-// target: on the board as it will be when it lands there. If the board is exactly that when
-// it lands, the next goal shows at once.
+// The next goal is made ahead (trying harder: level 2), on its own worker, as soon as a goal
+// shows: on the board as it is then, with the red block on its target. A room's goal (src/rooms.ts)
+// stays good while the player plays, whatever they move outside its room's reach (roomFits), so
+// it is ready the moment the goal is reached; it is made again only if something moves into
+// that reach or the player looks at its ground. The maker's goal (no room fits) fits only the
+// board it was made on: asked again whenever the red block is one move from its target, on the
+// board as it will be when it lands there; if the board is exactly that, it shows at once.
 const ahead = {
   worker: new Worker("goal-worker.js"),
   job: 0,
+  /** The board (its key) it was last asked about, and the goal that request follows
+   * (followKey; "first": the world's first, made while the island is played). */
   asked: "",
-  /** The goal being waited for (its board's key), made ahead. */
-  wanted: "",
-  ready: null as { key: string; goal: Goal | null; rejected?: boolean } | null,
+  for: "",
+  /** Whether a request is on its way (one at a time: a stale one would hold up the next). */
+  busy: false,
+  /** Whether that request may come back with a room's goal (rooms on). */
+  room: false,
+  /** Where the player waits for the goal it is making (it shows as it comes), or null. */
+  wanted: null as Point | null,
+  ready: null as { key: string; for: string; goal: Goal | null; rejected?: boolean } | null,
   /** What it was last asked (see checked). */
   contract: null as Asked | null,
 };
+/** Names a goal, for what is made ahead to follow it. */
+const followKey = (g: Goal | null | undefined) => (g ? `${g.id} ${g.target.x},${g.target.y}` : "");
+/** Whether a room's goal made earlier can still be stamped now: the stamp it was made as is
+ * the next one, nothing moved (where it started or where it is) is in the room's box (as
+ * rooms.ts placeFor has it), and the player has not seen its ground. */
+function roomFits(goal: Goal): boolean {
+  const st = goal.stamp;
+  if (!st || st.k !== (stamps.length ? Math.max(...stamps.map((x) => x.k)) + 1 : 0)) return false;
+  const r = { x: st.x, y: st.y, width: st.room.W, height: st.room.H };
+  for (const [id, p] of scene.moved) {
+    const b = scene.layout.byId(id);
+    if (b) for (const at of [b, p]) if (at.x < r.x + r.width && at.x + b.w > r.x && at.y < r.y + r.height && at.y + b.h > r.y) return false;
+  }
+  return !stampShows(st);
+}
 /** The cells of these goals' targets. */
 function targetsOf(goals: Goal[]): Rect[] {
   return goals.flatMap((g) => {
@@ -703,7 +744,8 @@ function targetsOf(goals: Goal[]): Rect[] {
   });
 }
 function boardKey(moved: ReadonlyMap<string, Point>, exclude: string[], near: Point): string {
-  return JSON.stringify([seed, tries, walls, placed, stamps.length, made.rooms.length, [...moved].sort(([a], [b]) => (a < b ? -1 : 1)), exclude, near]);
+  // (Not the device's own rooms: one made since only widens the choice.)
+  return JSON.stringify([seed, tries, walls, placed, stamps.length, [...moved].sort(([a], [b]) => (a < b ? -1 : 1)), exclude, near]);
 }
 /** The moves that matter to the world's first goal: those off the island, and the last
  * square's blocker (its red block ends on its target, the rest are walled in). */
@@ -723,8 +765,11 @@ function prefetchFirst(): void {
   while (inIsland(near)) near = { x: near.x + 1, y: near.y };
   const exclude = all.map((g) => g.id);
   ahead.asked = boardKey(worldMoved(moved), exclude, near);
+  ahead.for = "first";
   const request: GoalRequest = { job: ++ahead.job, seed, tries, walls, ui: shownUi, placed, near, moved: [...moved], level: 3, exclude, avoid: targetsOf(all), target: rampTarget(0), ...roomsPart(0) };
   ahead.contract = { request: asRequest(request, all), near, level: 3 };
+  ahead.busy = true;
+  ahead.room = !!request.roomsOn;
   asking(1, ahead.worker, request);
 }
 function lookAhead(): void {
@@ -733,26 +778,50 @@ function lookAhead(): void {
   const at = goal && whereIs(scene, goal.id);
   // (Not on the island: the world's first is made while it is played, prefetchFirst.)
   if (shared || !goal || !red || !at || (withIsland && squareOf(goal) !== null)) return;
-  const { lo, hi } = slideRange(scene.layout, { ...red, ...at }, scene);
-  const along = red.w > red.h ? goal.target.x : goal.target.y;
-  const inLane = red.w > red.h ? goal.target.y === at.y : goal.target.x === at.x;
-  if (!inLane || along < lo || along > hi) return;
+  // One at a time: whatever comes back is checked as it comes, and asked again if need be.
+  if (ahead.busy) return;
   const moved = new Map(scene.moved).set(goal.id, goal.target);
   const exclude = [...scene.done.map((g) => g.id), goal.id];
-  const key = boardKey(moved, exclude, goal.target);
-  if (key === ahead.asked || ahead.ready?.key === key) return;
+  const key = boardKey(moved, exclude, goal.target), follows = followKey(goal), ready = ahead.ready;
+  if (ready?.for === follows) {
+    if (ready.key === key || (ready.goal && !ready.rejected && roomFits(ready.goal))) return;
+    // (Not a room's: asked again only once the red block is one move from its target.)
+    const { lo, hi } = slideRange(scene.layout, { ...red, ...at }, scene);
+    const along = red.w > red.h ? goal.target.x : goal.target.y;
+    const inLane = red.w > red.h ? goal.target.y === at.y : goal.target.x === at.x;
+    if (!ready.goal?.stamp && (!inLane || along < lo || along > hi)) return;
+  }
   ahead.asked = key;
+  ahead.for = follows;
   const request: GoalRequest = { job: ++ahead.job, seed, tries, walls, ui: shownUi, placed, near: goal.target, moved: [...moved], level: 2, exclude, avoid: targetsOf([...scene.done, goal]), target: rampTarget(worldGoals() + 1), ...roomsPart(worldGoals() + 1) };
   ahead.contract = { request: asRequest(request, [...scene.done, goal]), near: goal.target, level: 2 };
+  ahead.busy = true;
+  ahead.room = !!request.roomsOn;
   asking(1, ahead.worker, request);
 }
 ahead.worker.onmessage = (event: MessageEvent<Reply>) => {
   if ("difficulty" in event.data) return measured(event.data);
+  ahead.busy = false;
   if (event.data.job !== ahead.job) return answered(1, null);
   const made = checked(event.data.goal, ahead.contract);
   answered(1, madeAs(made));
-  ahead.ready = { key: ahead.asked, goal: made.goal, rejected: made.rule !== undefined };
-  if (ahead.wanted && ahead.wanted === ahead.asked) requestGoal(finish?.next);
+  ahead.ready = { key: ahead.asked, for: ahead.for, goal: made.goal, rejected: made.rule !== undefined };
+  const wanted = ahead.wanted;
+  ahead.wanted = null;
+  if (wanted) requestGoal(wanted);
+  else lookAhead(); // (the board may have moved on while it was made)
+};
+// A request that broke the worker (it never answers): none made ahead; a player waiting for
+// it gets the quick way.
+ahead.worker.onerror = (e: ErrorEvent) => {
+  e.preventDefault();
+  log({ e: "error", message: `ahead: ${String(e.message).slice(0, 280)}`, where: `${e.filename?.split("/").pop()}:${e.lineno}:${e.colno}` });
+  ahead.busy = false;
+  answered(1, { is: "none" });
+  ahead.ready = { key: ahead.asked, for: ahead.for, goal: null };
+  const wanted = ahead.wanted;
+  ahead.wanted = null;
+  if (wanted) requestGoal(wanted);
 };
 // The room maker (src/room-worker.ts): one room at a time in the background, whenever neither
 // goal maker is busy and the page shows, ROOM_PAUSE_MS apart, up to MADE_MAX rooms kept. Room
@@ -1138,8 +1207,8 @@ Object.assign(window, {
     /** Frames drawn while recording: when, and where the sliding block was drawn. */
     frames: null as { t: number; x: number; y: number }[] | null,
     /** Change the next goal a worker sends (or the next `times`) before the Referee sees it (for tests). */
-    tamper: (change: (goal: Goal) => void, times = 1) => {
-      tamper = { change, times };
+    tamper: (change: (goal: Goal) => void, times = 1, by?: "maker" | "ahead") => {
+      tamper = { change, times, by };
     },
     /** Ask the worker for a goal near a lattice point, as reaching a goal does. */
     requestGoal: (near: Point) => requestGoal(near),
@@ -1152,7 +1221,7 @@ Object.assign(window, {
       finish = null;
       soul = soulFrom = flight = null;
       goalShownAt = -Infinity; // (a placed goal shows at once)
-      ahead.wanted = "";
+      ahead.wanted = null;
       placed = blocks;
       restart(scene, fixedLayout(blocks));
       logged = 0;
@@ -1315,6 +1384,7 @@ function cameraMoved(): void {
   cameraTimer = setTimeout(saveCamera, 300);
   if (shared) return;
   markSeen();
+  lookAhead(); // (a room made ahead on ground now seen is made again)
   clearTimeout(viewTimer);
   viewTimer = setTimeout(viewSettled, VIEW_SETTLE_MS);
 }
@@ -1472,11 +1542,13 @@ function advance(now: number): ReturnType<typeof sliding> {
       const landed = g && g.used !== undefined && finish.heard >= finishTimes(bestKnown(g) ?? g.solution.length, shownUsed(g)!).landed;
       showNext(!!landed);
     } else if (finish && now > finish.born + finish.end) {
-      const next = finish.next;
       finish = null;
-      if (ahead.wanted) {
-        ahead.wanted = "";
-        requestGoal(next); // not made ahead in time: the quick way
+      // The maker's goal not made ahead in time: the quick way. (A room's is waited for: it
+      // comes as fast as the quick way would make it again.)
+      if (ahead.wanted && !ahead.room) {
+        const near = ahead.wanted;
+        ahead.wanted = null;
+        requestGoal(near);
       }
       sendSoul(); // (or once the next goal comes, if it is still being made)
     }

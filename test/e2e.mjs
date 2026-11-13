@@ -1132,31 +1132,33 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
   // (In real time: the workers' searches are.)
   const until = async (ok) => { for (let t = 0; t < 120 && !(await ok()); t++) await Promise.all([pass(page, 250), page.waitForTimeout(250)]); };
   let logged = await page.evaluate(() => unblock.playLog.length);
-  await page.evaluate((near) => { unblock.tamper((g) => g.solution.pop()); unblock.requestGoal(near); }, near);
+  await page.evaluate((near) => { unblock.tamper((g) => g.solution.pop(), 1, "maker"); unblock.requestGoal(near); }, near);
   await until(async () => (await since(logged, "goal")).length > 0);
   const [rejected] = await since(logged, "rejected");
   check(rejected?.rule === 3 && rejected.request?.world?.seed === (await page.evaluate(() => unblock.seed())) && rejected.request.history.length === GOALS && rejected.level === 0, `a tampered goal is rejected and logged with its Request (rule ${rejected?.rule}: ${rejected?.why})`);
   let after = await page.evaluate(() => ({ goal: unblock.scene.goal, last: unblock.playLog.at(-1), sent: window.sent }));
-  check(after.goal && after.last.e === "goal" && after.last.judge?.fitness > 0 && (await since(logged, "rejected")).length === 1 && after.sent.join() === "0,1", `and asked for again once at the next effort level, the game gets a goal the Referee takes (${after.goal?.id}, ${after.last.judge?.moves} moves; requests at efforts ${after.sent})`);
+  check(after.goal && after.last.e === "goal" && after.last.judge?.fitness > 0 && (await since(logged, "rejected")).length === 1 && /^0,1(,2)*$/.test(after.sent.join()), `and asked for again once at the next effort level, the game gets a goal the Referee takes (${after.goal?.id}, ${after.last.judge?.moves} moves; requests at efforts ${after.sent}: a 2 is the next goal, made ahead)`);
   // (Kept for replaying: test/experiments/replay-rejected.ts.)
   await writeFile(shots + "rejected.json", JSON.stringify(rejected));
   // Rejected again too: none found, and nothing more is asked.
   logged = await page.evaluate(() => { window.sent = []; return unblock.playLog.length; });
-  await page.evaluate((near) => { unblock.tamper((g) => g.solution.pop(), 2); unblock.requestGoal(near); }, near);
+  await page.evaluate((near) => { unblock.tamper((g) => g.solution.pop(), 2, "maker"); unblock.requestGoal(near); }, near);
   await until(async () => (await since(logged, "rejected")).length >= 2);
   await pass(page, 3000);
   after = await page.evaluate(() => ({ goal: unblock.scene.goal, sent: window.sent, maker: document.querySelector("#makers").textContent }));
   check(after.goal === null && after.sent.join() === "0,1" && (await since(logged, "rejected")).length === 2 && after.maker.includes("Maker: rejected (rule 3)"), `rejected again, it is taken as none found and not asked for a third time (requests at efforts ${after.sent})`);
-  // In play: the next goal, made ahead, is rejected; reaching the goal asks for it the quick way.
-  await page.evaluate((near) => unblock.requestGoal(near), near);
+  // In play: the next goal is made ahead as soon as a goal shows. One the Referee rejects is
+  // never shown: it is made ahead again once the red block is one move from its target, and
+  // shows the moment the goal is reached.
+  logged = await page.evaluate(() => { window.sent = []; return unblock.playLog.length; });
+  await page.evaluate((near) => { unblock.tamper((g) => g.solution.pop(), 1, "ahead"); unblock.requestGoal(near); }, near);
   await page.evaluate(() => unblock.goalReady());
   const g = await page.evaluate(() => unblock.scene.goal);
-  logged = await page.evaluate(() => { window.sent = []; return unblock.playLog.length; });
-  await page.evaluate(() => unblock.tamper((g) => g.solution.pop()));
+  await until(async () => (await since(logged, "rejected")).length > 0);
   for (const m of g.solution) await drag(m);
   await until(() => page.evaluate((id) => unblock.scene.goal && unblock.scene.goal.id !== id, g.id));
-  const ahead = await since(logged, "rejected"), next = await page.evaluate(() => unblock.scene.goal);
-  check(ahead.length === 1 && ahead[0].level === 2 && next && next.id !== g.id && (await since(logged, "goal")).length === 1 && (await page.evaluate(() => window.sent.join())) === "2,0", `a goal made ahead that is rejected is asked for the quick way once the goal is reached (${next?.id}; requests at efforts ${await page.evaluate(() => window.sent)})`);
+  const ahead = await since(logged, "rejected"), next = await page.evaluate(() => unblock.scene.goal), shown = await since(logged, "goal");
+  check(ahead.length === 1 && ahead[0].level === 2 && next && next.id !== g.id && shown.length === 2 && /^0,2,2\b/.test(await page.evaluate(() => window.sent.join())), `a goal made ahead that is rejected is never shown: it is made ahead again, and the next goal comes (${next?.id}; requests at efforts ${await page.evaluate(() => window.sent)})`);
   await page.close();
 }
 
