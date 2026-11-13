@@ -25,7 +25,7 @@ import { OPEN_TRIALS_K } from "./trials-open-k";
 import { ROOM_TRIALS } from "./trials-rooms";
 import { DECOY_TRIALS } from "./trials-decoys";
 import { isRoom, type Room } from "./room";
-import { pace as roomPace, SEEN_TILE, stampReach, tilesOf } from "./rooms";
+import { dist, pace as roomPace, type Screen, stampReach, TRAVEL_AIM } from "./rooms";
 import { bayReached, GATE, GATE_GONE, inIsland, ISLAND_KEEP_OUT, opensGate, isLast, islandCamera, islandGoals, islandRects, nextIslandGoal, squareAt, squareMiddle, squareOf } from "./island";
 import { fixedLayout, type Layout, MAX_TRIES, MAX_WALLS, MIN_TRIES, randomLayout, TRIES, UNIT, uiArea, WALLS, type Placed, type Stamp, type Ui } from "./layout";
 import { CARD, CUE_MS, draw, fading, islandCardRect, resetFades, RIPPLE_MS, SHAKE_MS, THROB_MS, redArrow, uiArrow, type Sparkle } from "./render";
@@ -47,8 +47,9 @@ const GOAL_KEY = "unblock-me:v13:goal";
 const ROOMS_KEY = "unblock-me:v13:rooms";
 // Rooms this device made in the background (src/room-worker.ts): kept across resets.
 const MADE_KEY = "unblock-me:rooms-made";
-// The tiles of the world the player has seen (rooms.ts SEEN_TILE): no room is stamped there.
-const SEEN_KEY = "unblock-me:v13:seen";
+// (Until 2026-11-13 the tiles of the world the player had seen, kept so no room was stamped
+// there; now a room may go anywhere off screen. Removed on load.)
+const OLD_SEEN_KEY = "unblock-me:v13:seen";
 // The blocks in view when the page was last hidden, to check on the next load that the world
 // there is still the same (a world that changes on reload is a bug).
 const VIEW_CHECK_KEY = "unblock-me:view-check";
@@ -198,7 +199,13 @@ type LogEvent =
   // `wait`: ms from the goal before reached to this one shown (its finish played meanwhile).
   // `how`: a room's (with which room, its numbers as stamped and the room's own, the fill, the
   // pacing's aim, and the stamp), the maker's, the island's or a trial's.
-  | { e: "goal"; commit: string; id: string; target: Point; start?: Point; tries: number; walls?: number; seed: number; solution: number; proof?: [string, number, number, number, number][]; moved: [string, number, number][]; wait?: number; judge?: Terms; how?: "room" | "maker" | "island" | "trial"; n?: number; room?: Goal["room"]; stamp?: { k: number; x: number; y: number; W: number; H: number; fill: boolean | string[] }; view?: View }
+  // `hop`: cells from the last red block's end (its target) to this one's start, so we can see
+  // the next goal stays close. A travel goal (src/travel.ts) says which room it leads to and how
+  // far that room's red block is from its target (`travel`); the first one stamps the room.
+  | { e: "goal"; commit: string; id: string; target: Point; start?: Point; tries: number; walls?: number; seed: number; solution: number; proof?: [string, number, number, number, number][]; moved: [string, number, number][]; wait?: number; judge?: Terms; how?: "room" | "maker" | "island" | "trial" | "travel"; n?: number; hop?: number; room?: Goal["room"]; travel?: Goal["travel"]; stamp?: { k: number; x: number; y: number; W: number; H: number; fill: boolean | string[] }; view?: View }
+  // The room travel goals led to could not be given (something moved into it, or its proof no
+  // longer holds): the next goal is made as usual.
+  | { e: "travelDropped"; k: number; why: string }
   // A room this device made in the background (src/room-worker.ts): its number, fewest and extra
   // moves, how long it took and how many random rooms it tried.
   | { e: "roomMade"; k: number; f?: number; x?: number; ms: number; tries: number }
@@ -207,10 +214,11 @@ type LogEvent =
   // The view (see View), when it changed meaningfully and settled (at most every VIEW_EVERY_MS).
   | ({ e: "view" } & View)
   // World cells that changed without a move (a stamp, a reload): how many, how many on screen
-  // then, how many on ground seen before, their bounds (x0, y0, x1, y1 in cells, inclusive) and
-  // the cause. "visibleChange" (a warning, always a bug) when the player could see any of them.
-  | { e: "worldChange" | "visibleChange"; cause: string; n: number; inView: number; seen: number; b?: [number, number, number, number]; view: View }
-  // A room's goal arrived with its stamp on ground seen since it was made: not stamped, made again.
+  // then, their bounds (x0, y0, x1, y1 in cells, inclusive) and the cause. "visibleChange" (a
+  // warning, always a bug) when the player could see any of them.
+  | { e: "worldChange" | "visibleChange"; cause: string; n: number; inView: number; b?: [number, number, number, number]; view: View }
+  // A room's goal (or the travel goal that stamps one) arrived with its stamp on screen: not
+  // stamped, made again.
   | { e: "stampHeld"; k: number; x: number; y: number; W: number; H: number; view: View }
   // A goal from the maker the Referee rejected (src/referee.ts): a bug. With what it was asked
   // (the Request, and the worker's near and effort), to replay; the goal counts as none found.
@@ -340,8 +348,7 @@ function save(): void {
     localStorage.setItem(HISTORY_KEY, JSON.stringify(scene.history));
     // A goal belongs to one seed and density (and wall share).
     localStorage.setItem(GOAL_KEY, JSON.stringify({ seed, tries, walls, goal: scene.goal, done: scene.done }));
-    localStorage.setItem(ROOMS_KEY, JSON.stringify({ seed, tries, walls, stamps }));
-    localStorage.setItem(SEEN_KEY, JSON.stringify({ seed, tiles: [...seen] }));
+    localStorage.setItem(ROOMS_KEY, JSON.stringify({ seed, tries, walls, stamps, ...(trek && { trek }) }));
     localStorage.setItem(LOG_KEY, JSON.stringify(playLog));
   } catch {
     // Private mode or full storage: changes just don't survive a reload.
@@ -362,9 +369,13 @@ const moved = load<[string, number, number][]>(MOVED_KEY, []);
 const storedGoal = load<{ seed: number; tries: number; walls?: number; goal: Goal | null; done?: Goal[] } | null>(GOAL_KEY, null);
 // (An island goal fits only a page with the island.)
 const goalsFit = storedGoal?.seed === seed && storedGoal.tries === tries && (storedGoal.walls ?? 0) === walls && (withIsland || squareOf(storedGoal.goal) === null);
-const storedRooms = load<{ seed: number; tries: number; walls: number; stamps: Stamp[] } | null>(ROOMS_KEY, null);
+const storedRooms = load<{ seed: number; tries: number; walls: number; stamps: Stamp[]; trek?: Goal } | null>(ROOMS_KEY, null);
+const roomsFit = !!storedRooms && storedRooms.seed === seed && storedRooms.tries === tries && storedRooms.walls === walls;
 /** The rooms stamped into this world so far (src/rooms.ts), oldest first. */
-let stamps: Stamp[] = storedRooms && storedRooms.seed === seed && storedRooms.tries === tries && storedRooms.walls === walls ? storedRooms.stamps : [];
+let stamps: Stamp[] = roomsFit ? storedRooms.stamps : [];
+/** The room's goal travel goals lead to (src/travel.ts), its room stamped already; null when
+ * the player is not being led anywhere. */
+let trek: Goal | null = (roomsFit && storedRooms.trek) || null;
 /** Rooms this device made in the background (src/room-worker.ts), and the next one's number. */
 const made = load<{ next: number; from?: number; rooms: Room[] }>(MADE_KEY, { next: 0, rooms: [] });
 // Uploads keep these rooms only by id and numbers, so progress carried from the server (?p=,
@@ -381,10 +392,11 @@ if (!Array.isArray(madeRooms) || !madeRooms.every(isRoom)) {
     // No storage: kept as long as the page.
   }
 }
-/** The world's tiles the player has seen (rooms.ts SEEN_TILE), with the view and VIEW_MARGIN
- * round it: no stamp changes a cell there. Kept for the seed. */
-const storedSeen = load<{ seed: number; tiles: string[] } | null>(SEEN_KEY, null);
-const seen = new Set<string>(storedSeen?.seed === seed ? storedSeen.tiles : []);
+try {
+  localStorage.removeItem(OLD_SEEN_KEY);
+} catch {
+  // No storage: nothing to remove.
+}
 /** The world's layout: the seed's, the rooms stamped into it. */
 const worldOf = () => randomLayout(seed, { tries, walls, ...shownUi, rooms: stamps });
 const scene = newScene(innerWidth, innerHeight, {
@@ -408,13 +420,13 @@ addEventListener("unhandledrejection", (e: PromiseRejectionEvent) => {
   log({ e: "error", message: String(e.reason?.message ?? e.reason).slice(0, 300), where: "promise" });
   save();
 });
-// --- What the player sees and has seen, logged so any moment's view can be rebuilt; and world
+// --- What the player sees, logged so any moment's view can be rebuilt; and world
 // changes without a move, checked against it (a stamp must never change what they see). ---
 /** The view: its centre and bounds in cells (x0, y0, x1, y1; 0.1 cell) and the camera's scale
  * (screen px per world px; a cell is UNIT * s px). */
 type View = { c: [number, number]; s: number; b: [number, number, number, number] };
-/** Cells round the view that count as seen too. */
-const VIEW_MARGIN = 3;
+/** Cells round the view no room is placed on (it may move a little before the room comes). */
+const VIEW_MARGIN = 2;
 /** The view logs once it rests VIEW_SETTLE_MS, at most every VIEW_EVERY_MS, when its centre
  * moved VIEW_MOVE cells or more, or its scale or size changed by VIEW_SCALE or more. */
 const VIEW_SETTLE_MS = 800, VIEW_EVERY_MS = 3000, VIEW_MOVE = 2, VIEW_SCALE = 0.15;
@@ -433,9 +445,12 @@ function viewNow(): View {
   const r = viewRect();
   return { c: [tenth(r.x + r.width / 2), tenth(r.y + r.height / 2)], s: Math.round(scene.camera.scale * 100) / 100, b: [tenth(r.x), tenth(r.y), tenth(r.x + r.width), tenth(r.y + r.height)] };
 }
-/** Marks the view and VIEW_MARGIN round it as seen. */
-function markSeen(): void {
-  for (const t of tilesOf(grow(viewRect(), VIEW_MARGIN))) seen.add(t);
+/** The screen's size in cells, as rooms and travel goals measure distance (rooms.ts Screen):
+ * a step of about the view's mean side, and far past its longer side (within bounds, so a view
+ * zoomed far in or out still leads a sensible way). */
+function screenOf(): Screen {
+  const r = viewRect(), clamp = (v: number, lo: number, hi: number) => Math.round(Math.min(hi, Math.max(lo, v)));
+  return { step: clamp((r.width + r.height) / 2, 8, 24), far: clamp(Math.max(r.width, r.height), 10, 30) };
 }
 function viewSettled(): void {
   const v = viewNow(), l = lastView;
@@ -447,10 +462,10 @@ function viewSettled(): void {
   lastViewAt = performance.now();
   log({ e: "view", ...v });
 }
-/** Whether stamping this would change a cell on ground the player sees or has seen. */
+/** Whether stamping this would change a cell on screen (or a cell round it). */
 function stampShows(st: Stamp): boolean {
-  markSeen();
-  return tilesOf(stampReach(st)).some((t) => seen.has(t));
+  const v = grow(viewRect(), 1), r = stampReach(st);
+  return r.x < v.x + v.width && r.x + r.width > v.x && r.y < v.y + v.height && r.y + r.height > v.y;
 }
 function holdStamp(goal: Goal): void {
   const st = goal.stamp!;
@@ -467,16 +482,15 @@ function occupied(layout: Layout, area: Rect, moved: Changes = scene): Map<strin
 }
 /** Logs the cells that differ between two occupancies (see LogEvent worldChange). */
 function logChange(cause: string, before: Map<string, string>, after: Map<string, string>, view: Rect): void {
-  let n = 0, inView = 0, wasSeen = 0, x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  let n = 0, inView = 0, x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const key of new Set([...before.keys(), ...after.keys()])) {
     if (before.get(key) === after.get(key)) continue;
     const [x, y] = key.split(",").map(Number) as [number, number];
     n++;
     if (x + 1 > view.x && x < view.x + view.width && y + 1 > view.y && y < view.y + view.height) inView++;
-    if (seen.has(`${Math.floor(x / SEEN_TILE)},${Math.floor(y / SEEN_TILE)}`)) wasSeen++;
     ((x0 = Math.min(x0, x)), (y0 = Math.min(y0, y)), (x1 = Math.max(x1, x)), (y1 = Math.max(y1, y)));
   }
-  log({ e: inView || wasSeen ? "visibleChange" : "worldChange", cause, n, inView, seen: wasSeen, ...(n && { b: [x0, y0, x1, y1] as [number, number, number, number] }), view: viewNow() });
+  log({ e: inView ? "visibleChange" : "worldChange", cause, n, inView, ...(n && { b: [x0, y0, x1, y1] as [number, number, number, number] }), view: viewNow() });
 }
 /** The world's layout changed without a move: the cells that changed on screen, and in `also`
  * (where the change was meant to be), logged. */
@@ -590,13 +604,20 @@ function requestGoal(near: Point = viewCentre(scene.camera, scene.width, scene.h
   // search looks only round `near`, and no island block may be the red block).
   if (withIsland) while (inIsland(near)) near = { x: near.x + 1, y: near.y };
   const exclude = scene.done.map((g) => g.id);
+  // Travel goals have led the player to within a screen of their room: its goal, if it still holds.
+  if (trek && trekNext(near)) {
+    const goal = trek, why = trekBroken(goal, near);
+    trek = null;
+    if (!why) return showGoal(goal);
+    log({ e: "travelDropped", k: goal.room?.k ?? -1, why });
+  }
   // Made ahead while the goal before was played (or, the world's first, while the island
   // was): no wait.
   const key = boardKey(scene.moved, exclude, near);
   const first = withIsland && worldGoals() === 0 ? boardKey(worldMoved(scene.moved), exclude, near) : null;
   const follows = first !== null ? "first" : followKey(scene.done.at(-1));
   // (A room's goal, made on the board as it was then, is still good if nothing has moved into
-  // its room's reach since and its ground is still unseen; the Referee checks it again on the
+  // its room's reach since and its spot is still off screen; the Referee checks it again on the
   // board as it is now. The maker's fits only the board it was made on.)
   const ready = ahead.ready, exact = !!ready && (ready.key === key || ready.key === first);
   const usable = !!ready?.goal && !ready.rejected && (ready.goal.stamp
@@ -621,9 +642,24 @@ function requestGoal(near: Point = viewCentre(scene.camera, scene.width, scene.h
   asked = { request: asRequest(request, scene.done), near, level: 0 };
   asking(0, worker, request);
 }
+/** Whether the room travel goals lead to is the goal after one reached at `near`. */
+const trekNext = (near: Point) => !!trek && dist(near, trek.start ?? trek.target) <= screenOf().far;
+/** Why the room's goal travel goals led to no longer holds (something moved into its room, or
+ * the Referee rejects its proof on the board as it is now), or null if it holds. */
+function trekBroken(goal: Goal, near: Point): string | null {
+  const k = goal.room?.k, st = stamps.find((x) => x.k === k);
+  if (!st) return "no stamp";
+  const r = { x: st.x, y: st.y, width: st.room.W, height: st.room.H };
+  for (const [id, p] of scene.moved) {
+    const b = scene.layout.byId(id);
+    if (b) for (const at of [b, p]) if (at.x < r.x + r.width && at.x + b.w > r.x && at.y < r.y + r.height && at.y + b.h > r.y) return `${id} moved in its room`;
+  }
+  const made = checked(goal, { request: asRequest(nowRequest(near, job), scene.done), near, level: 2 }, true);
+  return made.goal ? null : `rule ${made.rule}`;
+}
 /** The quick way's request for a goal near `near` on the board as it is now. */
 function nowRequest(near: Point, job: number): GoalRequest {
-  return { job, seed, tries, walls, ui: shownUi, placed, near, moved: [...scene.moved], level: 0, exclude: scene.done.map((g) => g.id), avoid: targetsOf(scene.done), target: rampTarget(worldGoals()), ...roomsPart(worldGoals()) };
+  return { job, seed, tries, walls, ui: shownUi, placed, near, moved: [...scene.moved], level: 0, exclude: scene.done.map((g) => g.id), avoid: targetsOf(scene.done), target: rampTarget(worldGoals()), ...roomsPart(worldGoals(), near) };
 }
 /** The request the worker was last sent, to ask again if its goal is rejected. */
 let sent: GoalRequest | null = null;
@@ -633,16 +669,20 @@ type Asked = { request: contract.Request; near: Point; level: number };
 let asked: Asked | null = null;
 const asRequest = (r: GoalRequest, done: readonly { id: string; target: Point }[]) =>
   contract.gameRequest({ seed: r.seed, tries: r.tries, walls: r.walls, ui: r.ui, placed: r.placed, moved: new Map(r.moved), done, rampAim: r.target, rooms: r.rooms });
-/** The rooms part of a request for the n-th world goal: the rooms stamped so far and, with
- * rooms on, this device's own rooms and where no room may go (the island, the UI round the
- * start). */
-function roomsPart(n: number): Pick<GoalRequest, "rooms" | "roomsOn"> {
+/** The rooms part of a request for the n-th world goal, the one after a goal reached at `near`:
+ * the rooms stamped so far and, with rooms on, this device's own rooms and where no room may go
+ * (the island, the UI round the start, the view and a margin round it, and a view's size round
+ * `near`, where the player will be looking as the room comes); or, while travel goals lead to a
+ * room, a travel goal towards it (short: TRAVEL_AIM fewest moves). */
+function roomsPart(n: number, near: Point): Pick<GoalRequest, "rooms" | "roomsOn" | "travel" | "target"> {
+  const screen = screenOf();
+  if (trek && !placed && held < HELD_MAX) return { rooms: stamps, travel: { to: trek.start ?? trek.target, k: trek.room?.k ?? -1, room: trek.room?.id ?? "", screen }, target: TRAVEL_AIM };
   const ui = uiArea(shownUi);
   const keepOut = [...(withIsland ? ISLAND_KEEP_OUT : []), ...(ui ? [ui] : []), { x: -2, y: -2, width: 5, height: 5 }];
-  if (!shared) markSeen();
-  keepOut.push(grow(viewRect(), VIEW_MARGIN));
+  const v = viewRect();
+  keepOut.push(grow(v, VIEW_MARGIN), grow({ x: near.x + 1 - v.width / 2, y: near.y + 0.5 - v.height / 2, width: v.width, height: v.height }, VIEW_MARGIN));
   // (A room held back HELD_MAX times running: the maker's goal, which changes no cell.)
-  return { rooms: stamps, ...(withRooms && !placed && held < HELD_MAX && { roomsOn: { made: made.rooms, n, keepOut, seen: [...seen] } }) };
+  return { rooms: stamps, ...(withRooms && !placed && held < HELD_MAX && { roomsOn: { made: made.rooms, n, keepOut, screen } }) };
 }
 /** For tests: a change made to the next goals a worker sends (this many; only the quick
  * way's, or only those made ahead, if `by` says), before they are checked. */
@@ -669,8 +709,9 @@ function checked(goal: Goal | null, by: Asked | null, again = false): Checked {
   goal.judged = judge(request, made, { board });
   return { goal };
 }
-/** How many world goals (off the island) were reached: the next one's place on the ramp. */
-const worldGoals = () => scene.done.filter((g) => squareOf(g) === null).length;
+/** How many world goals (off the island, not travel goals) were reached: the next one's place
+ * on the ramp and the pacing. */
+const worldGoals = () => scene.done.filter((g) => squareOf(g) === null && !g.travel).length;
 type Measured = { of: { id: string; target: Point }; difficulty: Difficulty; choices?: number };
 type Reply = { job: number; goal: Goal | null } | ({ job: number } & Measured);
 function newGoalWorker(): Worker {
@@ -727,7 +768,7 @@ let waitFrom: number | null = null;
 let goalShownAt = -Infinity;
 const APPEAR_MS = 200;
 function showGoal(goal: Goal | null): void {
-  // A room's stamp never changes a cell the player sees or has seen: one made before the view
+  // A room's stamp never changes a cell the player sees: one made before the view
   // went there is held back and made again.
   if (goal?.stamp && stampShows(goal.stamp)) return holdStamp(goal);
   held = 0;
@@ -750,6 +791,12 @@ function showGoal(goal: Goal | null): void {
     scene.layout = worldOf();
     worldChanged("stamp", before, scene.layout, stampReach(stamp));
   }
+  // A travel goal that stamped a room leads to it: the room's goal comes once the player is
+  // within a screen of it (requestGoal).
+  if (goal?.then) {
+    trek = goal.then;
+    delete goal.then;
+  }
   scene.goal = goal;
   goalShownAt = performance.now();
   const wait = reachedAt >= 0 ? Math.round(goalShownAt - reachedAt) : undefined;
@@ -762,8 +809,9 @@ function showGoal(goal: Goal | null): void {
     const before = squareOf(goal) === null ? undefined : scene.done.filter((d) => squareOf(d) === squareOf(goal)).at(-1);
     goal.begun = before?.ended ?? scene.history.length;
     // A snapshot of the board, so the goal can be measured again later.
-    const how = trial || testbed ? "trial" : squareOf(goal) !== null ? "island" : goal.room ? "room" : "maker";
-    log({ e: "goal", commit: __COMMIT__, id: goal.id, target: goal.target, start: goal.start, tries, walls, seed, solution: goal.solution.length, proof: goal.solution.map((m) => [m.id, m.from.x, m.from.y, m.to.x, m.to.y]), moved: [...scene.moved].map(([id, p]) => [id, p.x, p.y]), ...(wait !== undefined && { wait }), ...(goal.judged && { judge: goal.judged }), how, ...(how !== "island" && how !== "trial" && { n: worldGoals() }), ...(goal.room && { room: goal.room }), ...(stamp && { stamp: { k: stamp.k, x: stamp.x, y: stamp.y, W: stamp.room.W, H: stamp.room.H, fill: stamp.fill } }), view: viewNow() });
+    const how = trial || testbed ? "trial" : squareOf(goal) !== null ? "island" : goal.room ? "room" : goal.travel ? "travel" : "maker";
+    const last = scene.done.at(-1), hop = last && goal.start ? Math.round(dist(last.target, goal.start) * 10) / 10 : undefined;
+    log({ e: "goal", commit: __COMMIT__, id: goal.id, target: goal.target, start: goal.start, tries, walls, seed, solution: goal.solution.length, proof: goal.solution.map((m) => [m.id, m.from.x, m.from.y, m.to.x, m.to.y]), moved: [...scene.moved].map(([id, p]) => [id, p.x, p.y]), ...(wait !== undefined && { wait }), ...(goal.judged && { judge: goal.judged }), how, ...(how !== "island" && how !== "trial" && { n: worldGoals() }), ...(hop !== undefined && { hop }), ...(goal.room && { room: goal.room }), ...(goal.travel && { travel: goal.travel }), ...(stamp && { stamp: { k: stamp.k, x: stamp.x, y: stamp.y, W: stamp.room.W, H: stamp.room.H, fill: stamp.fill } }), view: viewNow() });
   }
   // The last red block's soul flies to the new one, once its finish is over (none found: it
   // goes nowhere).
@@ -807,7 +855,7 @@ const ahead = {
 const followKey = (g: Goal | null | undefined) => (g ? `${g.id} ${g.target.x},${g.target.y}` : "");
 /** Whether a room's goal made earlier can still be stamped now: the stamp it was made as is
  * the next one, nothing moved (where it started or where it is) is in the room's box (as
- * rooms.ts placeFor has it), and the player has not seen its ground. */
+ * rooms.ts placeFor has it), and its spot is off screen. */
 function roomFits(goal: Goal): boolean {
   const st = goal.stamp;
   if (!st || st.k !== (stamps.length ? Math.max(...stamps.map((x) => x.k)) + 1 : 0)) return false;
@@ -848,7 +896,7 @@ function prefetchFirst(): void {
   const exclude = all.map((g) => g.id);
   ahead.asked = boardKey(worldMoved(moved), exclude, near);
   ahead.for = "first";
-  const request: GoalRequest = { job: ++ahead.job, seed, tries, walls, ui: shownUi, placed, near, moved: [...moved], level: 3, exclude, avoid: targetsOf(all), target: rampTarget(0), ...roomsPart(0) };
+  const request: GoalRequest = { job: ++ahead.job, seed, tries, walls, ui: shownUi, placed, near, moved: [...moved], level: 3, exclude, avoid: targetsOf(all), target: rampTarget(0), ...roomsPart(0, near) };
   ahead.contract = { request: asRequest(request, all), near, level: 3 };
   ahead.busy = true;
   ahead.room = !!request.roomsOn;
@@ -862,6 +910,8 @@ function lookAhead(): void {
   if (shared || !goal || !red || !at || (withIsland && squareOf(goal) !== null)) return;
   // One at a time: whatever comes back is checked as it comes, and asked again if need be.
   if (ahead.busy) return;
+  // (The room travel goals led to comes next: nothing to make.)
+  if (trekNext(goal.target)) return;
   const moved = new Map(scene.moved).set(goal.id, goal.target);
   const exclude = [...scene.done.map((g) => g.id), goal.id];
   const key = boardKey(moved, exclude, goal.target), follows = followKey(goal), ready = ahead.ready;
@@ -875,7 +925,7 @@ function lookAhead(): void {
   }
   ahead.asked = key;
   ahead.for = follows;
-  const request: GoalRequest = { job: ++ahead.job, seed, tries, walls, ui: shownUi, placed, near: goal.target, moved: [...moved], level: 2, exclude, avoid: targetsOf([...scene.done, goal]), target: rampTarget(worldGoals() + 1), ...roomsPart(worldGoals() + 1) };
+  const request: GoalRequest = { job: ++ahead.job, seed, tries, walls, ui: shownUi, placed, near: goal.target, moved: [...moved], level: 2, exclude, avoid: targetsOf([...scene.done, goal]), target: rampTarget(worldGoals() + (goal.travel ? 0 : 1)), ...roomsPart(worldGoals() + (goal.travel ? 0 : 1), goal.target) };
   ahead.contract = { request: asRequest(request, [...scene.done, goal]), near: goal.target, level: 2 };
   ahead.busy = true;
   ahead.room = !!request.roomsOn;
@@ -1231,6 +1281,7 @@ const gestures = new Gestures(scene, {
         log({ e: "density", from: tries, to: next, goal: scene.goal?.id ?? null });
         tries = next;
         stamps = [];
+        trek = null;
         relayout(scene, worldOf());
         logged = 0; // a new board starts a new history
       }
@@ -1243,6 +1294,7 @@ const gestures = new Gestures(scene, {
         log({ e: "walls", from: walls, to: next, goal: scene.goal?.id ?? null });
         walls = next;
         stamps = [];
+        trek = null;
         relayout(scene, worldOf());
         logged = 0; // a new board starts a new history
       }
@@ -1493,7 +1545,6 @@ function saveCamera(): void {
   if (shared || forgetting) return;
   try {
     localStorage.setItem(CAMERA_KEY, JSON.stringify(scene.camera));
-    localStorage.setItem(SEEN_KEY, JSON.stringify({ seed, tiles: [...seen] }));
   } catch {
     // No storage: the view starts centred next time.
   }
@@ -1508,8 +1559,7 @@ function cameraMoved(): void {
   clearTimeout(cameraTimer);
   cameraTimer = setTimeout(saveCamera, 300);
   if (shared) return;
-  markSeen();
-  lookAhead(); // (a room made ahead on ground now seen is made again)
+  lookAhead(); // (a room made ahead whose spot is now on screen is made again)
   clearTimeout(viewTimer);
   viewTimer = setTimeout(viewSettled, VIEW_SETTLE_MS);
 }

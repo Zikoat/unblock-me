@@ -2,9 +2,12 @@
 // into the endless board where the goal is placed, from the library shipped with the game
 // (src/rooms-library.json, made by the lab's lab/room-lib.ts) and the rooms this device made
 // in the background (src/room-worker.ts). What a room is, and why its numbers hold wherever it
-// goes: src/room-core.ts. A room goes on ground the player has never seen (the view and a
-// margin round it, as tiles: src/main.ts markSeen), so a stamp never changes a cell they see or
-// saw: the nearest such ground within SEEN_RADIUS. If none fits, the maker makes the goal.
+// goes: src/room-core.ts. A room goes on the nearest untouched ground off the player's screen
+// (the view and a margin round it, passed in as keepOut: src/main.ts roomsPart), so a stamp
+// never changes a cell they see; ground they saw earlier may change (the user's decision of
+// 2026-11-13: rooms land just off screen, close to the last red block). If none fits within
+// RADIUS, the maker makes the goal. A room further than a screen away, and every spike (placed
+// SPIKE_AHEAD screens ahead), is reached through travel goals (src/travel.ts).
 //
 // Pacing: which room comes next (pace, pickRooms). Rule, by n = world goals reached so far:
 //  - The aim rises from AIM_FROM fewest moves to AIM_TO over RISE goals (about the old ramp),
@@ -70,20 +73,9 @@ export type RoomGoal = { goal: Goal; stamp: Stamp; fill: string; states: number 
 
 /** Where a room may go: its box (with a cell round it) clear of blocks the player has moved
  * (where they started and where they are), of the cells `keepOut` covers (the island, the UI,
- * earlier targets, the view), of other rooms, and of every tile in `seen` (the player has seen
- * it: a stamp there would change blocks before their eyes, or blocks they remember). */
-export type Ground = { moved: ReadonlyMap<string, Point>; layout: Layout; keepOut: readonly Rect[]; stamps: readonly Stamp[]; seen?: ReadonlySet<string> };
-
-/** Seen ground is kept as tiles of SEEN_TILE x SEEN_TILE cells ("tx,ty"). */
-export const SEEN_TILE = 8;
-/** The tiles a rectangle of cells touches. */
-export function tilesOf(r: Rect): string[] {
-  const out: string[] = [];
-  const x0 = Math.floor(r.x / SEEN_TILE), y0 = Math.floor(r.y / SEEN_TILE);
-  const x1 = Math.floor((r.x + r.width - 1e-9) / SEEN_TILE), y1 = Math.floor((r.y + r.height - 1e-9) / SEEN_TILE);
-  for (let tx = x0; tx <= x1; tx++) for (let ty = y0; ty <= y1; ty++) out.push(`${tx},${ty}`);
-  return out;
-}
+ * earlier targets, the view and a margin round it: a stamp there would change blocks before
+ * the player's eyes), and of other rooms. */
+export type Ground = { moved: ReadonlyMap<string, Point>; layout: Layout; keepOut: readonly Rect[]; stamps: readonly Stamp[] };
 /** The cells a stamp can change: its box and a cell round it (a world block sticking into the
  * box goes, leaving its outside cell empty); nothing beyond (layout.ts stampParts). */
 export const stampReach = (s: { x: number; y: number; room: { W: number; H: number } }): Rect => ({ x: s.x - 1, y: s.y - 1, width: s.room.W + 2, height: s.room.H + 2 });
@@ -92,7 +84,6 @@ function clear(box: Rect, g: Ground, taken: Set<string>): boolean {
   const pad = { x: box.x - 1, y: box.y - 1, width: box.width + 2, height: box.height + 2 };
   const hit = (r: Rect) => r.x < pad.x + pad.width && r.x + r.width > pad.x && r.y < pad.y + pad.height && r.y + r.height > pad.y;
   if (g.keepOut.some(hit)) return false;
-  if (g.seen?.size && tilesOf(pad).some((t) => g.seen!.has(t))) return false;
   for (const s of g.stamps) if (hit({ x: s.x, y: s.y, width: s.room.W, height: s.room.H })) return false;
   for (let x = box.x; x < box.x + box.width; x++) for (let y = box.y; y < box.y + box.height; y++) if (taken.has(`${x},${y}`)) return false;
   return true;
@@ -120,14 +111,26 @@ function spiral(radius: number): [number, number, number][] {
   spirals.set(radius, spots);
   return spots;
 }
-/** How far a room may go from the player: near when nothing is seen (tests), further when the
- * ground round the player has been seen (the nearest unseen ground is often past the view). */
-export const RADIUS = 14, SEEN_RADIUS = 48;
+/** How far a room may go from where it is asked for (box centre to it): past the view, zoomed
+ * out (a view of 30 x 20 cells or so). */
+export const RADIUS = 40;
+/** The fewest moves a travel goal (src/travel.ts) aims at: short, relief between hard ones. */
+export const TRAVEL_AIM = 3;
+/** A spike is placed this many screens (Screen.step) ahead, and travelled to. */
+export const SPIKE_AHEAD = 2;
 
-/** The nearest place to `near` (within `radius` cells, box centre to it) where the room fits
- * on untouched, unseen ground, or null. Spirals out, so the same place on every device. */
-export function placeFor(room: Room, near: Point, g: Ground, radius = g.seen?.size ? SEEN_RADIUS : RADIUS, taken = movedCells(g)): Point | null {
-  const cx = Math.floor(room.W / 2), cy = Math.floor(room.H / 2);
+/** The screen's size in cells, as rooms and travel goals measure distance (src/main.ts
+ * screenOf): `step`, how far a travel goal leads; `far`, a room further than this from the
+ * last red block is travelled to, and a room within it is the next goal. */
+export type Screen = { step: number; far: number };
+
+export const dist = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
+
+/** The nearest place to `near` (within `radius` cells, the room's red block to it) where the
+ * room fits on untouched ground off screen, or null. Spirals out, so the same place on every
+ * device. */
+export function placeFor(room: Room, near: Point, g: Ground, radius = RADIUS, taken = movedCells(g)): Point | null {
+  const [cx, cy] = room.b[0]!;
   for (const [d2, dx, dy] of spiral(radius)) {
     if (d2 < 4) continue; // not right on the player
     const at = { x: near.x + dx - cx, y: near.y + dy - cy };
@@ -210,11 +213,19 @@ function goalOf(room: Room, st: Stamp, layout: Layout, proof: [string, number, n
   };
 }
 
+/** Where a spike is placed round: SPIKE_AHEAD screens from `near`, the way the seed says. */
+export function spikeSpot(near: Point, n: number, seed: number, screen: Screen): Point {
+  const a = 2 * Math.PI * hash(seed + n, "spike"), d = SPIKE_AHEAD * screen.step;
+  return { x: Math.round(near.x + d * Math.cos(a)), y: Math.round(near.y + d * Math.sin(a)) };
+}
+
 /** The n-th world goal as a room: the rooms `pickRooms` gives, each turned the ways the seed
- * orders, at the nearest place it fits; null if none fits (the maker makes it then). */
-export function roomGoal(pool: readonly Room[], n: number, near: Point, g: Ground, world: { seed: number; tries: number; walls: number; ui: UiShown }, budget?: number): (RoomGoal & { pace: Pace; tried: number }) | null {
+ * orders, at the nearest place it fits; null if none fits (the maker makes it then). With the
+ * `screen`, a spike goes round spikeSpot (to be travelled to). */
+export function roomGoal(pool: readonly Room[], n: number, near: Point, g: Ground, world: { seed: number; tries: number; walls: number; ui: UiShown }, budget?: number, screen?: Screen): (RoomGoal & { pace: Pace; tried: number }) | null {
   const used = new Set(g.stamps.map((s) => baseId(s.room.id)));
   const taken = movedCells(g);
+  if (screen && pace(n).spike) near = spikeSpot(near, n, world.seed, screen);
   let tried = 0;
   for (const room of pickRooms(pool, used, n, world.seed)) {
     const turns = [...Array(8).keys()].sort((a, b) => hash(world.seed + n, `${room.id}/${a}`) - hash(world.seed + n, `${room.id}/${b}`));

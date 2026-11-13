@@ -199,7 +199,7 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
   const { "unblock-me:v13:goal": storedGoal, "unblock-me:camera": storedCamera, "unblock-me:log": storedLog, "unblock-me:device": storedDevice, "unblock-me:v13:rooms": storedRooms, "unblock-me:rooms-made": storedMade, "unblock-me:v13:seen": storedSeen, ...rest } = stored;
   // (The first goal's room, stamped into the new world; the device's own rooms survive.)
   check(JSON.parse(storedRooms ?? "{}").seed === seedAfter && !!storedMade, `the rooms stamped belong to the new seed, the device's rooms are kept (${storedRooms?.slice(0, 40)})`);
-  check(!storedSeen || JSON.parse(storedSeen).seed === seedAfter, `the ground seen belongs to the new seed (${storedSeen?.slice(0, 40)})`);
+  check(storedSeen === undefined, "no ground seen is stored (rooms go anywhere off screen)");
   check(/^[0-9a-f-]{36}$/.test(storedDevice), `the device id for automatic uploads survives the reset (${storedDevice})`);
   // (The page's opening, logged once its fingerprint is known, may come before or after the goal.)
   const kinds = JSON.parse(storedLog ?? "[]").map((e) => e.e);
@@ -1037,8 +1037,8 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
   await page.close();
 }
 
-// --- A room is stamped only where the player has not looked (src/rooms.ts seen ground): its
-// stamp changes no cell in view, and logs no warning. One made while the view went to its spot
+// --- A room is stamped just off screen, near the last red block (src/rooms.ts): its stamp
+// changes no cell in view, and logs no warning. One made while the view went to its spot
 // (the view moved there as it arrives) is held back and made again elsewhere; nothing in view
 // changes. The log has the view with the goal, and the world change with its cells.
 {
@@ -1055,7 +1055,7 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
   check(first.goal?.how === "room" && Array.isArray(first.goal.view?.b) && first.goal.view.s > 0, `the goal's log has the view (${JSON.stringify(first.goal?.view)})`);
   const v = first.goal.view.b, st = first.goal.stamp;
   check(st.x + st.W + 1 <= v[0] || st.x - 1 >= v[2] || st.y + st.H + 1 <= v[1] || st.y - 1 >= v[3], `the room is stamped off the view (box ${st.x},${st.y} ${st.W}x${st.H}, view ${v})`);
-  check(first.change?.e === "worldChange" && first.change.cause === "stamp" && first.change.n > 0 && first.change.inView === 0 && first.change.seen === 0, `its stamp is logged as a world change, none of it in view or on seen ground (${JSON.stringify(first.change)})`);
+  check(first.change?.e === "worldChange" && first.change.cause === "stamp" && first.change.n > 0 && first.change.inView === 0, `its stamp is logged as a world change, none of it in view (${JSON.stringify(first.change)})`);
   // The next room made while the player looks at its spot.
   await page.evaluate(() => {
     window.goalsBefore = unblock.playLog.filter((e) => e.e === "goal").length;
@@ -1065,7 +1065,7 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
       window.spot = { x: s.x, y: s.y, W: s.room.W, H: s.room.H };
       unblock.scene.camera = { scale, offsetX: 640 - (s.x + s.room.W / 2) * UNIT * scale, offsetY: 400 - (s.y + s.room.H / 2) * UNIT * scale };
       window.shown = JSON.stringify(unblock.onScreen().map((b) => [b.id, b.x, b.y]).sort());
-    });
+    }, 1, "maker"); // (not one made ahead: that one is made again whenever its spot shows)
     unblock.requestGoal(unblock.scene.goal.target);
   });
   await page.waitForFunction(() => unblock.playLog.filter((e) => e.e === "goal").length > window.goalsBefore, null, { timeout: 30000 }).catch(() => {});
@@ -1102,6 +1102,60 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
   await frame(page);
   const warned = await page.evaluate(() => unblock.playLog.filter((e) => e.e === "visibleChange").at(-1));
   check(warned?.cause === "reload" && warned.n >= 1 && warned.inView === warned.n && warned.b?.length === 4, `a world changed on reload is logged as a visible change (${JSON.stringify(warned)})`);
+  await page.close();
+}
+
+// --- Travel goals (src/travel.ts): a spike is stamped ahead, off screen, with a short goal on
+// the plain world leading to it; once within a screen of it, the spike's room is the next goal.
+// Each goal logs how far its red block starts from the last one's end (hop); no visible change.
+{
+  const page = await clocked(await browser.newPage({ viewport: { width: 1280, height: 800 } }));
+  await page.goto(url);
+  await page.evaluate(() => { unblock.forget(); localStorage.setItem("unblock-me:v13:seed", "20261113"); });
+  await page.goto(url);
+  await frame(page);
+  await page.evaluate(() => unblock.goalReady());
+  // Six world goals won (stand-ins far away): the next is a spike.
+  await page.evaluate(() => {
+    const g = unblock.scene.goal;
+    unblock.scene.goal = null;
+    for (let i = 0; i < 6; i++) unblock.scene.done.push({ id: `won ${i}`, target: { x: g.target.x, y: g.target.y }, solution: [] });
+    unblock.requestGoal(g.target);
+  });
+  await page.evaluate(() => unblock.goalReady());
+  const goals = () => page.evaluate(() => unblock.playLog.filter((e) => e.e === "goal"));
+  let log = (await goals()).at(-1);
+  check(log?.how === "travel" && log.travel?.k === 1 && log.stamp?.k === 1 && log.solution <= 6 && log.hop > 0, `a spike comes with a short travel goal leading to it, which stamps it (${JSON.stringify({ how: log?.how, travel: log?.travel, stamp: log?.stamp, moves: log?.solution, hop: log?.hop })})`);
+  const change = await page.evaluate(() => unblock.playLog.filter((e) => e.e === "worldChange" || e.e === "visibleChange").at(-1));
+  check(change?.e === "worldChange" && change.cause === "stamp" && change.inView === 0, `the spike's stamp changes nothing in view (${JSON.stringify(change)})`);
+  // Reloaded on the way, the room it leads to is kept (stored with the rooms).
+  await page.reload();
+  await frame(page);
+  check(await page.evaluate(() => !!unblock.scene.goal?.travel && JSON.parse(localStorage.getItem("unblock-me:v13:rooms")).trek?.room?.k === 1), "a reload keeps the travel goal and the room it leads to");
+  async function drag(m) {
+    const b = await page.evaluate((id) => unblock.scene.layout.byId(id), m.id);
+    const mid = { x: (m.from.x + m.to.x + b.w) / 2, y: (m.from.y + m.to.y + b.h) / 2 };
+    await page.evaluate(([mid, UNIT]) => { unblock.scene.camera = { scale: 1, offsetX: 640 - mid.x * UNIT, offsetY: 400 - mid.y * UNIT }; unblock.redraw(); }, [mid, UNIT]);
+    await frame(page);
+    const at = (p) => [640 + (p.x + b.w / 2 - mid.x) * UNIT, 400 + (p.y + b.h / 2 - mid.y) * UNIT];
+    await page.mouse.move(...at(m.from));
+    await page.mouse.down();
+    await page.mouse.move(...at(m.to), { steps: 10 });
+    await page.mouse.up();
+    await pass(page, 400);
+  }
+  // Played until the room's goal comes (a travel goal or two).
+  for (let i = 0; i < 4; i++) {
+    const g = await page.evaluate(() => unblock.scene.goal);
+    if (!g?.travel) break;
+    for (const m of g.solution) await drag(m);
+    await pass(page, 12000);
+    await page.evaluate(() => unblock.goalReady());
+  }
+  const all = await goals(), room = all.at(-1), travels = all.filter((e) => e.how === "travel");
+  check(room?.how === "room" && room.room?.k === 1 && room.room.pace?.spike && !room.stamp && room.n === 6, `then the spike's room is the goal, stamped already (${JSON.stringify({ how: room?.how, room: room?.room?.id, k: room?.room?.k, n: room?.n })})`);
+  check(travels.length >= 1 && travels.every((t) => t.travel.k === 1) && room.hop <= 22, `${travels.length} travel goal(s), each nearer: ${travels.map((t) => t.travel.left).join(", ")}; the room ${room?.hop} cells from the last one`);
+  check(await page.evaluate(() => unblock.playLog.filter((e) => e.e === "visibleChange").length === 0), "no visible change was logged");
   await page.close();
 }
 

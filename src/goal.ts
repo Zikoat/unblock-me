@@ -43,6 +43,12 @@ export type Goal = {
   /** The stamp that puts the room in the world, until the goal is shown (then it is the
    * world's: src/main.ts). */
   stamp?: Stamp;
+  /** A travel goal (src/travel.ts): leads towards room k's stamp (its library id `room`), `left`
+   * cells from its red block once reached. */
+  travel?: { k: number; room: string; left: number };
+  /** With the first travel goal: the room's goal it leads to, to come once the player is within
+   * a screen of it (src/main.ts trek); its stamp comes with the travel goal. */
+  then?: Goal;
   /** An island square's goal with more to come in it: reached, it sparkles and the next one
    * follows, no finish nor stars. */
   step?: boolean;

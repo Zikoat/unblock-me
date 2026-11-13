@@ -1,12 +1,15 @@
 // Makes goals off the main thread, so the board stays responsive while it searches. A world
 // goal is a room (src/rooms.ts): the library's and the device's own rooms, paced, stamped on
-// untouched ground the player has not seen, near them; if none fits, the maker makes one as before.
+// untouched ground just off the player's screen, near them; if none fits, the maker makes one as
+// before. A room further than a screen away, and a spike, comes with a travel goal leading to it
+// (src/travel.ts), and travel goals are made on their own while the player is led there.
 import { choices } from "./choices";
 import { makeGoalHard } from "./goal-search";
 import { fixedLayout, randomLayout, type Placed, type Stamp, type UiShown } from "./layout";
 import type { Point, Rect } from "./camera";
 import { isRoom, type Room } from "./room";
-import { LIBRARY, roomGoal } from "./rooms";
+import { LIBRARY, type Screen, stampReach } from "./rooms";
+import { roomOrTravel, travelGoal } from "./travel";
 
 export type GoalRequest = {
   job: number;
@@ -30,25 +33,33 @@ export type GoalRequest = {
   /** Rooms stamped so far. */
   rooms?: Stamp[];
   /** With rooms on: the rooms this device made (the library's are the worker's own), the
-   * world goal's number (for the pacing), where no room may go (the island, the UI, the view),
-   * and the tiles the player has seen (rooms.ts SEEN_TILE): no room changes a cell there. */
-  roomsOn?: { made: Room[]; n: number; keepOut: Rect[]; seen?: string[] };
+   * world goal's number (for the pacing), where no room may go (the island, the UI, the view
+   * and a margin round it), and the screen's size (a room further, or a spike, is travelled to). */
+  roomsOn?: { made: Room[]; n: number; keepOut: Rect[]; screen?: Screen };
+  /** A travel goal towards room k's red block at `to` (src/travel.ts), the room stamped already. */
+  travel?: { to: Point; k: number; room: string; screen: Screen };
 };
 
 self.onmessage = (event: MessageEvent<GoalRequest>) => {
-  const { job, seed, tries, walls, ui, placed, near, moved, level = 1, exclude, avoid, target, rooms = [], roomsOn } = event.data;
+  const { job, seed, tries, walls, ui, placed, near, moved, level = 1, exclude, avoid, target, rooms = [], roomsOn, travel } = event.data;
   const layout = placed ? fixedLayout(placed) : randomLayout(seed, { tries, walls, ...ui, rooms });
   const map = new Map(moved);
-  if (roomsOn && !placed) {
-    const t0 = performance.now();
-    const made = roomGoal([...roomsOn.made.filter(isRoom), ...LIBRARY], roomsOn.n, near, { moved: map, layout, keepOut: [...roomsOn.keepOut, ...avoid], stamps: rooms, seen: new Set(roomsOn.seen) }, { seed, tries, walls, ui });
-    if (made) {
-      const { goal } = made;
-      goal.stamp = made.stamp;
-      goal.room = { ...goal.room!, pace: made.pace, ms: Math.round(performance.now() - t0), states: made.states };
+  if (travel && !placed) {
+    const stamp = rooms.find((s) => s.k === travel.k);
+    const t = stamp && travelGoal(layout, near, travel.to, travel.screen, { moved: map, exclude: new Set(exclude), avoid, reach: stampReach(stamp), k: travel.k, room: travel.room });
+    if (t) {
+      const { difficulty, ...goal } = t;
       postMessage({ job, goal });
-      const stamped = randomLayout(seed, { tries, walls, ...ui, rooms: [...rooms, made.stamp] });
-      postMessage({ job, of: { id: goal.id, target: goal.target }, difficulty: goal.difficulty, choices: choices(stamped, map, goal) });
+      postMessage({ job, of: { id: goal.id, target: goal.target }, difficulty, choices: choices(layout, map, goal) });
+      return;
+    }
+  }
+  if (roomsOn && !placed) {
+    const made = roomOrTravel([...roomsOn.made.filter(isRoom), ...LIBRARY], roomsOn.n, near, { moved: map, layout, keepOut: [...roomsOn.keepOut, ...avoid], stamps: rooms }, { seed, tries, walls, ui }, roomsOn.screen, { exclude: new Set(exclude), avoid });
+    if (made) {
+      const { goal, difficulty } = made;
+      postMessage({ job, goal });
+      postMessage({ job, of: { id: goal.id, target: goal.target }, difficulty, choices: choices(made.layout, map, goal) });
       return;
     }
   }
