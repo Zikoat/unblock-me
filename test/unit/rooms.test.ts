@@ -7,7 +7,7 @@ import { expect, test } from "bun:test";
 import { bestGoal, type Grid, randomRoom, rng, solve } from "../../src/extra-gen-core";
 import { checkRoom, checkStamped, type Fill, thin, transform, walledRoom } from "../../src/room-core";
 import { cellKinds, cellsOf, laneAt, type Room } from "../../src/room";
-import { LIBRARY, pace, pickRooms, roomGoal, SEEN_TILE, stampReach, tilesOf } from "../../src/rooms";
+import { FILL_BUDGET, LIBRARY, pace, pickRooms, roomGoal, SEEN_TILE, stampReach, tilesOf } from "../../src/rooms";
 import { randomLayout, type Stamp } from "../../src/layout";
 import { makeRoom } from "../../src/room-make";
 import { contractGoal, gameRequest } from "../../src/contract";
@@ -135,6 +135,17 @@ test("a room goes on untouched ground, the same way every time, and its proof is
   expect(referee(request, contractGoal(a.goal))).toEqual({ ok: true });
   expect(a.goal.solution.length).toBe(a.goal.room!.f);
 });
+
+test("a stamp's fill checks stay within their budget, and its goal is still legal", () => {
+  const layout = randomLayout(world.seed, { tries: world.tries, walls: world.walls, ...world.ui });
+  for (let i = 0; i < 16; i++) {
+    const near = { x: 20 + 17 * i, y: -30 + 11 * i }, ground = { moved: new Map(), layout, keepOut: [], stamps: [] as Stamp[] };
+    const a = roomGoal(LIBRARY, i + 5, near, ground, world)!;
+    // (Each check's two searches may each reach what is left of it.)
+    expect(a.states).toBeLessThanOrEqual(2 * FILL_BUDGET);
+    expect(referee(gameRequest({ ...world, moved: new Map(), done: [], rooms: [a.stamp] }), contractGoal(a.goal))).toEqual({ ok: true });
+  }
+}, 60_000);
 
 test("no ground for a room: no room goal (the maker makes it)", () => {
   const layout = randomLayout(1, { tries: 12 });

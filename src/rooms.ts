@@ -61,6 +61,11 @@ export function pickRooms(pool: readonly Room[], used: ReadonlySet<string>, n: n
   return fresh.map((r) => [r, cost(r) + 0.5 * hash(seed + n, r.id) - (r.id.startsWith("d") ? 0.75 : 0)] as const).sort((a, b) => a[1] - b[1]).slice(0, count).map((a) => a[0]);
 }
 
+/** The states a stamp's fill checks may search in all (stampGoal): about 0.6 s on a slow phone
+ * (2026-11-13, an Android phone measured about 46 states a ms; 300,000 a check, up to four
+ * checks, had kept players waiting 3 to 9 s). */
+export const FILL_BUDGET = 30_000;
+
 export type RoomGoal = { goal: Goal; stamp: Stamp; fill: string; states: number };
 
 /** Where a room may go: its box (with a cell round it) clear of blocks the player has moved
@@ -134,8 +139,10 @@ export function placeFor(room: Room, near: Point, g: Ground, radius = g.seen?.si
 /** The goal of a room stamped at `at` as the k-th stamp, on the world `world` (the layout's
  * inputs, without this stamp): the world fills the room's free cells, and its reserved cells
  * too when the stamped room, measured with that fill (checkStamped, within `cap` states), is
- * still exact; else they stay empty and the room's own numbers and proof hold. */
-export function stampGoal(room: Room, at: Point, k: number, world: { seed: number; tries: number; walls: number; ui: UiShown; rooms: readonly Stamp[] }, cap = 300_000): RoomGoal {
+ * still exact; else they stay empty and the room's own numbers and proof hold. All its
+ * measures together search at most `budget` states (FILL_BUDGET: a fill that needs more is
+ * left out, so a stamp never keeps the player waiting long; in states, so the same everywhere). */
+export function stampGoal(room: Room, at: Point, k: number, world: { seed: number; tries: number; walls: number; ui: UiShown; rooms: readonly Stamp[] }, budget = FILL_BUDGET): RoomGoal {
   const ids = room.b.map((_, i) => `room ${k} ${i}`);
   const box: Rect = { x: at.x, y: at.y, width: room.W, height: room.H };
   const inside = (b: { x: number; y: number; w: number; h: number }) => b.x >= box.x && b.y >= box.y && b.x + b.w <= box.x + box.width && b.y + b.h <= box.y + box.height;
@@ -162,7 +169,9 @@ export function stampGoal(room: Room, at: Point, k: number, world: { seed: numbe
   if (!onReserved.length) return { goal: goalOf(room, full.stamp, full.layout, room.p.map(([i, x, y]) => [ids[i]!, x, y]), room.f, room.e, room.E, "none"), stamp: full.stamp, fill: "none", states: 0 };
   let states = 0;
   const measure = (m: ReturnType<typeof make>) => {
-    const c = checkStamped(room, fillOf(m.layout), ids, cap, edgeOf(m.layout));
+    const left = budget - states;
+    if (left <= 0) return { exact: false, status: "over budget" } as ReturnType<typeof checkStamped>;
+    const c = checkStamped(room, fillOf(m.layout), ids, left, edgeOf(m.layout));
     states += c.states;
     return c;
   };
@@ -203,7 +212,7 @@ function goalOf(room: Room, st: Stamp, layout: Layout, proof: [string, number, n
 
 /** The n-th world goal as a room: the rooms `pickRooms` gives, each turned the ways the seed
  * orders, at the nearest place it fits; null if none fits (the maker makes it then). */
-export function roomGoal(pool: readonly Room[], n: number, near: Point, g: Ground, world: { seed: number; tries: number; walls: number; ui: UiShown }, cap?: number): (RoomGoal & { pace: Pace; tried: number }) | null {
+export function roomGoal(pool: readonly Room[], n: number, near: Point, g: Ground, world: { seed: number; tries: number; walls: number; ui: UiShown }, budget?: number): (RoomGoal & { pace: Pace; tried: number }) | null {
   const used = new Set(g.stamps.map((s) => baseId(s.room.id)));
   const taken = movedCells(g);
   let tried = 0;
@@ -215,7 +224,7 @@ export function roomGoal(pool: readonly Room[], n: number, near: Point, g: Groun
       const at = placeFor(r, near, g, undefined, taken);
       if (!at) continue;
       const k = g.stamps.length ? Math.max(...g.stamps.map((x) => x.k)) + 1 : 0;
-      return { ...stampGoal(r, at, k, { ...world, rooms: g.stamps }, cap), pace: pace(n), tried };
+      return { ...stampGoal(r, at, k, { ...world, rooms: g.stamps }, budget), pace: pace(n), tried };
     }
   }
   return null;
