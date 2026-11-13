@@ -67,6 +67,17 @@ export function squareOf(goal: { id: string } | null): number | null {
   return m ? Number(m[1]) : null;
 }
 
+/** Whether a reached goal counts as a world goal: off the island, and not a travel goal
+ * (those only lead to a room). */
+export const isWorldGoal = (goal: { id: string; travel?: unknown }) => squareOf(goal) === null && !goal.travel;
+
+/** Each reached world goal's number among them (1 for the first), from the done list. */
+export function worldNumbers(done: readonly { id: string; travel?: unknown }[]): Map<string, number> {
+  const numbers = new Map<string, number>();
+  for (const g of done) if (isWorldGoal(g)) numbers.set(g.id, numbers.size + 1);
+  return numbers;
+}
+
 /** Square `k`'s top-left inside cell. */
 export const squareAt = (k: number) => {
   let x = ORIGIN.x;

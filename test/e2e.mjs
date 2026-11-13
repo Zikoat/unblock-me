@@ -917,6 +917,7 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
     await pass(page, 400);
   }
   check(await page.evaluate(() => unblock.scene.done.length === 1), "its proof's moves reach the goal");
+  check(await page.evaluate(() => unblock.numbers()) === null, "its red block shows no world goal's number (only in the world)");
   const keys = await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("unblock-me:")));
   check(keys.length === 0, `and nothing is stored on a trial (${keys.join() || "nothing"})`);
   await pass(page, 200);
@@ -1156,6 +1157,68 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
   check(room?.how === "room" && room.room?.k === 1 && room.room.pace?.spike && !room.stamp && room.n === 6, `then the spike's room is the goal, stamped already (${JSON.stringify({ how: room?.how, room: room?.room?.id, k: room?.room?.k, n: room?.n })})`);
   check(travels.length >= 1 && travels.every((t) => t.travel.k === 1) && room.hop <= 22, `${travels.length} travel goal(s), each nearer: ${travels.map((t) => t.travel.left).join(", ")}; the room ${room?.hop} cells from the last one`);
   check(await page.evaluate(() => unblock.playLog.filter((e) => e.e === "visibleChange").length === 0), "no visible change was logged");
+  await page.close();
+}
+
+// --- A reached world goal's red block shows the player's count of world goals (island goals
+// and travel goals not counted), worked out from the stored done list: a save from before
+// (the stuck player's, past the island) with 26 world goals and a travel goal done, then a
+// world goal played by dragging its solution's moves, and the page reloaded.
+{
+  const W = 402, Hh = 874;
+  const page = await clocked(await browser.newPage({ viewport: { width: W, height: Hh }, deviceScaleFactor: 3 }));
+  const stored = JSON.parse(await readFile(new URL("./fixtures/stuck-after-island.json", import.meta.url), "utf8")).stored;
+  const g = stored["unblock-me:v13:goal"];
+  const far = (i) => ({ x: -400 - 3 * i, y: -400 });
+  const before = [...Array(26)].map((_, i) => ({ id: `old ${i}`, target: far(i), solution: [] }));
+  before.splice(20, 0, { id: "old travel", target: far(40), solution: [], travel: { k: 1, room: "x", left: 2 } });
+  const save = { ...stored, "unblock-me:v13:goal": { ...g, done: [...g.done, ...before] } };
+  await page.goto(root);
+  await page.evaluate((save) => { unblock.forget(); for (const [k, v] of Object.entries(save)) localStorage.setItem(k, JSON.stringify(v)); }, save);
+  await page.goto(root);
+  await frame(page);
+  for (let t = 0; t < 60 && !(await page.evaluate(() => unblock.scene.goal)); t++) await Promise.all([pass(page, 250), page.waitForTimeout(250)]);
+  const numbers = await page.evaluate(() => unblock.numbers());
+  check(numbers?.length === 26 && numbers[0][0] === "old 0" && numbers.at(-1)[1] === 26 && !numbers.some(([id]) => id.startsWith("isle ") || id === "old travel"), `a save's world goals are numbered from its done list, island and travel goals left out (${numbers?.length} numbered)`);
+  const goal = await page.evaluate(() => unblock.scene.goal);
+  for (const m of goal.solution) {
+    const b = await page.evaluate((id) => unblock.scene.layout.byId(id), m.id);
+    const mid = { x: (m.from.x + m.to.x + b.w) / 2, y: (m.from.y + m.to.y + b.h) / 2 };
+    await page.evaluate(([mid, W, Hh]) => { unblock.scene.camera = { scale: 1, offsetX: W / 2 - mid.x * 60, offsetY: Hh / 2 - mid.y * 60 }; unblock.redraw(); }, [mid, W, Hh]);
+    await frame(page);
+    const at = (p) => [W / 2 + (p.x + b.w / 2 - mid.x) * UNIT, Hh / 2 + (p.y + b.h / 2 - mid.y) * UNIT];
+    await page.mouse.move(...at(m.from));
+    await page.mouse.down();
+    await page.mouse.move(...at(m.to), { steps: 10 });
+    await page.mouse.up();
+    await pass(page, 400);
+  }
+  check(await page.evaluate((id) => unblock.scene.done.at(-1)?.id === id, goal.id), `its world goal is reached (${goal.id}, ${goal.solution.length} moves)`);
+  // White pixels (the number) round the middle of the reached red block, with the view on it.
+  const red = await page.evaluate((id) => unblock.scene.layout.byId(id), goal.id);
+  const whiteOnRed = (scale) => page.evaluate(([t, red, W, Hh, scale]) => {
+    const x = (t.x + red.w / 2) * 60, y = (t.y + red.h / 2) * 60;
+    unblock.scene.camera = { scale, offsetX: W / 2 - x * scale, offsetY: Hh / 2 - y * scale };
+    unblock.redraw();
+    return new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => {
+      const c = document.querySelector("canvas"), d = c.width / c.clientWidth, s = 20 * scale * d;
+      const data = c.getContext("2d").getImageData(Math.round(W / 2 * d - s), Math.round(Hh / 2 * d - s), Math.round(2 * s), Math.round(2 * s)).data;
+      let n = 0;
+      for (let i = 0; i < data.length; i += 4) if (data[i] > 245 && data[i + 1] > 245 && data[i + 2] > 245) n++;
+      r(n);
+    })));
+  }, [goal.target, red, W, Hh, scale]);
+  await pass(page, 12000);
+  const shown = await whiteOnRed(1);
+  check((await page.evaluate((id) => unblock.numbers().find(([g]) => g === id)?.[1], goal.id)) === 27 && shown > 100, `its red block shows 27 once reached (${shown} white px on it)`);
+  await page.reload();
+  await frame(page);
+  for (let t = 0; t < 60 && !(await page.evaluate(() => unblock.scene.goal)); t++) await Promise.all([pass(page, 250), page.waitForTimeout(250)]);
+  const kept = await whiteOnRed(1);
+  check(kept > 100, `and still after a reload (${kept} white px)`);
+  await page.screenshot({ path: shots + "phone-7e-world-number.png" });
+  const far1 = await whiteOnRed(0.25);
+  check(far1 === 0, `zoomed far out it is left out, too small to read (${far1} white px)`);
   await page.close();
 }
 

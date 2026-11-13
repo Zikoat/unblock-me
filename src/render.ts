@@ -28,6 +28,8 @@ export const COLORS = {
   done: "#d49a2a",
   doneTarget: "rgb(242, 229, 198)", // gold at 0.2 over the background, opaque: overlapping areas cover outlines inside them
   doneLine: "#dcaa45",
+  number: "#ffffff", // a reached world goal's number on its block
+  numberEdge: "#8a5a12",
   star: "#f2b632",
   ui: "#1d1d1f",
   wall: "#5f5d57",
@@ -72,10 +74,42 @@ export const THROB_MS = 450;
 /** One heartbeat: up to 15% larger and back, quick out, slower settle. */
 const throbScale = (t: number) => (t <= 0 || t >= 1 ? 1 : 1 + 0.15 * Math.sin(Math.PI * Math.pow(t, 0.7)));
 
+/** Below this many screen px tall a reached world goal's number isn't drawn (unreadable). */
+const NUMBER_MIN_PX = 9;
+/** A reached world goal's number on its red block: centred, in the game's font, as tall as
+ * half its short side (less if it would not fit across), white with a dark gold edge so it
+ * reads over the row of stars on its target; left out when too small to read. */
+function drawNumber(ctx: CanvasRenderingContext2D, block: Block, n: number, at: DOMMatrix): void {
+  const text = String(n), w = block.w * UNIT - 2 * GAP, h = block.h * UNIT - 2 * GAP;
+  const font = (px: number) => `800 ${px}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+  let size = Math.min(w, h) * 0.5;
+  ctx.save();
+  ctx.setTransform(at);
+  ctx.font = font(size);
+  const across = ctx.measureText(text).width;
+  if (across > w * 0.8) size *= (w * 0.8) / across;
+  // (The transform's scale: device px per world unit, over the device's px per CSS px.)
+  if (size * Math.hypot(at.a, at.b) < NUMBER_MIN_PX * (devicePixelRatio || 1)) {
+    ctx.restore();
+    return;
+  }
+  ctx.font = font(size);
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  const x = (block.x + block.w / 2) * UNIT, y = (block.y + block.h / 2) * UNIT + size * 0.04;
+  ctx.lineJoin = "round";
+  ctx.lineWidth = size * 0.22;
+  ctx.strokeStyle = COLORS.numberEdge;
+  ctx.strokeText(text, x, y);
+  ctx.fillStyle = COLORS.number;
+  ctx.fillText(text, x, y);
+  ctx.restore();
+}
+
 export function draw(
   canvas: HTMLCanvasElement,
   scene: Scene,
-  { fullscreen, density, walls = 0, fps = true, sliding, sparkles = [], throb = null, cue = null, ripples = [], shake = null, pinThrob = null, pinHeld = null, used = 0, trace, finish = null, soul = null, loading = null, waiting = false, appear = 1, stillRed = null, detail = 1, now = 0, hud = null, surface = null, labels = [] }: {
+  { fullscreen, density, walls = 0, fps = true, sliding, sparkles = [], throb = null, cue = null, ripples = [], shake = null, pinThrob = null, pinHeld = null, used = 0, trace, finish = null, soul = null, loading = null, waiting = false, appear = 1, stillRed = null, detail = 1, now = 0, hud = null, surface = null, labels = [], numbers = null }: {
     fullscreen: boolean;
     density: number;
     /** The walls slider's position, 0..1. */
@@ -112,6 +146,9 @@ export function draw(
     surface?: { rects: Rect[]; alpha: number } | null;
     /** The island squares' levels, on their top walls (lattice units). */
     labels?: { x: number; y: number; text: string }[];
+    /** Each reached world goal's number (island.ts worldNumbers), shown on its red block; none
+     * off the world (a shared board, the testbed, a trial). */
+    numbers?: ReadonlyMap<string, number> | null;
     /** The next red block is shown, its soul not yet set off (the last one's finish plays). */
     waiting?: boolean;
     /** How far the current goal has faded in since it was shown, 0..1: its red block (from
@@ -304,6 +341,9 @@ export function draw(
     else if (block.ui === "walls") wallsIcon(ctx, block, walls);
     else if (block.ui === "home") homeIcon(ctx, block);
   };
+  // Reached world goals' red blocks with their numbers, and where each was drawn (its
+  // transform: hops and the finish's jolts move the number with it), drawn over the stars.
+  const numbered: { block: Block; at: DOMMatrix }[] = [];
   timed(ctx, "blocks", () => {
     // On an island square its walls are the colour of the surface round it.
     drawWalls(ctx, blocks.filter((b) => b.wall), scene.locked ? COLORS.outside : COLORS.wall);
@@ -361,6 +401,7 @@ export function draw(
         ctx.restore();
       }
       uiIcon(block);
+      if (wasGoal && numbers?.has(block.id) && block.id !== stillRed) numbered.push({ block, at: ctx.getTransform() });
       if (beat !== 1 || jolt) ctx.restore();
       if (squashed) ctx.restore();
       if (hop > 0.3) ctx.restore();
@@ -414,6 +455,7 @@ export function draw(
       else if (g.used !== undefined && !g.step && !(finish?.island && finish.id === g.id)) drawScoreTrack(ctx, trackRect(cells), fewestOf(g), shownUsed(g)!, { t: finish?.id === g.id ? (finishClock(scene, finish, now) ?? Infinity) : Infinity, undone: g.undone, trace: finish?.id === g.id ? trace : undefined, detail });
     }
   });
+  for (const { block, at } of numbered) drawNumber(ctx, block, numbers!.get(block.id)!, at);
   timed(ctx, "sparkles", () => sparkles.forEach((s) => sparkle(ctx, s, now)));
   // The next goal still being made: three small red dots just under the last red block (its
   // soul sets off once it comes), swelling in turn, the way a chat shows someone typing.

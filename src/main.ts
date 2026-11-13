@@ -26,7 +26,7 @@ import { ROOM_TRIALS } from "./trials-rooms";
 import { DECOY_TRIALS } from "./trials-decoys";
 import { isRoom, type Room } from "./room";
 import { dist, pace as roomPace, type Screen, stampReach, TRAVEL_AIM } from "./rooms";
-import { bayReached, GATE, GATE_GONE, inIsland, ISLAND_KEEP_OUT, opensGate, isLast, islandCamera, islandGoals, islandRects, nextIslandGoal, squareAt, squareMiddle, squareOf } from "./island";
+import { bayReached, GATE, GATE_GONE, inIsland, isWorldGoal, worldNumbers, ISLAND_KEEP_OUT, opensGate, isLast, islandCamera, islandGoals, islandRects, nextIslandGoal, squareAt, squareMiddle, squareOf } from "./island";
 import { fixedLayout, type Layout, MAX_TRIES, MAX_WALLS, MIN_TRIES, randomLayout, TRIES, UNIT, uiArea, WALLS, type Placed, type Stamp, type Ui } from "./layout";
 import { CARD, CUE_MS, draw, fading, islandCardRect, resetFades, RIPPLE_MS, SHAKE_MS, THROB_MS, redArrow, uiArrow, type Sparkle } from "./render";
 import { ease, slideDuration } from "./slide";
@@ -711,7 +711,10 @@ function checked(goal: Goal | null, by: Asked | null, again = false): Checked {
 }
 /** How many world goals (off the island, not travel goals) were reached: the next one's place
  * on the ramp and the pacing. */
-const worldGoals = () => scene.done.filter((g) => squareOf(g) === null && !g.travel).length;
+const worldGoals = () => scene.done.filter(isWorldGoal).length;
+/** The reached world goals' numbers shown on their red blocks: only in the world, not on a
+ * shared board, the testbed or a trial. */
+const numbersShown = () => (shared ? null : worldNumbers(scene.done));
 type Measured = { of: { id: string; target: Point }; difficulty: Difficulty; choices?: number };
 type Reply = { job: number; goal: Goal | null } | ({ job: number } & Measured);
 function newGoalWorker(): Worker {
@@ -1374,6 +1377,8 @@ Object.assign(window, {
     /** The adaptive detail step (0 full; see pace). */
     detailStep: () => detailStep,
     undo: () => takeBack(),
+    /** The numbers shown on reached world goals' red blocks ([id, n]), or null off the world. */
+    numbers: () => { const n = numbersShown(); return n && [...n]; },
     /** Forget everything stored, like the reset block but without reloading (for tests). */
     forget: () => {
       forget();
@@ -1762,6 +1767,7 @@ function paint(now: number, moving: ReturnType<typeof sliding>, to: HTMLCanvasEl
         // Out in the world, every square's; on one, its own (the rest are under the surface).
         // (None while a finish card shows: it has the level.)
         labels: !withIsland || finish?.island ? [] : scene.locked ? LABELS.filter((_, k) => k === islandHud().level - 1) : LABELS,
+        numbers: numbersShown(),
         now,
         detail: DETAIL[detailStep],
       }),

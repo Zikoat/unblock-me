@@ -2,7 +2,7 @@
 // red block on its target, in the fewest moves there are (a search of its own); nothing
 // random is generated inside the island.
 import { describe, expect, test } from "bun:test";
-import { bayReached, GATE, GATE_GONE, ISLAND_AREA, ISLAND_RECTS, islandGoals, isLast, nextIslandGoal, opensGate, redId, sideOf, squareAt } from "../../src/island";
+import { bayReached, GATE, GATE_GONE, ISLAND_AREA, ISLAND_RECTS, islandGoals, isLast, nextIslandGoal, opensGate, redId, sideOf, squareAt, worldNumbers } from "../../src/island";
 import { ISLAND_LEVELS, type IslandLevel } from "../../src/island-levels";
 import { intersects, randomLayout } from "../../src/layout";
 import { slideRange } from "../../src/rules";
@@ -111,5 +111,16 @@ describe("island", () => {
     expect(nextIslandGoal([...before, islandGoals(several)[0]!])?.id).toBe(`isle ${several} ${ISLAND_LEVELS[several]!.goals![0]!.block}`); // then inside
     expect(nextIslandGoal(ISLAND_LEVELS.flatMap((_, k) => islandGoals(k)))).toBeNull();
     expect(ISLAND_RECTS.some((r) => intersects({ x: -1, y: 0, w: 3, h: 5 }, r))).toBe(false); // clear of the debug UI
+  });
+});
+
+describe("world goals' numbers", () => {
+  test("count reached goals off the island, travel goals left out, in the order reached", () => {
+    const done = [
+      { id: "isle 0 0" }, { id: "isle 9 2" }, // the island's
+      { id: "a" }, { id: "b", travel: { k: 1, room: "spike", left: 3 } }, { id: "c" }, { id: "d" },
+    ];
+    expect([...worldNumbers(done)]).toEqual([["a", 1], ["c", 2], ["d", 3]]);
+    expect(worldNumbers([]).size).toBe(0);
   });
 });
