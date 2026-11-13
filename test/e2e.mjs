@@ -139,7 +139,9 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
   await tap(cell(-0.5, 3.5));
   await pass(page, 100);
   const text = await page.evaluate(() => document.body.innerText.trim());
-  check(/^\d+ fps · \d+[smhd] ago · [0-9a-f]{7,}\+?\nWorld goals solved: 0\n(Ramp target: 4 fewest moves|Pace: 5 fewest, 0 extra · rooms \d+ placed, \d+ made here)\nAudio: [a-z]+ · \d+ tries · .+\nDevice: [a-z]+ [a-z]+ \d\d\nPrint: ([a-z]+ [a-z]+ \d\d|…)\nMaker: (idle|making, effort \d, \d+s|ready, \d+ moves, fitness [\d.]+)\nAhead: .+$/.test(text), `the fps toggle shows the debug counter: fps, build age and commit, world goals solved, the pacing's aim, this browser's device and fingerprint names, and what the goal makers are doing ("${text}")`);
+  check(/^\d+fps · \d+[smhd] · [0-9a-f]{7,}\+? · ♪ [a-z]+\nwon 0 · (ramp 4|aim 5\+0 · rooms \d+\/\d+)\ndev [a-z]+ [a-z]+ \d\d · fp ([a-z]+ [a-z]+ \d\d|…)\nmaker (idle|making e\d \d+s|ready \d+mv [\d.]+) ahead \S.*$/.test(text), `the fps toggle shows the debug counter, four short lines: fps, build age, commit and sound; world goals won and the pacing's aim; this browser's device and fingerprint names; what the goal makers are doing ("${text}")`);
+  const box = await page.evaluate(() => { const r = document.querySelector("#fps").getBoundingClientRect(); return { w: r.width, h: r.height }; });
+  check(box.h < 70 && box.w < 340, `and it stays small on a phone (${Math.round(box.w)}x${Math.round(box.h)} px)`);
   await pass(page, 1200);
   const idleFps = await page.evaluate(() => parseInt(document.querySelector("#fps").textContent));
   check(idleFps > 10, `with nothing moving the counter still counts frames (${idleFps} fps)`);
@@ -1180,7 +1182,7 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
   await until(async () => (await since(logged, "rejected")).length >= 2);
   await pass(page, 3000);
   after = await page.evaluate(() => ({ goal: unblock.scene.goal, sent: window.sent, maker: document.querySelector("#makers").textContent }));
-  check(after.goal === null && after.sent.join() === "0,1" && (await since(logged, "rejected")).length === 2 && after.maker.includes("Maker: rejected (rule 3)"), `rejected again, it is taken as none found and not asked for a third time (requests at efforts ${after.sent})`);
+  check(after.goal === null && after.sent.join() === "0,1" && (await since(logged, "rejected")).length === 2 && after.maker.includes("maker rejected r3"), `rejected again, it is taken as none found and not asked for a third time (requests at efforts ${after.sent})`);
   // In play: the next goal is made ahead as soon as a goal shows. One the Referee rejects is
   // never shown: it is made ahead again once the red block is one move from its target, and
   // shows the moment the goal is reached.

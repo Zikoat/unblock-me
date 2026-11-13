@@ -476,7 +476,7 @@ type Making = { is: "idle" } | { is: "working"; level: number; since: number; ag
 /** The maker of goals waited for (0) and the one making the next goal ahead (1): what each is
  * doing, and how many requests it has yet to answer. */
 const makers = [0, 1].map(() => ({ making: { is: "idle" } as Making, pending: 0 }));
-const makerRows = [...document.querySelectorAll<HTMLElement>("#makers > div")];
+const makerRows = [...document.querySelectorAll<HTMLElement>("#makers > span")];
 /** A maker was asked for a goal (`again`: after one that broke this rule). */
 function asking(k: number, to: Worker, request: GoalRequest, again?: number): void {
   if (k === 0) pauseRooms(); // (the player waits for this one)
@@ -505,11 +505,12 @@ function setMaking(k: number, making: Making): void {
 function showMaking(): void {
   makers.forEach(({ making: m }, k) => {
     const [square, text] = makerRows[k]!.children as unknown as [HTMLElement, HTMLElement];
-    const said = `${k ? "Ahead" : "Maker"}: ${
-      m.is === "working" ? `${m.again === undefined ? "making" : `again (rule ${m.again})`}, effort ${m.level}, ${Math.floor((performance.now() - m.since) / 1000)}s`
-      : m.is === "ready" ? `ready, ${m.moves} moves, fitness ${m.fitness.toFixed(2)}`
-      : m.is === "rejected" ? `rejected (rule ${m.rule})`
-      : m.is === "none" ? "none found"
+    // (e: effort; r: the Referee's rule broken; mv: fewest moves; then the Judge's fitness.)
+    const said = `${k ? "ahead" : "maker"} ${
+      m.is === "working" ? `${m.again === undefined ? "making" : `again r${m.again}`} e${m.level} ${Math.floor((performance.now() - m.since) / 1000)}s`
+      : m.is === "ready" ? `ready ${m.moves}mv ${m.fitness.toFixed(2)}`
+      : m.is === "rejected" ? `rejected r${m.rule}`
+      : m.is === "none" ? "none"
       : "idle"
     }`;
     if (text.textContent !== said) text.textContent = said;
@@ -1448,18 +1449,15 @@ function storedName(): string {
 }
 function showFps(now: number): void {
   while (frames.length && frames[0]! <= now - 1000) frames.shift();
-  // And the world's goals solved, the ramp's target for the goal being played (or next), and
-  // how sound is doing.
-  const target = rampTarget(worldGoals()), p = roomPace(worldGoals());
+  // And the world's goals won, the pacing's aim for the goal being played (fewest+extra, ↑ a
+  // spike, ↓ easy after one; or the ramp's target), the rooms placed and made on this device,
+  // how long the last goal took to come after the one before was reached, how sound is doing,
+  // and who this browser is (device and fingerprint names). The makers' line follows.
+  const p = roomPace(worldGoals()), target = rampTarget(worldGoals());
   fpsText.textContent = [
-    `${frames.length} fps · ${ago(Date.now() - builtAt)} · ${__COMMIT__}`,
-    `World goals solved: ${worldGoals()}`,
-    withRooms && !placed
-      ? `Pace: ${p.fewest} fewest, ${p.extra} extra${p.spike ? ", spike" : p.easy ? ", easy" : ""} · rooms ${stamps.length} placed, ${made.rooms.length} made here`
-      : `Ramp target: ${target === undefined ? "none" : `${target} fewest moves`}`,
-    `Audio: ${sfx.audioState()}`,
-    `Device: ${storedName()}`,
-    `Print: ${printName}`,
+    `${frames.length}fps · ${ago(Date.now() - builtAt).replace(" ago", "")} · ${__COMMIT__} · ♪ ${sfx.audioState().split(" · ")[0]}`,
+    `won ${worldGoals()} · ${withRooms && !placed ? `aim ${p.fewest}+${p.extra}${p.spike ? "↑" : p.easy ? "↓" : ""} · rooms ${stamps.length}/${made.rooms.length}` : `ramp ${target ?? "none"}`}${lastWait === null ? "" : ` · wait ${(lastWait / 1000).toFixed(1)}s`}`,
+    `dev ${storedName()} · fp ${printName}`,
   ].join("\n");
 }
 setInterval(() => showFps(performance.now()), 500);

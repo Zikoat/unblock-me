@@ -18,10 +18,12 @@
   #view { position: fixed; pointer-events: none; }
   #view > * { pointer-events: auto; }
   /* Turns a little every frame, so frames keep coming and the fps counter shows the real rate. */
-  #spin { position: absolute; top: 15px; left: 6px; width: 8px; height: 8px; border-radius: 2px; background: #b9b6ad; pointer-events: none !important; }
-  #fps { position: absolute; top: 6px; left: 20px; padding: 6px 10px; border-radius: 8px; background: rgba(29, 29, 31, 0.82); color: #f3f2ee; font: 13px/1.5 ui-monospace, monospace; white-space: pre; pointer-events: none !important; }
-  /* Under it, what each goal maker is doing: a square in its state's colour (main.ts MAKING). */
-  #makers i { display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 2px; vertical-align: 1px; background: #8e8e93; }
+  #spin { position: absolute; top: 9px; left: 6px; width: 8px; height: 8px; border-radius: 2px; background: #b9b6ad; pointer-events: none !important; }
+  /* Small and dense: a few facts a line, never wrapped (main.ts showFps). */
+  #fps { position: absolute; top: 4px; left: 18px; padding: 3px 6px; border-radius: 6px; background: rgba(29, 29, 31, 0.78); color: #f3f2ee; font: 10.5px/1.35 ui-monospace, monospace; white-space: pre; pointer-events: none !important; }
+  /* Its last line, what each goal maker is doing: a square in its state's colour (main.ts Making). */
+  #makers > span + span { margin-left: 4px; }
+  #makers i { display: inline-block; width: 6px; height: 6px; margin-right: 4px; border-radius: 1px; vertical-align: 1px; background: #8e8e93; }
   #makers i[data-is="working"] { background: #f2b632; }
   #makers i[data-is="ready"] { background: #5fd38d; }
   #makers i[data-is="none"] { background: #8fa3bf; }
@@ -40,7 +42,7 @@
 <canvas></canvas>
 <div id="view">
 <div id="spin"></div>
-<div id="fps"><span></span><div id="makers"><div><i></i><span></span></div><div><i></i><span></span></div></div></div>
+<div id="fps"><span></span><div id="makers"><span><i></i><span></span></span> <span><i></i><span></span></span></div></div>
 <div id="tip" role="tooltip"></div>
 <button id="next" hidden>Next level</button>
 <div id="trial" hidden></div>
