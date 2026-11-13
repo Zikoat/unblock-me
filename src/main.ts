@@ -1191,19 +1191,29 @@ function takeBack(): void {
 
 /** Count a step of the debug sequence: a tap on the empty board ("tap"), then a tap on the
  * stuck red block ("red"); anything else (null) starts it over. True once it is complete,
- * which turns the debug UI on. */
+ * which turns the debug UI on (and starts over). With the debug UI on, the same sequence
+ * turns it off again (debugOff), keeping the progress. */
 let debugSteps = 0;
 function debugCode(step: "tap" | "red" | null): boolean {
-  if (debug) return false;
   const want = debugSteps % 2 === 0 ? "tap" : "red";
   debugSteps = step === want ? debugSteps + 1 : step === "tap" ? 1 : 0;
   if (debugSteps < DEBUG_ROUNDS * 2) return false;
+  debugSteps = 0;
   try {
-    localStorage.setItem(DEBUG_KEY, "true");
+    localStorage.setItem(DEBUG_KEY, debug ? "false" : "true");
   } catch {
     return false; // no storage: no debug UI
   }
+  if (debug) {
+    debugOff();
+    return false;
+  }
   return true;
+}
+/** The debug sequence done with the debug UI on: it goes off, the progress stays. */
+function debugOff(): void {
+  save();
+  location.reload();
 }
 
 /** A tap pushed a block (the move is made): it slides there. A tap that sends the red block
