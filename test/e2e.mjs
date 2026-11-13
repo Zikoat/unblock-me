@@ -1180,10 +1180,10 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
   await frame(page);
   for (let t = 0; t < 60 && !(await page.evaluate(() => unblock.scene.goal)); t++) await Promise.all([pass(page, 250), page.waitForTimeout(250)]);
   const numbers = await page.evaluate(() => unblock.numbers());
-  check(numbers?.length === 26 && numbers[0][0] === "old 0" && numbers.at(-1)[1] === 26 && !numbers.some(([id]) => id.startsWith("isle ") || id === "old travel"), `a save's world goals are numbered from its done list, island and travel goals left out (${numbers?.length} numbered)`);
+  check(numbers?.length === 26 && numbers[0][0] === "old 0" && numbers.at(-1)[1] === 36 && !numbers.some(([id]) => id.startsWith("isle ") || id === "old travel"), `a save's world goals are numbered from its done list, island and travel goals left out (${numbers?.length} numbered)`);
   const goal = await page.evaluate(() => unblock.scene.goal);
   const label = () => page.evaluate(() => { const e = document.querySelector("#goalno"); return e.hidden ? null : e.textContent; });
-  check(!goal.travel && (await label()) === "Level 27", `the world goal being played shows its number at the top right (${await label()})`);
+  check(!goal.travel && (await label()) === "Level 37", `the world goal being played shows its number at the top right (${await label()})`);
   for (const m of goal.solution) {
     const b = await page.evaluate((id) => unblock.scene.layout.byId(id), m.id);
     const mid = { x: (m.from.x + m.to.x + b.w) / 2, y: (m.from.y + m.to.y + b.h) / 2 };
@@ -1213,14 +1213,14 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
   }, [goal.target, red, W, Hh, scale]);
   await pass(page, 12000);
   const shown = await whiteOnRed(1);
-  check((await page.evaluate((id) => unblock.numbers().find(([g]) => g === id)?.[1], goal.id)) === 27 && shown > 100, `its red block shows 27 once reached (${shown} white px on it)`);
+  check((await page.evaluate((id) => unblock.numbers().find(([g]) => g === id)?.[1], goal.id)) === 37 && shown > 100, `its red block shows 37 once reached (${shown} white px on it)`);
   await page.reload();
   await frame(page);
   for (let t = 0; t < 60 && !(await page.evaluate(() => unblock.scene.goal)); t++) await Promise.all([pass(page, 250), page.waitForTimeout(250)]);
   const kept = await whiteOnRed(1);
   check(kept > 100, `and still after a reload (${kept} white px)`);
   const next = await page.evaluate(() => unblock.scene.goal);
-  check((await label()) === (next.travel ? null : "Level 28"), `the next goal shows Level 28, or nothing for a travel goal (${next.travel ? "travel" : "world"}: ${await label()})`);
+  check((await label()) === (next.travel ? null : "Level 38"), `the next goal shows Level 38, or nothing for a travel goal (${next.travel ? "travel" : "world"}: ${await label()})`);
   await page.screenshot({ path: shots + "phone-7e-world-number.png" });
   const far1 = await whiteOnRed(0.25);
   check(far1 === 0, `zoomed far out it is left out, too small to read (${far1} white px)`);

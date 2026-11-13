@@ -74,7 +74,8 @@ export const isWorldGoal = (goal: { id: string; travel?: unknown }) => squareOf(
 /** Each reached world goal's number among them (1 for the first), from the done list. */
 export function worldNumbers(done: readonly { id: string; travel?: unknown }[]): Map<string, number> {
   const numbers = new Map<string, number>();
-  for (const g of done) if (isWorldGoal(g)) numbers.set(g.id, numbers.size + 1);
+  // Numbered on from the island's levels: the first world goal is level 11 after 10 squares.
+  for (const g of done) if (isWorldGoal(g)) numbers.set(g.id, ISLAND_LEVELS.length + numbers.size + 1);
   return numbers;
 }
 

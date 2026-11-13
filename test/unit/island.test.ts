@@ -120,7 +120,7 @@ describe("world goals' numbers", () => {
       { id: "isle 0 0" }, { id: "isle 9 2" }, // the island's
       { id: "a" }, { id: "b", travel: { k: 1, room: "spike", left: 3 } }, { id: "c" }, { id: "d" },
     ];
-    expect([...worldNumbers(done)]).toEqual([["a", 1], ["c", 2], ["d", 3]]);
+    expect([...worldNumbers(done)]).toEqual([["a", 11], ["c", 12], ["d", 13]]); // on from the 10 island levels
     expect(worldNumbers([]).size).toBe(0);
   });
 });

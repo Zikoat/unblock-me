@@ -1761,7 +1761,7 @@ function showGoalNumber(): void {
     scene.keepOut = null;
     return;
   }
-  const text = `Level ${worldGoals() + 1}`;
+  const text = `Level ${ISLAND_LEVELS.length + worldGoals() + 1}`; // on from the island's levels
   if (goalNo.textContent !== text) goalNo.textContent = text;
   goalNo.style.marginTop = "";
   let r = goalNo.getBoundingClientRect();

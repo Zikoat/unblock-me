@@ -186,7 +186,7 @@ const no = await full.evaluate(() => {
   const g = document.querySelector("#goalno"), r = g.getBoundingClientRect(), f = document.querySelector("#fps").getBoundingClientRect();
   return { text: g.hidden ? null : g.textContent, r: [r.left, r.top, r.right, r.bottom], clear: r.left >= f.right || r.top >= f.bottom };
 });
-check(no.text === "Level 1" && no.r[1] >= 62 && no.r[2] <= 402 && no.clear, `the level number shows top right, below the notch and clear of the debug box (${no.text} at ${no.r.map(Math.round)})`);
+check(no.text === "Level 11" && no.r[1] >= 62 && no.r[2] <= 402 && no.clear, `the level number shows top right, below the notch and clear of the debug box (${no.text} at ${no.r.map(Math.round)})`);
 await full.screenshot({ path: shots + "iphone-level-number.png" });
 // A pin that would sit under it moves out: the board far up and right, the red block's pin in
 // the top right corner.
