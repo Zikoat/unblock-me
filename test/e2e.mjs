@@ -665,6 +665,40 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
   check(again !== "star", `landing on it a second time sends no stars (${again})`);
   await pass(page, 400);
 
+  // Waiting for the next goal (a slow phone: here every goal request is held back 3 s). The
+  // finish skipped by a tap before the goal is made: once it comes, the last red block's soul
+  // still flies to it and the view follows. Meanwhile, after a moment, dots circle in the last
+  // red block.
+  await page.evaluate(() => {
+    window.realPost ??= Worker.prototype.postMessage;
+    Worker.prototype.postMessage = function (m, ...rest) {
+      if (m && "level" in m) setTimeout(() => window.realPost.call(this, m, ...rest), 3000);
+      else window.realPost.call(this, m, ...rest);
+    };
+  });
+  await place([...UI, Wall(-4, 4), H("r", -3, 4), Wall(3, 4), V("n", 0, 6)], { id: "r", target: { x: 1, y: 4 }, solution: [] });
+  await tap(cell(-2, 4.5));
+  await pass(page, 400);
+  check(await page.evaluate(() => unblock.scene.done.at(-1)?.id === "r" && !unblock.scene.goal), "reached, the next goal still being made");
+  await tap(cell(-1.5, 6.5)); // skips the finish
+  await pass(page, 150);
+  const early = await page.evaluate(() => unblock.loading());
+  await pass(page, 400);
+  const waitingDots = await page.evaluate(() => unblock.loading());
+  await page.screenshot({ path: shots + "phone-7c-waiting.png" });
+  await page.screenshot({ path: shots + "phone-7d-waiting-close.png", clip: { x: 190, y: 590, width: 180, height: 110 }, scale: "device" });
+  check(!early && waitingDots, `the finish skipped and the goal not made yet: after a moment the waiting dots show (${early} at 150 ms, ${waitingDots} at 550 ms)`);
+  const viewWaiting = await page.evaluate(() => unblock.scene.camera);
+  await pass(page, 3000);
+  await page.evaluate(() => unblock.goalReady());
+  await frame(page);
+  const arrived = await page.evaluate(() => ({ goal: unblock.scene.goal?.id, soul: !!unblock.soul(), loading: unblock.loading() }));
+  await pass(page, 1600);
+  const viewAfter = await page.evaluate(() => unblock.scene.camera);
+  check(arrived.goal === "n" && arrived.soul && !arrived.loading && Math.abs(viewAfter.offsetY - viewWaiting.offsetY) > 100, `once it comes, the soul flies to it and the view follows, the dots gone (${JSON.stringify(arrived)}, view moved ${Math.round(viewAfter.offsetY - viewWaiting.offsetY)} px)`);
+  await page.evaluate(() => { Worker.prototype.postMessage = window.realPost; unblock.scene.camera = { scale: 1, offsetX: 170, offsetY: 370 }; unblock.redraw(); });
+  await frame(page);
+
   // With the border on, a goal area wholly outside it is culled, check and all. Moving the
   // view up puts the target (lattice row 4, x 1..3) at screen y 10..70: on screen, above
   // the border (y 80).

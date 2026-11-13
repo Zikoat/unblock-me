@@ -61,6 +61,8 @@ export type Sparkle = { x: number; y: number; dx: number; dy: number; born: numb
  * throb has peaked), grows towards the target, holds, and fades; CUE_MS in all. */
 const CUE_DELAY = 200, CUE_GROW = 450, CUE_HOLD = 700, CUE_FADE = 450;
 export const CUE_MS = CUE_DELAY + CUE_GROW + CUE_HOLD + CUE_FADE;
+/** How long the waiting dots take to swell in turn once, in ms. */
+const LOADING_TURN_MS = 900;
 /** How long a stuck block shakes, in ms. */
 export const SHAKE_MS = 220;
 /** How long a tap's ripple lasts, in ms. */
@@ -73,7 +75,7 @@ const throbScale = (t: number) => (t <= 0 || t >= 1 ? 1 : 1 + 0.15 * Math.sin(Ma
 export function draw(
   canvas: HTMLCanvasElement,
   scene: Scene,
-  { fullscreen, density, walls = 0, fps = true, sliding, sparkles = [], throb = null, cue = null, ripples = [], shake = null, pinThrob = null, pinHeld = null, used = 0, trace, finish = null, soul = null, waiting = false, appear = 1, stillRed = null, detail = 1, now = 0, hud = null, surface = null, labels = [] }: {
+  { fullscreen, density, walls = 0, fps = true, sliding, sparkles = [], throb = null, cue = null, ripples = [], shake = null, pinThrob = null, pinHeld = null, used = 0, trace, finish = null, soul = null, loading = null, waiting = false, appear = 1, stillRed = null, detail = 1, now = 0, hud = null, surface = null, labels = [] }: {
     fullscreen: boolean;
     density: number;
     /** The walls slider's position, 0..1. */
@@ -119,6 +121,9 @@ export function draw(
     stillRed?: string | null;
     /** The last red block's soul flying to the new one (world px), and when it set off. */
     soul?: { from: { x: number; y: number; width: number; height: number }; toId: string; born: number; style: SoulStyle } | null;
+    /** The next goal is still being made, the player waiting (main.ts LOADING_DELAY): under the
+     * last red block (`id`), shown `k` of the way in (0..1). */
+    loading?: { id: string; k: number } | null;
     /** How much of the finish's detail to draw (less when frames come late: main.ts). */
     detail?: number;
     now?: number;
@@ -410,6 +415,22 @@ export function draw(
     }
   });
   timed(ctx, "sparkles", () => sparkles.forEach((s) => sparkle(ctx, s, now)));
+  // The next goal still being made: three small red dots just under the last red block (its
+  // soul sets off once it comes), swelling in turn, the way a chat shows someone typing.
+  const waitOn = loading ? blocks.find((b) => b.id === loading.id) : null;
+  if (loading && waitOn) {
+    const cx = (waitOn.x + waitOn.w / 2) * UNIT, cy = (waitOn.y + waitOn.h) * UNIT + UNIT * 0.2;
+    ctx.save();
+    ctx.fillStyle = COLORS.goal;
+    for (let i = 0; i < 3; i++) {
+      const beat = 0.5 + 0.5 * Math.sin((now / LOADING_TURN_MS) * Math.PI * 2 - i * 0.9);
+      ctx.globalAlpha = loading.k * (0.35 + 0.6 * beat);
+      ctx.beginPath();
+      ctx.arc(cx + (i - 1) * UNIT * 0.2, cy - beat * UNIT * 0.03, UNIT * (0.045 + 0.02 * beat), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
   // The island's surface goes over everything round the square: other squares' targets and
   // their stars too.
   // (With the smaller border on, it lets the world show through: the view outside, to test.)

@@ -181,9 +181,10 @@ type LogEvent =
   | { e: "error"; message: string; where: string }
   // `proof`: the maker's solution itself (id, from x y, to x y), so the play can be measured
   // against it later without running the maker again (research/roadmap.md, the data pipeline).
+  // `wait`: ms from the goal before reached to this one shown (its finish played meanwhile).
   // `how`: a room's (with which room, its numbers as stamped and the room's own, the fill, the
   // pacing's aim, and the stamp), the maker's, the island's or a trial's.
-  | { e: "goal"; commit: string; id: string; target: Point; start?: Point; tries: number; walls?: number; seed: number; solution: number; proof?: [string, number, number, number, number][]; moved: [string, number, number][]; judge?: Terms; how?: "room" | "maker" | "island" | "trial"; n?: number; room?: Goal["room"]; stamp?: { k: number; x: number; y: number; W: number; H: number; fill: boolean | string[] }; view?: View }
+  | { e: "goal"; commit: string; id: string; target: Point; start?: Point; tries: number; walls?: number; seed: number; solution: number; proof?: [string, number, number, number, number][]; moved: [string, number, number][]; wait?: number; judge?: Terms; how?: "room" | "maker" | "island" | "trial"; n?: number; room?: Goal["room"]; stamp?: { k: number; x: number; y: number; W: number; H: number; fill: boolean | string[] }; view?: View }
   // A room this device made in the background (src/room-worker.ts): its number, fewest and extra
   // moves, how long it took and how many random rooms it tried.
   | { e: "roomMade"; k: number; f?: number; x?: number; ms: number; tries: number }
@@ -647,6 +648,13 @@ function measured({ of, difficulty, choices }: Measured): void {
   }
   save();
 }
+/** When the last world goal was reached, while the next is yet to show (else -1); and how
+ * long the last one shown took from it (for the debug text). */
+let reachedAt = -1, lastWait: number | null = null;
+/** Waiting for the next goal (its finish over) for longer than LOADING_DELAY: the waiting
+ * dots show under the last red block (render.ts loading), fading in over LOADING_FADE. */
+const LOADING_DELAY = 300, LOADING_FADE = 200;
+let waitFrom: number | null = null;
 /** When the current goal was shown: it fades in over APPEAR_MS. */
 let goalShownAt = -Infinity;
 const APPEAR_MS = 200;
@@ -675,6 +683,9 @@ function showGoal(goal: Goal | null): void {
   }
   scene.goal = goal;
   goalShownAt = performance.now();
+  const wait = reachedAt >= 0 ? Math.round(goalShownAt - reachedAt) : undefined;
+  reachedAt = -1;
+  if (wait !== undefined && goal) lastWait = wait;
   if (goal) {
     goal.tries = tries;
     // (An island square's next goal counts from where the one before was reached: moves made
@@ -683,10 +694,12 @@ function showGoal(goal: Goal | null): void {
     goal.begun = before?.ended ?? scene.history.length;
     // A snapshot of the board, so the goal can be measured again later.
     const how = trial || testbed ? "trial" : squareOf(goal) !== null ? "island" : goal.room ? "room" : "maker";
-    log({ e: "goal", commit: __COMMIT__, id: goal.id, target: goal.target, start: goal.start, tries, walls, seed, solution: goal.solution.length, proof: goal.solution.map((m) => [m.id, m.from.x, m.from.y, m.to.x, m.to.y]), moved: [...scene.moved].map(([id, p]) => [id, p.x, p.y]), ...(goal.judged && { judge: goal.judged }), how, ...(how !== "island" && how !== "trial" && { n: worldGoals() }), ...(goal.room && { room: goal.room }), ...(stamp && { stamp: { k: stamp.k, x: stamp.x, y: stamp.y, W: stamp.room.W, H: stamp.room.H, fill: stamp.fill } }), view: viewNow() });
+    log({ e: "goal", commit: __COMMIT__, id: goal.id, target: goal.target, start: goal.start, tries, walls, seed, solution: goal.solution.length, proof: goal.solution.map((m) => [m.id, m.from.x, m.from.y, m.to.x, m.to.y]), moved: [...scene.moved].map(([id, p]) => [id, p.x, p.y]), ...(wait !== undefined && { wait }), ...(goal.judged && { judge: goal.judged }), how, ...(how !== "island" && how !== "trial" && { n: worldGoals() }), ...(goal.room && { room: goal.room }), ...(stamp && { stamp: { k: stamp.k, x: stamp.x, y: stamp.y, W: stamp.room.W, H: stamp.room.H, fill: stamp.fill } }), view: viewNow() });
   }
-  // The last red block's soul flies to the new one, once its finish is over.
-  if (!finish) sendSoul();
+  // The last red block's soul flies to the new one, once its finish is over (none found: it
+  // goes nowhere).
+  if (!goal) soulFrom = null;
+  else if (!finish) sendSoul();
   // The new red block throbs once; its clock starts at the first frame drawn (after the soul
   // gets there).
   if (scene.goal) throb = { id: scene.goal.id, born: -1 };
@@ -948,7 +961,11 @@ let soul: { from: WorldRect & { id: string }; toId: string; born: number; style:
  * played), the view following it there; on the island to the square's middle, at its zoom. */
 function sendSoul(): void {
   const goal = scene.goal, red = goal && scene.layout.byId(goal.id), at = goal && whereIs(scene, goal.id);
-  if (soulFrom && goal && red && at) {
+  // (The next goal still being made: the soul waits for it, and sets off as it shows. It had
+  // been dropped here, so a finish skipped or over before the goal came had no soul, and the
+  // view stayed where it was.)
+  if (!goal) return;
+  if (soulFrom && red && at) {
     const style = forcedSoul ?? (worldGoals() >= SOUL_UNLOCK ? SOUL_STYLES[Math.floor(Math.random() * SOUL_STYLES.length)]! : "comet");
     soul = { from: soulFrom, toId: goal.id, born: -1, style };
     const k = squareOf(goal);
@@ -1001,6 +1018,7 @@ function reachGoal(now: number): void {
     };
   });
   // The next goal shows at once (its red block muted until the soul gets there).
+  reachedAt = now;
   soulFrom = { id: goal.id, x: at.x * UNIT + 3, y: at.y * UNIT + 3, width: red.w * UNIT - 6, height: red.h * UNIT - 6 };
   requestGoal(goal.target, true);
   save();
@@ -1194,6 +1212,10 @@ Object.assign(window, {
     onScreen: () => blocksIn(scene.layout, latticeRect(scene, { x: 0, y: 0, width: scene.width, height: scene.height }), scene),
     slideRange: (id: string) => slideRange(scene.layout, visibleBlocks(scene).find((b) => b.id === id)!, scene),
     redraw: () => redraw(),
+    /** What the maker ahead is doing (for tests and debugging). */
+    ahead: () => ({ asked: ahead.asked, for: ahead.for, busy: ahead.busy, room: ahead.room, wanted: ahead.wanted, ready: ahead.ready && { key: ahead.ready.key, for: ahead.ready.for, id: ahead.ready.goal?.id, rejected: ahead.ready.rejected } }),
+    /** Whether the waiting dots show (the next goal still being made, the player waiting). */
+    loading: () => waitFrom !== null && performance.now() - waitFrom > LOADING_DELAY,
     /** The soul in flight, if one is (when it set off: -1 until its first frame). */
     soul: () => soul,
     /** The edge arrows, where drawn (screen px), or null. */
@@ -1220,6 +1242,7 @@ Object.assign(window, {
       // (And a finish still playing, its soul and the view's flight with it, are the old board's.)
       finish = null;
       soul = soulFrom = flight = null;
+      reachedAt = -1;
       goalShownAt = -Infinity; // (a placed goal shows at once)
       ahead.wanted = null;
       placed = blocks;
@@ -1451,7 +1474,7 @@ function redraw(): void {
     pace(now);
     const moving = advance(now);
     paint(now, moving);
-    if (animation || sparkles.length || flight || throb || cue || ripples.length || shake || finish || soul || pinThrob || fading() || now < goalShownAt + APPEAR_MS) redraw();
+    if (animation || sparkles.length || flight || throb || cue || ripples.length || shake || finish || soul || pinThrob || waitFrom !== null || fading() || now < goalShownAt + APPEAR_MS) redraw();
   });
 }
 
@@ -1552,6 +1575,9 @@ function advance(now: number): ReturnType<typeof sliding> {
       }
       sendSoul(); // (or once the next goal comes, if it is still being made)
     }
+    // The player waits for the next goal once its finish is over (or skipped).
+    const waits = !scene.goal && !finish && reachedAt >= 0 && !!scene.done.length;
+    waitFrom = waits ? (waitFrom ?? now) : null;
     sparkles = sparkles.filter((s) => now < s.born + s.life);
     return moving;
 }
@@ -1575,6 +1601,7 @@ function paint(now: number, moving: ReturnType<typeof sliding>, to: HTMLCanvasEl
         used: scene.goal ? movesSince(scene.goal.begun ?? 0) : 0,
         finish,
         soul,
+        loading: waitFrom !== null && now - waitFrom > LOADING_DELAY ? { id: scene.done.at(-1)!.id, k: Math.min(1, (now - waitFrom - LOADING_DELAY) / LOADING_FADE) } : null,
         waiting: soulWaits(),
         appear: Math.min(1, (now - goalShownAt) / APPEAR_MS),
         stillRed: finish?.id ?? soulFrom?.id ?? (soul && soul.born < 0 ? soul.from.id : null),
