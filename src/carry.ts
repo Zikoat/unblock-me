@@ -15,7 +15,7 @@ export const isPlayerId = (id: string | null): id is string => !!id && /^[0-9a-f
 /** The stored keys that are the player's progress (and play log), carried from browser to
  * browser; settings (fps counter, debug row, border) stay with the browser. The server
  * returns only these (PROGRESS_KEY in scripts/serve-public.py). */
-export const isProgressKey = (key: string): boolean => /^unblock-me:(v\d+:(seed|moved|history|goal|rooms|seen)|tries|walls|camera|rooms-made|detail|log)$/.test(key);
+export const isProgressKey = (key: string): boolean => /^unblock-me:(v\d+:(seed|moved|history|goal|rooms|seen)|tries|walls|camera|rooms-made|detail|log|debug|fps|border)$/.test(key);
 /** Goals reached in a stored world: the length of its goal key's `done`. */
 export function goalsIn(goal: unknown): number {
   const done = (goal as { done?: unknown } | null)?.done;

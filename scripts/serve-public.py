@@ -6,6 +6,7 @@ import functools
 import http.server
 import json
 import os
+import threading
 import pathlib
 import re
 import urllib.parse
@@ -24,7 +25,7 @@ MAX_TOTAL = 200_000_000  # bytes kept
 # of the device's last upload (isProgressKey there), and only for a well-formed existing id.
 # Anyone with the link gets that progress and play log; the id is a random UUID.
 PLAYER_ID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
-PROGRESS_KEY = re.compile(r"unblock-me:(v\d+:(seed|moved|history|goal|rooms|seen)|tries|walls|camera|rooms-made|detail|log)")
+PROGRESS_KEY = re.compile(r"unblock-me:(v\d+:(seed|moved|history|goal|rooms|seen)|tries|walls|camera|rooms-made|detail|log|debug|fps|border)")
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
@@ -84,7 +85,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_error(507)
             return
         # Written whole, then renamed into place: GET /progress never reads half an upload.
-        part = PLAY_DATA / f".{name}.part"
+        # A unique temporary name: two uploads from one device at once must not share it.
+        part = PLAY_DATA / f".{name}.{os.getpid()}.{threading.get_ident()}.part"
         part.write_bytes(body)
         os.replace(part, PLAY_DATA / name)
         self.send_response(204)
