@@ -104,7 +104,7 @@ check(await until(async () => (await uploaded(id))?.sentAt !== before), "hiding 
 // --- The server hands back only the progress, and only for a well-formed existing id.
 const got = await fetch(`${root}progress?p=${id}`).then((r) => r.json());
 const keys = Object.keys(got.stored);
-check(keys.includes("unblock-me:v13:goal") && keys.includes("unblock-me:log") && !keys.includes("unblock-me:device") && !keys.includes("unblock-me:fps") && !("userAgent" in got), `GET /progress returns the progress keys only (${keys.length} keys)`);
+check(keys.includes("unblock-me:v13:goal") && keys.includes("unblock-me:log") && !keys.includes("unblock-me:device") && !("userAgent" in got), `GET /progress returns the progress keys (and debug settings) only (${keys.length} keys)`);
 const statuses = await Promise.all([crypto.randomUUID(), "../play-data/x", "4bf17ee7"].map((p) => fetch(`${root}progress?p=${encodeURIComponent(p)}`).then((r) => r.status)));
 check(statuses.every((s) => s === 404), `an unknown or malformed id gets 404 (${statuses})`);
 

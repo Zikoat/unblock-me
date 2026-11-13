@@ -9,9 +9,9 @@ test("only well-formed ids are carried", () => {
   expect(isPlayerId(null)).toBe(false);
 });
 
-test("progress keys are the world and the log, not the browser's settings", () => {
-  for (const key of ["unblock-me:v13:goal", "unblock-me:v13:moved", "unblock-me:v14:seed", "unblock-me:log", "unblock-me:rooms-made", "unblock-me:camera"]) expect(isProgressKey(key)).toBe(true);
-  for (const key of ["unblock-me:device", "unblock-me:fps", "unblock-me:debug", "unblock-me:border", "unblock-me:view-check", "other:v13:goal"]) expect(isProgressKey(key)).toBe(false);
+test("progress keys are the world, the log and the player's debug settings, not the device id", () => {
+  for (const key of ["unblock-me:v13:goal", "unblock-me:v13:moved", "unblock-me:v14:seed", "unblock-me:log", "unblock-me:rooms-made", "unblock-me:camera", "unblock-me:fps", "unblock-me:debug", "unblock-me:border"]) expect(isProgressKey(key)).toBe(true);
+  for (const key of ["unblock-me:device", "unblock-me:view-check", "other:v13:goal"]) expect(isProgressKey(key)).toBe(false);
 });
 
 test("the server returns the same keys", () => {
