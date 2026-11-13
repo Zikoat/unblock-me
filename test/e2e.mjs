@@ -134,11 +134,11 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
 
   // Random layout with the UI blocks in the middle.
   await fresh();
-  check(await page.evaluate(() => document.body.innerText.trim() === "" && getComputedStyle(document.querySelector("#fps")).display === "none"), "no text on the page: the fps counter starts off");
+  check(await page.evaluate(() => document.body.innerText.replace(/Level \d+$/, "").trim() === "" && getComputedStyle(document.querySelector("#fps")).display === "none"), "no text on the page: the fps counter starts off");
   // The fps toggle shows and hides the counter.
   await tap(cell(-0.5, 3.5));
   await pass(page, 100);
-  const text = await page.evaluate(() => document.body.innerText.trim());
+  const text = await page.evaluate(() => document.body.innerText.replace(/\s*Level \d+$/, "").trim()); // (the goal's number aside)
   check(/^\d+fps · \d+[smhd] · [0-9a-f]{7,}\+? · ♪ [a-z]+\nwon 0 · (ramp 4|aim 5\+0 · rooms \d+\/\d+)\ndev [a-z]+ [a-z]+ \d\d · fp ([a-z]+ [a-z]+ \d\d|…)\nmaker (idle|making e\d \d+s|ready \d+mv [\d.]+) ahead \S.*$/.test(text), `the fps toggle shows the debug counter, four short lines: fps, build age, commit and sound; world goals won and the pacing's aim; this browser's device and fingerprint names; what the goal makers are doing ("${text}")`);
   const box = await page.evaluate(() => { const r = document.querySelector("#fps").getBoundingClientRect(); return { w: r.width, h: r.height }; });
   check(box.h < 70 && box.w < 340, `and it stays small on a phone (${Math.round(box.w)}x${Math.round(box.h)} px)`);
@@ -918,6 +918,7 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
   }
   check(await page.evaluate(() => unblock.scene.done.length === 1), "its proof's moves reach the goal");
   check(await page.evaluate(() => unblock.numbers()) === null, "its red block shows no world goal's number (only in the world)");
+  check(await page.evaluate(() => document.querySelector("#goalno").hidden), "nor a level number at the top right");
   const keys = await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("unblock-me:")));
   check(keys.length === 0, `and nothing is stored on a trial (${keys.join() || "nothing"})`);
   await pass(page, 200);
@@ -1181,6 +1182,8 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
   const numbers = await page.evaluate(() => unblock.numbers());
   check(numbers?.length === 26 && numbers[0][0] === "old 0" && numbers.at(-1)[1] === 26 && !numbers.some(([id]) => id.startsWith("isle ") || id === "old travel"), `a save's world goals are numbered from its done list, island and travel goals left out (${numbers?.length} numbered)`);
   const goal = await page.evaluate(() => unblock.scene.goal);
+  const label = () => page.evaluate(() => { const e = document.querySelector("#goalno"); return e.hidden ? null : e.textContent; });
+  check(!goal.travel && (await label()) === "Level 27", `the world goal being played shows its number at the top right (${await label()})`);
   for (const m of goal.solution) {
     const b = await page.evaluate((id) => unblock.scene.layout.byId(id), m.id);
     const mid = { x: (m.from.x + m.to.x + b.w) / 2, y: (m.from.y + m.to.y + b.h) / 2 };
@@ -1216,6 +1219,8 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
   for (let t = 0; t < 60 && !(await page.evaluate(() => unblock.scene.goal)); t++) await Promise.all([pass(page, 250), page.waitForTimeout(250)]);
   const kept = await whiteOnRed(1);
   check(kept > 100, `and still after a reload (${kept} white px)`);
+  const next = await page.evaluate(() => unblock.scene.goal);
+  check((await label()) === (next.travel ? null : "Level 28"), `the next goal shows Level 28, or nothing for a travel goal (${next.travel ? "travel" : "world"}: ${await label()})`);
   await page.screenshot({ path: shots + "phone-7e-world-number.png" });
   const far1 = await whiteOnRed(0.25);
   check(far1 === 0, `zoomed far out it is left out, too small to read (${far1} white px)`);

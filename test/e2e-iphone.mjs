@@ -181,6 +181,31 @@ const box = await full.evaluate(() => {
 check(box.canvas.join() === "0,0,402,874" && box.scene.join() === "402,874", `the board fills the whole screen (canvas ${box.canvas}, drawn ${box.scene})`);
 check(box.fpsTop >= 62 && box.safe.top === 62 && box.safe.bottom === 34, `the debug box keeps below the notch (top ${box.fpsTop}), the game knows the insets (${JSON.stringify(box.safe)})`);
 await full.screenshot({ path: shots + "iphone-full-screen.png" });
+// The world goal's number, top right: below the notch, clear of the debug box.
+const no = await full.evaluate(() => {
+  const g = document.querySelector("#goalno"), r = g.getBoundingClientRect(), f = document.querySelector("#fps").getBoundingClientRect();
+  return { text: g.hidden ? null : g.textContent, r: [r.left, r.top, r.right, r.bottom], clear: r.left >= f.right || r.top >= f.bottom };
+});
+check(no.text === "Level 1" && no.r[1] >= 62 && no.r[2] <= 402 && no.clear, `the level number shows top right, below the notch and clear of the debug box (${no.text} at ${no.r.map(Math.round)})`);
+await full.screenshot({ path: shots + "iphone-level-number.png" });
+// A pin that would sit under it moves out: the board far up and right, the red block's pin in
+// the top right corner.
+await full.evaluate(() => {
+  const c = unblock.scene.camera;
+  unblock.scene.camera = { ...c, offsetX: c.offsetX + 3000, offsetY: c.offsetY - 3000 };
+  unblock.redraw();
+});
+await full.waitForTimeout(200);
+const corner = await full.evaluate(() => ({ pin: unblock.pins().red, r: document.querySelector("#goalno").getBoundingClientRect().toJSON() }));
+const p = corner.pin, r = corner.r;
+check(p && (p.x + 13 <= r.left || p.y - 13 >= r.bottom), `a pin in the top right corner keeps clear of it (pin ${p && [p.x, p.y].map(Math.round)}, label ${[r.left, r.bottom].map(Math.round)})`);
+await full.screenshot({ path: shots + "iphone-level-number-pin.png" });
+await full.evaluate(() => {
+  const c = unblock.scene.camera;
+  unblock.scene.camera = { ...c, offsetX: c.offsetX - 3000, offsetY: c.offsetY + 3000 };
+  unblock.redraw();
+});
+await full.waitForTimeout(200);
 // Pins keep clear of the notch and home bar: the board moved far down, the red block's pin
 // sits at the bottom, above the home bar.
 await full.evaluate(() => {

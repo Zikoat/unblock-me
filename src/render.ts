@@ -1115,6 +1115,20 @@ function edgeArrow(scene: Scene, target: ScreenRect): EdgeArrow | null {
 /** Both edge pins; when they would overlap, they step apart along the edge they sit on. */
 function pins(scene: Scene): { ui: EdgeArrow | null; red: EdgeArrow | null } {
   if (scene.locked) return { ui: null, red: null };
+  const both = pinsApart(scene);
+  return { ui: clearOf(scene, both.ui), red: clearOf(scene, both.red) };
+}
+
+/** A pin moved out from under the screen's label (scene.keepOut), the shorter way: down below
+ * it or left of it (the label sits top right). */
+function clearOf(scene: Scene, a: EdgeArrow | null): EdgeArrow | null {
+  const r = scene.keepOut, c = 20; // a pin's radius and a little
+  if (!a || !r || a.x + c <= r.left || a.x - c >= r.right || a.y + c <= r.top || a.y - c >= r.bottom) return a;
+  const down = r.bottom + c - a.y, left = a.x - (r.left - c);
+  return down <= left ? { ...a, y: a.y + down } : { ...a, x: a.x - left };
+}
+
+function pinsApart(scene: Scene): { ui: EdgeArrow | null; red: EdgeArrow | null } {
   const ui = uiArrowAlone(scene), red = redArrowAlone(scene);
   if (!ui || !red) return { ui, red };
   const apart = 40;

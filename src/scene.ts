@@ -39,6 +39,8 @@ export type Scene = {
   /** CSS px at each screen edge under a notch, rounded corner or home bar (iPhone): the board
    * is drawn there, but pins and the toolbar keep out. */
   safe?: { top: number; right: number; bottom: number; left: number };
+  /** A label on the screen the pins keep clear of (the goal's number, top right), in CSS px. */
+  keepOut?: { left: number; top: number; right: number; bottom: number } | null;
   /** Set while an island square is played: its cells (the square in its walls, and its
    * bay). The view is fixed (no panning or zooming, no edge pins), everything else is greyed
    * out, and touches there do nothing. */

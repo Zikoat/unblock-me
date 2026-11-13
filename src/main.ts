@@ -1617,6 +1617,7 @@ function showFps(now: number): void {
     `won ${worldGoals()} · ${withRooms && !placed ? `aim ${p.fewest}+${p.extra}${p.spike ? "↑" : p.easy ? "↓" : ""} · rooms ${stamps.length}/${made.rooms.length}` : `ramp ${target ?? "none"}`}${lastWait === null ? "" : ` · wait ${(lastWait / 1000).toFixed(1)}s`}`,
     `dev ${storedName()} · fp ${printName}`,
   ].join("\n");
+  if (scene.keepOut) showGoalNumber(); // (the box may have grown under the goal's number)
 }
 setInterval(() => showFps(performance.now()), 500);
 
@@ -1738,8 +1739,35 @@ function advance(now: number): ReturnType<typeof sliding> {
     return moving;
 }
 
+/** The world goal being played's number at the top right, the one its red block shows once
+ * reached (the world goals done + 1). Only while a world goal is played: not on the island, a
+ * shared board, the testbed or a trial, and not for a travel goal (it gets no number). Below
+ * the debug box when they would overlap; the pins keep clear of it (scene.keepOut). */
+const goalNo = document.querySelector<HTMLElement>("#goalno")!;
+function showGoalNumber(): void {
+  const goal = scene.goal, on = !!goal && !shared && isWorldGoal(goal);
+  goalNo.hidden = !on;
+  if (!on) {
+    scene.keepOut = null;
+    return;
+  }
+  const text = `Level ${worldGoals() + 1}`;
+  if (goalNo.textContent !== text) goalNo.textContent = text;
+  goalNo.style.marginTop = "";
+  let r = goalNo.getBoundingClientRect();
+  if (fps.style.display !== "none") {
+    const f = fps.getBoundingClientRect();
+    if (f.right + 6 > r.left && f.bottom > r.top) {
+      goalNo.style.marginTop = `${f.bottom + 6 - r.top}px`;
+      r = goalNo.getBoundingClientRect();
+    }
+  }
+  scene.keepOut = { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+}
+
 /** Draw the board as it is at `now` (on `to`, the screen's canvas by default). */
 function paint(now: number, moving: ReturnType<typeof sliding>, to: HTMLCanvasElement = canvas, trace?: TraceEntry[]): void {
+    if (to === canvas) showGoalNumber();
     timedFrame(to.getContext("2d")!, () =>
       draw(to, scene, {
         fullscreen: fullscreenElement() !== null,
