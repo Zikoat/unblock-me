@@ -124,7 +124,9 @@ const hadDevice = (() => {
     return false;
   }
 })();
-const carried: Carried | null = shared ? null : await carryFromUrl(GOAL_KEY);
+// ?carry=0 turns it off (no id put in the URL, none taken from it), to test the loss it fixes.
+const noCarry = new URLSearchParams(location.search).get("carry") === "0";
+const carried: Carried | null = shared || noCarry ? null : await carryFromUrl(GOAL_KEY);
 // Set by a reset: from then on this page stores nothing.
 let forgetting = false;
 
@@ -284,7 +286,7 @@ const device = (() => {
 })();
 // The player's id in the URL at once (src/carry.ts), so "Open in Safari" carries it.
 // (Not when the URL's player couldn't be fetched: a reload tries again.)
-const idPutInUrl = !shared && carried?.e !== "restoreFailed" && showIdInUrl(device);
+const idPutInUrl = !shared && !noCarry && carried?.e !== "restoreFailed" && showIdInUrl(device);
 function upload(): Promise<boolean> {
   unsent = 0;
   return trial ? sendTrialData() : sendPlayData(true);
