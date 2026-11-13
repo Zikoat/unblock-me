@@ -161,6 +161,14 @@ test("a device's room k is the same room everywhere, and exact", () => {
   expect([c.exact, c.fewest, c.extra]).toEqual([true, a.room!.f, a.room!.e]);
 }, 60_000);
 
+test("a device's room maker stopped part way goes on from its last failed try to the same room", () => {
+  const failed: number[] = [];
+  const whole = makeRoom(4, 30, 1, (t) => failed.push(t));
+  expect(whole.tries).toBeGreaterThan(1);
+  expect(failed).toEqual([...Array(whole.tries - 1).keys()].map((i) => i + 1));
+  expect(JSON.stringify(makeRoom(4, 30, whole.tries).room)).toBe(JSON.stringify(whole.room));
+}, 60_000);
+
 test("a room is stamped only on unseen ground: nothing in view changes, nothing beyond its reach", () => {
   const layout = randomLayout(world.seed, { tries: world.tries, walls: world.walls, ...world.ui });
   const cells = (l: ReturnType<typeof randomLayout>, r: { x: number; y: number; width: number; height: number }) => {

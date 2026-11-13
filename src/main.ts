@@ -187,6 +187,8 @@ type LogEvent =
   // A room this device made in the background (src/room-worker.ts): its number, fewest and extra
   // moves, how long it took and how many random rooms it tried.
   | { e: "roomMade"; k: number; f?: number; x?: number; ms: number; tries: number }
+  // The room maker stopped as the player waited for a goal, making room k (from its try `from`).
+  | { e: "roomPaused"; k: number; from: number }
   // The view (see View), when it changed meaningfully and settled (at most every VIEW_EVERY_MS).
   | ({ e: "view" } & View)
   // World cells that changed without a move (a stamp, a reload): how many, how many on screen
@@ -328,7 +330,7 @@ const storedRooms = load<{ seed: number; tries: number; walls: number; stamps: S
 /** The rooms stamped into this world so far (src/rooms.ts), oldest first. */
 let stamps: Stamp[] = storedRooms && storedRooms.seed === seed && storedRooms.tries === tries && storedRooms.walls === walls ? storedRooms.stamps : [];
 /** Rooms this device made in the background (src/room-worker.ts), and the next one's number. */
-const made = load<{ next: number; rooms: Room[] }>(MADE_KEY, { next: 0, rooms: [] });
+const made = load<{ next: number; from?: number; rooms: Room[] }>(MADE_KEY, { next: 0, rooms: [] });
 /** The world's tiles the player has seen (rooms.ts SEEN_TILE), with the view and VIEW_MARGIN
  * round it: no stamp changes a cell there. Kept for the seed. */
 const storedSeen = load<{ seed: number; tiles: string[] } | null>(SEEN_KEY, null);
@@ -476,6 +478,7 @@ const makers = [0, 1].map(() => ({ making: { is: "idle" } as Making, pending: 0 
 const makerRows = [...document.querySelectorAll<HTMLElement>("#makers > div")];
 /** A maker was asked for a goal (`again`: after one that broke this rule). */
 function asking(k: number, to: Worker, request: GoalRequest, again?: number): void {
+  if (k === 0) pauseRooms(); // (the player waits for this one)
   to.postMessage(request);
   makers[k]!.pending++;
   setMaking(k, { is: "working", level: request.level ?? 1, since: performance.now(), again });
@@ -753,7 +756,10 @@ ahead.worker.onmessage = (event: MessageEvent<Reply>) => {
 };
 // The room maker (src/room-worker.ts): one room at a time in the background, whenever neither
 // goal maker is busy and the page shows, ROOM_PAUSE_MS apart, up to MADE_MAX rooms kept. Room
-// k is the same on every device. Its rooms join the library's for the next goals.
+// k is the same on every device. Its rooms join the library's for the next goals. Whenever the
+// player waits for a goal it stops at once (pauseRooms: on a phone it slowed the goal they
+// waited for), and goes on later from the try it had got to. (Not for a goal made ahead while
+// they play: a room takes a phone half a minute or more, and goals come faster than that.)
 const MADE_MAX = 200, ROOM_PAUSE_MS = 3000;
 let roomWorker: Worker | null = null, roomBusy = false;
 function makeRoomWhenIdle(): void {
@@ -761,20 +767,37 @@ function makeRoomWhenIdle(): void {
   if (document.hidden || placed || makers.some((m) => m.pending > 0)) return void setTimeout(makeRoomWhenIdle, ROOM_PAUSE_MS);
   roomWorker ??= new Worker("room-worker.js");
   roomBusy = true;
-  roomWorker.onmessage = (event: MessageEvent<{ k: number; room: Room | null; tries: number; ms: number }>) => {
+  roomWorker.onmessage = (event: MessageEvent<{ k: number; failed: number } | { k: number; room: Room | null; tries: number; ms: number }>) => {
+    if ("failed" in event.data) {
+      made.from = event.data.failed + 1;
+      return keepMade();
+    }
     const { k, room, tries: t, ms } = event.data;
     roomBusy = false;
     made.next = k + 1;
+    delete made.from;
     if (room) made.rooms.push(room);
     if (!placed) log({ e: "roomMade", k, ...(room && { f: room.f, x: room.e }), ms, tries: t });
-    try {
-      if (!forgetting) localStorage.setItem(MADE_KEY, JSON.stringify(made));
-    } catch {
-      // No storage: the rooms last as long as the page.
-    }
+    keepMade();
     setTimeout(makeRoomWhenIdle, ROOM_PAUSE_MS);
   };
-  roomWorker.postMessage({ k: made.next });
+  roomWorker.postMessage({ k: made.next, from: made.from ?? 1 });
+}
+function keepMade(): void {
+  try {
+    if (!forgetting) localStorage.setItem(MADE_KEY, JSON.stringify(made));
+  } catch {
+    // No storage: the rooms last as long as the page.
+  }
+}
+/** The player waits for a goal: the room maker stops (its worker ended; a new one goes on later). */
+function pauseRooms(): void {
+  if (!roomBusy) return;
+  roomWorker?.terminate();
+  roomWorker = null;
+  roomBusy = false;
+  if (!placed) log({ e: "roomPaused", k: made.next, from: made.from ?? 1 });
+  setTimeout(makeRoomWhenIdle, ROOM_PAUSE_MS);
 }
 setTimeout(makeRoomWhenIdle, 5000);
 
