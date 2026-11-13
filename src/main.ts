@@ -31,6 +31,7 @@ import { fixedLayout, type Layout, MAX_TRIES, MAX_WALLS, MIN_TRIES, randomLayout
 import { CARD, CUE_MS, draw, fading, islandCardRect, resetFades, RIPPLE_MS, SHAKE_MS, THROB_MS, redArrow, uiArrow, type Sparkle } from "./render";
 import { ease, slideDuration } from "./slide";
 import { blockAt, blocksIn, slideRange, type Changes, type Move } from "./rules";
+import { carryFromUrl, dropIdFromUrl, showIdInUrl, type Carried } from "./carry";
 import { borderOnScreen, goalSolved, latticeRect, newScene, quickPush, record, relayout, resize, restart, undo, visibleBlocks, whereIs } from "./scene";
 
 // v13: several goals in every square from level 7, the last one with its exit shut, the island reordered; v12 bay goals first, a few squares with goals inside later; v11 teaching squares first, of several sizes; v10 varied island squares; v9 a slower island ramp; v8 harder island squares (their
@@ -113,6 +114,17 @@ const NEXT_TRIAL_MS = 6000;
 // ?board=<JSON list of placed blocks> opens exactly that board (for sharing a board, and
 // for tests). Nothing is stored while it is open (nor on the testbed or a trial).
 const shared = new URLSearchParams(location.search).get("board") ?? (testbed ? JSON.stringify(TESTBED.blocks) : trial ? JSON.stringify(trial.blocks) : null);
+// ?p=<device id> carries the player from browser to browser (src/carry.ts): before anything
+// is read from storage, a page whose URL names another player takes over that player's
+// progress from the server. Not on a shared board, the testbed or a trial.
+const hadDevice = (() => {
+  try {
+    return localStorage.getItem(DEVICE_KEY) !== null;
+  } catch {
+    return false;
+  }
+})();
+const carried: Carried | null = shared ? null : await carryFromUrl(GOAL_KEY);
 // Set by a reset: from then on this page stores nothing.
 let forgetting = false;
 
@@ -214,6 +226,9 @@ type LogEvent =
   // The page opened: whether this browser's storage was empty (no device id: progress lost or
   // a new player), its fingerprint (src/identity.ts), and how it was opened.
   | { e: "open"; fresh: boolean; print: string; name: string; standalone: boolean; referrer: string; search: string }
+  // The player's id was put in the URL (src/carry.ts), and what a URL naming a player did.
+  | { e: "idInUrl"; id: string }
+  | Carried
   | { e: "density"; from: number; to: number; goal: string | null }
   | { e: "walls"; from: number; to: number; goal: string | null };
 const LOG_MAX = 3000;
@@ -258,7 +273,7 @@ const device = (() => {
   if (shared) return "";
   try {
     const stored = localStorage.getItem(DEVICE_KEY);
-    freshStorage = stored === null;
+    freshStorage = !hadDevice;
     const id = stored ?? crypto.randomUUID();
     localStorage.setItem(DEVICE_KEY, id);
     return id;
@@ -267,15 +282,28 @@ const device = (() => {
     return crypto.randomUUID();
   }
 })();
+// The player's id in the URL at once (src/carry.ts), so "Open in Safari" carries it.
+// (Not when the URL's player couldn't be fetched: a reload tries again.)
+const idPutInUrl = !shared && carried?.e !== "restoreFailed" && showIdInUrl(device);
 function upload(): Promise<boolean> {
   unsent = 0;
   return trial ? sendTrialData() : sendPlayData(true);
 }
 const trialUrl = () => `play-data?device=${device}&trial=${trial!.label}&session=${trialSession}`;
-addEventListener("pagehide", () => {
+// Sent as the page goes, and as it hides: leaving Telegram's browser for Safari only hides it,
+// and the page there asks for this upload (src/carry.ts). A beacon holds 64 kB at most; a
+// bigger upload goes by fetch while the page still runs.
+function sendOnLeave(): void {
   if (trial && unsent) navigator.sendBeacon(trialUrl(), new Blob([JSON.stringify(trialData())], { type: "application/json" }));
-  else if (unsent && !shared && !forgetting) navigator.sendBeacon(`play-data?device=${device}`, new Blob([JSON.stringify(playData())], { type: "application/json" }));
-});
+  else if (unsent && !shared && !forgetting) {
+    save();
+    unsent = 0;
+    const body = JSON.stringify(playData());
+    if (!navigator.sendBeacon(`play-data?device=${device}`, new Blob([body], { type: "application/json" }))) void fetch(`play-data?device=${device}`, { method: "POST", headers: { "Content-Type": "application/json" }, body }).catch(() => {});
+  }
+}
+addEventListener("pagehide", sendOnLeave);
+document.addEventListener("visibilitychange", () => document.hidden && sendOnLeave());
 /** How the move a gesture is recording was made (see Gestures' onInput); logged with it. */
 let input: Input | null = null;
 /** History entries already in the log (set once the stored history is loaded). */
@@ -994,6 +1022,8 @@ function reachGoal(now: number): void {
   if (trial?.next) setTimeout(() => location.replace(`?trial=${trial.next}`), NEXT_TRIAL_MS);
   scene.done.push(goal);
   scene.goal = null;
+  // Sent at once, so the progress another browser may take over (?p=, src/carry.ts) is fresh.
+  if (!trial && !shared) void upload();
   // The way it slid in, for the landing's squash and jolt.
   const last = scene.history.at(-1);
   const dir = last?.id === goal.id ? { x: Math.sign(last.to.x - last.from.x), y: Math.sign(last.to.y - last.from.y) } : { x: 0, y: 0 };
@@ -1225,7 +1255,10 @@ Object.assign(window, {
     detailStep: () => detailStep,
     undo: () => takeBack(),
     /** Forget everything stored, like the reset block but without reloading (for tests). */
-    forget: () => forget(),
+    forget: () => {
+      forget();
+      dropIdFromUrl(); // (a new player: the reset block keeps the device id, this doesn't)
+    },
     playLog,
     /** Frames drawn while recording: when, and where the sliding block was drawn. */
     frames: null as { t: number; x: number; y: number }[] | null,
@@ -1437,6 +1470,8 @@ void fingerprint().then((p) => {
   printName = nameOf(p);
   if (shared && !trial) return;
   log({ e: "open", fresh: freshStorage, print, name: printName, standalone: matchMedia("(display-mode: standalone)").matches, referrer: document.referrer, search: location.search });
+  if (carried) log(carried);
+  if (idPutInUrl) log({ e: "idInUrl", id: device });
   void upload();
 });
 function storedName(): string {

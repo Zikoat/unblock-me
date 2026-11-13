@@ -5,18 +5,50 @@ import datetime
 import functools
 import http.server
 import json
+import os
 import pathlib
 import re
 import urllib.parse
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-PLAY_DATA = ROOT / "play-data"
+# (Tests run it on a free port, over dist/ and an empty play-data folder.)
+PORT = int(os.environ.get("PORT", "8080"))
+PUBLIC = pathlib.Path(os.environ.get("PUBLIC_DIR", ROOT / "public"))
+PLAY_DATA = pathlib.Path(os.environ.get("PLAY_DATA_DIR", ROOT / "play-data"))
 MAX_UPLOAD = 8_000_000  # bytes per upload (the stored rooms made uploads pass 1 MB)
 MAX_FILES = 500  # uploads kept, all devices together
 MAX_TOTAL = 200_000_000  # bytes kept
 
 
+# A player's progress, for another browser opened with ?p=<id> (src/carry.ts): only these keys
+# of the device's last upload (isProgressKey there), and only for a well-formed existing id.
+# Anyone with the link gets that progress and play log; the id is a random UUID.
+PLAYER_ID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+PROGRESS_KEY = re.compile(r"unblock-me:(v\d+:(seed|moved|history|goal|rooms|seen)|tries|walls|camera|rooms-made|detail|log)")
+
+
 class Handler(http.server.SimpleHTTPRequestHandler):
+    def do_GET(self) -> None:
+        path, _, query = self.path.partition("?")
+        if path != "/progress":
+            return super().do_GET()
+        device = urllib.parse.parse_qs(query).get("p", [""])[0]
+        file = PLAY_DATA / f"device-{device}.json"
+        if not PLAYER_ID.fullmatch(device) or not file.is_file():
+            self.send_error(404)
+            return
+        try:
+            stored = json.loads(file.read_bytes()).get("stored") or {}
+        except (ValueError, AttributeError):
+            self.send_error(503)  # unreadable: not "no such player", so the page doesn't take the id
+            return
+        body = json.dumps({"stored": {k: v for k, v in stored.items() if PROGRESS_KEY.fullmatch(k)}}).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_POST(self) -> None:
         # The game's play data: automatic uploads name their device and replace its last
         # upload; the upload block's each get a new file; a trial's name the trial too.
@@ -51,7 +83,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if not (PLAY_DATA / name).exists() and (len(files) >= MAX_FILES or sum(f.stat().st_size for f in files) + length > MAX_TOTAL):
             self.send_error(507)
             return
-        (PLAY_DATA / name).write_bytes(body)
+        # Written whole, then renamed into place: GET /progress never reads half an upload.
+        part = PLAY_DATA / f".{name}.part"
+        part.write_bytes(body)
+        os.replace(part, PLAY_DATA / name)
         self.send_response(204)
         self.end_headers()
 
@@ -97,5 +132,5 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             left -= len(chunk)
 
 
-handler = functools.partial(Handler, directory=str(ROOT / "public"))
-http.server.ThreadingHTTPServer(("0.0.0.0", 8080), handler).serve_forever()
+handler = functools.partial(Handler, directory=str(PUBLIC))
+http.server.ThreadingHTTPServer(("0.0.0.0", PORT), handler).serve_forever()

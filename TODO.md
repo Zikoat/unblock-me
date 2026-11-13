@@ -21,7 +21,6 @@ In approximate priority order, highest first; the middle ones are not ordered am
 - Log each goal's proof and measured difficulty, and page hides; waits on you picking it.
 - Undo a reached goal: rewind to where its moves started counting and replay it for a better score; waits on you picking it.
 - Undo during a goal (or undoing the goal) loses the medal (shown faded) and is stored with the goal; waits on you picking it.
-- Progress across browsers: on Android, Telegram's in-app browser, Chrome and the installed app share storage (tested 2026-11-12, ~/unblock-me-lab/research/identity-test.md); other browsers, devices and incognito start fresh, and progress must never come back from the fingerprint. Intended fix where needed: on entry redirect to a URL with a temporary user id whose progress lives on the server, until a later login; waits on the iPhone test (steps in that file) and the server.
 - The multiplayer server, the home and offline islands (reports/one-engine.html); waits on the features settling.
 - Group picture puzzles in Telegram (your idea): a picture made of 2x1 blocks, scrambled by legal moves, solved together by a group, everyone seeing each other; waits on the multiplayer server and a Telegram mini app.
 - A block exactly on the goal rarer early on (subject b thought it impossible); mostly superseded by the teaching squares; waits on them.

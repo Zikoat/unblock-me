@@ -5,6 +5,11 @@ post-commit hook (scripts/install-hooks.sh, scripts/publish.sh) and served by
 scripts/serve-public.py (unblock-me-public.service, port 8080), which also takes the play
 data uploads into play-data/. Open games reload themselves when a new build is published.
 
+The player travels in the URL: a game page gets `?p=<its device id>` (a random UUID), so
+opening it in another browser (Telegram's "Open in Safari") goes on with the same progress,
+fetched from the server's `GET /progress?p=<id>` (src/carry.ts). Anyone with that link gets
+that progress and play log; fine for a game, there is no sign-in.
+
 `bun run build` builds dist/ for the end-to-end test (`bun run e2e`).
 
 Goal makers are judged on the Bench (reports/goal-spec.md): `bun bench/run.ts --maker
