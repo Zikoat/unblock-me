@@ -1262,6 +1262,61 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
   await page.close();
 }
 
+// --- The game never sits without a goal: with none for 20 s (here the maker's goal rejected
+// twice, taken as none found), it logs `stuck` and the maker makes one the old way.
+{
+  const page = await clocked(await browser.newPage({ viewport: { width: 1280, height: 800 } }));
+  await page.goto(url);
+  await page.evaluate(() => { unblock.forget(); localStorage.setItem("unblock-me:v13:seed", "20261108"); });
+  await page.goto(url);
+  await frame(page);
+  await page.evaluate(() => unblock.goalReady());
+  const near = await page.evaluate(() => unblock.scene.goal.target);
+  const since = async (n, e) => (await page.evaluate((n) => unblock.playLog.slice(n), n)).filter((x) => x.e === e);
+  const until = async (ok) => { for (let t = 0; t < 120 && !(await ok()); t++) await Promise.all([pass(page, 250), page.waitForTimeout(250)]); };
+  const logged = await page.evaluate(() => unblock.playLog.length);
+  await page.evaluate((near) => { unblock.tamper((g) => g.solution.pop(), 2, "maker"); unblock.requestGoal(near); }, near);
+  await until(async () => (await since(logged, "rejected")).length >= 2);
+  await pass(page, 1000);
+  const none = await page.evaluate(() => unblock.scene.goal);
+  await pass(page, 20000);
+  await until(async () => (await since(logged, "goal")).length > 0);
+  const [stuckAt] = await since(logged, "stuck"), [unstuck] = await since(logged, "goal");
+  check(none === null && stuckAt?.ms === 20000 && stuckAt.maker === "rejected" && unstuck?.how === "maker" && !!(await page.evaluate(() => unblock.scene.goal)), `with no goal for 20 s it logs stuck (maker ${stuckAt?.maker}) and the maker's goal comes (${unstuck?.id}, ${unstuck?.how})`);
+  await page.close();
+}
+
+// --- Progress carried in by ?p= (src/carry.ts) has the device's rooms only by id and numbers
+// (uploads leave the rest out): a player whose island was done got no world goal, as the goal
+// workers broke on them (test/fixtures/stuck-after-island.json, from that player's upload). Now
+// only whole rooms are kept (the rest made again), and that saved state gets its world goal.
+{
+  const saved = JSON.parse(await readFile(new URL("./fixtures/stuck-after-island.json", import.meta.url), "utf8")).stored;
+  const seedWith = async (page, stored) => {
+    await page.goto(root);
+    await page.evaluate((stored) => { unblock.forget(); for (const [k, v] of Object.entries(stored)) localStorage.setItem(k, JSON.stringify(v)); }, stored);
+    await page.goto(root);
+    await frame(page);
+  };
+  const logOf = (page) => page.evaluate(() => unblock.playLog.slice(unblock.playLog.findLastIndex((e) => e.e === "load")));
+  const wholeRooms = (page) => page.evaluate(() => JSON.parse(localStorage.getItem("unblock-me:rooms-made")).rooms.every((r) => r && !Array.isArray(r) && typeof r.id === "string"));
+  let page = await clocked(await browser.newPage({ viewport: { width: 436, height: 817 }, hasTouch: true }));
+  await seedWith(page, saved);
+  for (let t = 0; t < 60 && !(await page.evaluate(() => unblock.scene.goal)); t++) await Promise.all([pass(page, 250), page.waitForTimeout(250)]);
+  let goal = await page.evaluate(() => unblock.scene.goal), log = await logOf(page);
+  check(!!goal && !goal.id.startsWith("isle ") && !log.some((e) => e.e === "error" || e.e === "stuck") && (await wholeRooms(page)), `the stuck player's saved state gets a world goal on reload (${goal?.id}; ${log.filter((e) => e.e === "error" || e.e === "stuck").map((e) => e.message ?? e.e).join(", ") || "no errors"})`);
+  await page.close();
+  // Carried in on the island's first square: the world's first goal is made ahead while the
+  // island is played, without breaking.
+  page = await clocked(await browser.newPage({ viewport: { width: 436, height: 817 }, hasTouch: true }));
+  await seedWith(page, { "unblock-me:rooms-made": saved["unblock-me:rooms-made"] });
+  for (let t = 0; t < 120 && !(await page.evaluate(() => unblock.ahead().ready)); t++) await Promise.all([pass(page, 250), page.waitForTimeout(250)]);
+  const ahead = await page.evaluate(() => unblock.ahead());
+  log = await logOf(page);
+  check(ahead.for === "first" && !!ahead.ready?.id && !log.some((e) => e.e === "error") && (await wholeRooms(page)), `carried in on the island, the world's first goal is made ahead without breaking (${ahead.ready?.id}; ${log.filter((e) => e.e === "error").map((e) => e.message).join(", ") || "no errors"}; for ${ahead.for})`);
+  await page.close();
+}
+
 await browser.close();
 server.close();
 console.log(failures ? `\n${failures} failed` : "\nall passed");

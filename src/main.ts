@@ -24,7 +24,7 @@ import { OPEN_TRIALS_J } from "./trials-open-j";
 import { OPEN_TRIALS_K } from "./trials-open-k";
 import { ROOM_TRIALS } from "./trials-rooms";
 import { DECOY_TRIALS } from "./trials-decoys";
-import type { Room } from "./room";
+import { isRoom, type Room } from "./room";
 import { pace as roomPace, SEEN_TILE, stampReach, tilesOf } from "./rooms";
 import { bayReached, GATE, GATE_GONE, inIsland, ISLAND_KEEP_OUT, opensGate, isLast, islandCamera, islandGoals, islandRects, nextIslandGoal, squareAt, squareMiddle, squareOf } from "./island";
 import { fixedLayout, type Layout, MAX_TRIES, MAX_WALLS, MIN_TRIES, randomLayout, TRIES, UNIT, uiArea, WALLS, type Placed, type Stamp, type Ui } from "./layout";
@@ -221,6 +221,11 @@ type LogEvent =
   | { e: "panAfterPush"; ms: number }
   // The world's first goal was the one made while the island was played (prefetchFirst).
   | { e: "prefetched" }
+  // No goal for STUCK_MS past the island (see unstick): how long, the how-many-th time, what
+  // the quick way's maker was doing and its requests unanswered, the maker ahead (busy, the
+  // goal it made for, whether the player waited for it, whether a room's, what it made), rooms
+  // held back running, and whether the room maker was busy. The maker's goal is asked for.
+  | { e: "stuck"; ms: number; times: number; maker: string; pending: number; ahead: { busy: boolean; for: string; wanted: boolean; room: boolean; ready: "goal" | "rejected" | "none" | null }; held: number; rooms: boolean }
   | { e: "reached"; id: string; used: number }
   | { e: "reset"; goal: string | null }
   // The page hidden (another tab, the phone locked) and shown again: time away is not thinking.
@@ -362,6 +367,20 @@ const storedRooms = load<{ seed: number; tries: number; walls: number; stamps: S
 let stamps: Stamp[] = storedRooms && storedRooms.seed === seed && storedRooms.tries === tries && storedRooms.walls === walls ? storedRooms.stamps : [];
 /** Rooms this device made in the background (src/room-worker.ts), and the next one's number. */
 const made = load<{ next: number; from?: number; rooms: Room[] }>(MADE_KEY, { next: 0, rooms: [] });
+// Uploads keep these rooms only by id and numbers, so progress carried from the server (?p=,
+// src/carry.ts) has no rooms in them: kept, they broke the goal workers and no world goal came.
+// Only whole rooms are kept; the rest are made again (makeRoomWhenIdle skips those it has).
+const madeRooms: unknown = made.rooms;
+if (!Array.isArray(madeRooms) || !madeRooms.every(isRoom)) {
+  made.rooms = Array.isArray(madeRooms) ? madeRooms.filter(isRoom) : [];
+  made.next = 0;
+  delete made.from;
+  try {
+    localStorage.setItem(MADE_KEY, JSON.stringify(made));
+  } catch {
+    // No storage: kept as long as the page.
+  }
+}
 /** The world's tiles the player has seen (rooms.ts SEEN_TILE), with the view and VIEW_MARGIN
  * round it: no stamp changes a cell there. Kept for the seed. */
 const storedSeen = load<{ seed: number; tiles: string[] } | null>(SEEN_KEY, null);
@@ -552,7 +571,7 @@ setInterval(() => makers.some((m) => m.making.is === "working") && showMaking(),
 
 // Goals are made by a worker: shuffling a dense board can take a second or two. Only the
 // newest request counts; a slider drag or reset in between makes older answers stale.
-const worker = new Worker("goal-worker.js");
+let worker = newGoalWorker();
 let job = 0;
 /** The exact board in play when tests place one; null for the random board. */
 let placed: Placed[] | null = null;
@@ -580,12 +599,12 @@ function requestGoal(near: Point = viewCentre(scene.camera, scene.width, scene.h
   // its room's reach since and its ground is still unseen; the Referee checks it again on the
   // board as it is now. The maker's fits only the board it was made on.)
   const ready = ahead.ready, exact = !!ready && (ready.key === key || ready.key === first);
-  const usable = !!ready && !ready.rejected && (ready.goal?.stamp
+  const usable = !!ready?.goal && !ready.rejected && (ready.goal.stamp
     ? ready.for === follows && roomFits(ready.goal) && (exact || !!checked(ready.goal, { request: asRequest(nowRequest(near, job), scene.done), near, level: 2 }, true).goal)
     : exact);
   if (usable) {
     if (first !== null) log({ e: "prefetched" });
-    showGoal(ready.goal);
+    showGoal(ready!.goal);
     return;
   }
   // (One made ahead that the Referee rejected is asked for again, the quick way, below.)
@@ -654,7 +673,13 @@ function checked(goal: Goal | null, by: Asked | null, again = false): Checked {
 const worldGoals = () => scene.done.filter((g) => squareOf(g) === null).length;
 type Measured = { of: { id: string; target: Point }; difficulty: Difficulty; choices?: number };
 type Reply = { job: number; goal: Goal | null } | ({ job: number } & Measured);
-worker.onmessage = (event: MessageEvent<Reply>) => {
+function newGoalWorker(): Worker {
+  const w = new Worker("goal-worker.js");
+  w.onmessage = madeNow;
+  w.onerror = brokeNow;
+  return w;
+}
+function madeNow(event: MessageEvent<Reply>): void {
   if ("difficulty" in event.data) return measured(event.data);
   if (event.data.job !== job) return answered(0, null);
   const made = checked(event.data.goal, asked);
@@ -668,7 +693,17 @@ worker.onmessage = (event: MessageEvent<Reply>) => {
     return asking(0, worker, sent, made.rule);
   }
   showGoal(made.goal);
-};
+}
+/** A request that broke the quick way's worker (it never answers): asked again once the
+ * maker's way, which stamps no room; broken again, the stuck check (unstick) tries later. */
+function brokeNow(e: ErrorEvent): void {
+  e.preventDefault();
+  log({ e: "error", message: `maker: ${String(e.message).slice(0, 280)}`, where: `${e.filename?.split("/").pop()}:${e.lineno}:${e.colno}` });
+  answered(0, { is: "none" });
+  if (scene.goal || held >= HELD_MAX) return;
+  held = HELD_MAX;
+  requestGoal(lastNear);
+}
 /** A goal's difficulty arrived: it belongs to whichever goal it was measured for. */
 function measured({ of, difficulty, choices }: Measured): void {
   const all = [scene.goal, ahead.ready?.goal, ...scene.done];
@@ -682,6 +717,8 @@ function measured({ of, difficulty, choices }: Measured): void {
 /** When the last world goal was reached, while the next is yet to show (else -1); and how
  * long the last one shown took from it (for the debug text). */
 let reachedAt = -1, lastWait: number | null = null;
+/** Times running the game was stuck without a goal (see unstick). */
+let stuckTimes = 0;
 /** Waiting for the next goal (its finish over) for longer than LOADING_DELAY: the waiting
  * dots show under the last red block (render.ts loading), fading in over LOADING_FADE. */
 const LOADING_DELAY = 300, LOADING_FADE = 200;
@@ -694,6 +731,7 @@ function showGoal(goal: Goal | null): void {
   // went there is held back and made again.
   if (goal?.stamp && stampShows(goal.stamp)) return holdStamp(goal);
   held = 0;
+  if (goal) stuckTimes = 0;
   job++; // anything still on its way is stale
   ahead.wanted = null;
   // Past the island's last square, the view cuts to the world's first red block.
@@ -878,6 +916,7 @@ let roomWorker: Worker | null = null, roomBusy = false;
 function makeRoomWhenIdle(): void {
   if (!withRooms || shared || testbed || trial || roomBusy || forgetting || made.rooms.length >= MADE_MAX) return;
   if (document.hidden || placed || makers.some((m) => m.pending > 0)) return void setTimeout(makeRoomWhenIdle, ROOM_PAUSE_MS);
+  while (made.rooms.some((r) => r.id === `d${made.next}`)) (made.next++, delete made.from);
   roomWorker ??= new Worker("room-worker.js");
   roomBusy = true;
   roomWorker.onmessage = (event: MessageEvent<{ k: number; failed: number } | { k: number; room: Room | null; tries: number; ms: number }>) => {
@@ -913,6 +952,33 @@ function pauseRooms(): void {
   setTimeout(makeRoomWhenIdle, ROOM_PAUSE_MS);
 }
 setTimeout(makeRoomWhenIdle, 5000);
+
+// The game never sits without a goal: past the island, with the page showing and no finish
+// playing, no goal for STUCK_MS means whatever it waited for (the goal made ahead, a worker,
+// a room held back) never came. It is logged as `stuck`, and the maker makes one the old way
+// (no room, on a fresh worker, round the view if it was stuck there before).
+const STUCK_MS = 20_000;
+let noGoalSince: number | null = null;
+function unstick(waited: number): void {
+  const m = makers.map((k) => k.making.is);
+  log({ e: "stuck", ms: Math.round(waited), times: stuckTimes + 1, maker: m[0]!, pending: makers[0]!.pending, ahead: { busy: ahead.busy, for: ahead.for, wanted: !!ahead.wanted, room: ahead.room, ready: ahead.ready ? (ahead.ready.goal ? (ahead.ready.rejected ? "rejected" : "goal") : "none") : null }, held, rooms: roomBusy });
+  worker.terminate();
+  worker = newGoalWorker();
+  makers[0]!.pending = 0;
+  ahead.wanted = null;
+  if (ahead.ready && !ahead.ready.goal) ahead.ready = null;
+  held = HELD_MAX;
+  requestGoal(stuckTimes++ ? viewCentre(scene.camera, scene.width, scene.height) : lastNear);
+}
+setInterval(() => {
+  const waits = !scene.goal && !shared && !testbed && !trial && !document.hidden && !finish && !(withIsland && nextIslandGoal(scene.done));
+  if (!waits) return void (noGoalSince = null);
+  const now = performance.now();
+  noGoalSince ??= now;
+  if (now - noGoalSince < STUCK_MS) return;
+  noGoalSince = now;
+  unstick(STUCK_MS);
+}, 1000);
 
 if (testbed || trial) {
   // The testbed and a trial show their first goal once the board is in place (below).

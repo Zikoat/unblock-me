@@ -5,7 +5,7 @@ import { choices } from "./choices";
 import { makeGoalHard } from "./goal-search";
 import { fixedLayout, randomLayout, type Placed, type Stamp, type UiShown } from "./layout";
 import type { Point, Rect } from "./camera";
-import type { Room } from "./room";
+import { isRoom, type Room } from "./room";
 import { LIBRARY, roomGoal } from "./rooms";
 
 export type GoalRequest = {
@@ -41,7 +41,7 @@ self.onmessage = (event: MessageEvent<GoalRequest>) => {
   const map = new Map(moved);
   if (roomsOn && !placed) {
     const t0 = performance.now();
-    const made = roomGoal([...roomsOn.made, ...LIBRARY], roomsOn.n, near, { moved: map, layout, keepOut: [...roomsOn.keepOut, ...avoid], stamps: rooms, seen: new Set(roomsOn.seen) }, { seed, tries, walls, ui });
+    const made = roomGoal([...roomsOn.made.filter(isRoom), ...LIBRARY], roomsOn.n, near, { moved: map, layout, keepOut: [...roomsOn.keepOut, ...avoid], stamps: rooms, seen: new Set(roomsOn.seen) }, { seed, tries, walls, ui });
     if (made) {
       const { goal } = made;
       goal.stamp = made.stamp;

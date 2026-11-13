@@ -26,6 +26,12 @@ export type Room = {
   from?: string;
 };
 
+/** Whether a stored value is a whole room (uploads keep a device's rooms as [id, f, e] only). */
+export const isRoom = (r: unknown): r is Room => {
+  const o = r as Partial<Room> | null;
+  return !!o && typeof o === "object" && !Array.isArray(o) && typeof o.id === "string" && Array.isArray(o.b) && Array.isArray(o.w) && Array.isArray(o.r) && Array.isArray(o.t) && Array.isArray(o.p) && typeof o.f === "number";
+};
+
 export const laneAt = (b: RBlock): number => (b[2] ? b[0] : b[1]);
 export const cellsOf = (b: RBlock): [number, number][] => (b[2] ? [[b[0], b[1]], [b[0] + 1, b[1]]] : [[b[0], b[1]], [b[0], b[1] + 1]]);
 
