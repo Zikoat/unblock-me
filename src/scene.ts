@@ -36,6 +36,9 @@ export type Scene = {
   dragging: { id: string; x: number; y: number } | null;
   /** Cull to the smaller border (and draw it), or to the screen edge. */
   border: boolean;
+  /** CSS px at each screen edge under a notch, rounded corner or home bar (iPhone): the board
+   * is drawn there, but pins and the toolbar keep out. */
+  safe?: { top: number; right: number; bottom: number; left: number };
   /** Set while an island square is played: its cells (the square in its walls, and its
    * bay). The view is fixed (no panning or zooming, no edge pins), everything else is greyed
    * out, and touches there do nothing. */
@@ -208,13 +211,15 @@ export function uiToolbar(scene: Scene): { block: Block; rect: Rect }[] {
   // The square's inside on the screen (its walls are a cell in from the locked area).
   // Measured in the view: the screen, or the smaller border when that is on.
   const c = scene.camera, sq = scene.locked[0]!, v = borderOnScreen(scene);
+  // (Clear of a notch or home bar; the border, when on, is already clear of them.)
+  const top = Math.max(0, (scene.safe?.top ?? 0) - v.y), bottomSafe = Math.max(0, (scene.safe?.bottom ?? 0) - (scene.height - v.y - v.height)), left0 = Math.max(0, (scene.safe?.left ?? 0) - v.x);
   const left = (sq.x + 1) * UNIT * c.scale + c.offsetX - v.x, bottom = (sq.y + sq.height - 1) * UNIT * c.scale + c.offsetY - v.y;
-  const beside = Math.min(TOOL, (left - TOOLBAR.x - 8) / cols, (v.height - TOOLBAR.y - TOOLBAR.x) / rows);
-  const under = Math.min(TOOL, (v.height - bottom - 2 * TOOLBAR.x) / cols, (v.width - 2 * TOOLBAR.x) / rows);
+  const beside = Math.min(TOOL, (left - left0 - TOOLBAR.x - 8) / cols, (v.height - top - bottomSafe - TOOLBAR.y - TOOLBAR.x) / rows);
+  const under = Math.min(TOOL, (v.height - bottomSafe - bottom - 2 * TOOLBAR.x) / cols, (v.width - left0 - 2 * TOOLBAR.x) / rows);
   const upright = beside >= under, size = Math.max(beside, under);
   return ui.map((block) => {
     const [i, j] = upright ? [block.x - x0, block.y - y0] : [block.y - y0, block.x - x0];
-    const y = upright ? TOOLBAR.y + j * size : v.height - TOOLBAR.x - (cols - j) * size;
-    return { block, rect: { x: v.x + TOOLBAR.x + i * size, y: v.y + y, width: size, height: size } };
+    const y = upright ? top + TOOLBAR.y + j * size : v.height - bottomSafe - TOOLBAR.x - (cols - j) * size;
+    return { block, rect: { x: v.x + left0 + TOOLBAR.x + i * size, y: v.y + y, width: size, height: size } };
   });
 }

@@ -2,7 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<!-- viewport-fit=cover: the page reaches under the notch and the home bar (with Safari's
+     "Hide Toolbar", or added to the home screen), so the board fills the whole screen; only
+     the UI that must stay clear of them keeps out (the --safe-* insets below, main.ts). -->
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#f3f2ee">
 <!-- Added to an iPhone's home screen, the game opens without Safari's bars: the nearest
      thing to full screen there (iPhone Safari has no fullscreen for pages). -->
@@ -12,15 +15,17 @@
 <title>Unblock Me</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='2' y='2' width='12' height='12' rx='2' fill='%234f6d8f'/%3E%3C/svg%3E">
 <style>
+  /* The screen's notch, rounded corners and home bar (0 elsewhere), read by main.ts too. */
+  :root { --safe-top: env(safe-area-inset-top, 0px); --safe-right: env(safe-area-inset-right, 0px); --safe-bottom: env(safe-area-inset-bottom, 0px); --safe-left: env(safe-area-inset-left, 0px); }
   html, body { margin: 0; height: 100%; overflow: hidden; background: #f3f2ee; }
   /* Things on the screen live in #view, which main.ts keeps sized to the current view (the
      smaller border when it is on), so they always sit inside it. */
   #view { position: fixed; pointer-events: none; }
   #view > * { pointer-events: auto; }
   /* Turns a little every frame, so frames keep coming and the fps counter shows the real rate. */
-  #spin { position: absolute; top: 9px; left: 6px; width: 8px; height: 8px; border-radius: 2px; background: #b9b6ad; pointer-events: none !important; }
+  #spin { position: absolute; top: calc(9px + var(--safe-top)); left: calc(6px + var(--safe-left)); width: 8px; height: 8px; border-radius: 2px; background: #b9b6ad; pointer-events: none !important; }
   /* Small and dense: a few facts a line, never wrapped (main.ts showFps). */
-  #fps { position: absolute; top: 4px; left: 18px; padding: 3px 6px; border-radius: 6px; background: rgba(29, 29, 31, 0.78); color: #f3f2ee; font: 10.5px/1.35 ui-monospace, monospace; white-space: pre; pointer-events: none !important; }
+  #fps { position: absolute; top: calc(4px + var(--safe-top)); left: calc(18px + var(--safe-left)); padding: 3px 6px; border-radius: 6px; background: rgba(29, 29, 31, 0.78); color: #f3f2ee; font: 10.5px/1.35 ui-monospace, monospace; white-space: pre; pointer-events: none !important; }
   /* Its last line, what each goal maker is doing: a square in its state's colour (main.ts Making). */
   #makers > span + span { margin-left: 4px; }
   #makers i { display: inline-block; width: 6px; height: 6px; margin-right: 4px; border-radius: 1px; vertical-align: 1px; background: #8e8e93; }
@@ -33,8 +38,10 @@
   #next { position: absolute; left: 50%; transform: translateX(-50%); padding: 0.8em 1.7em; border: 0; border-radius: 999px; background: #f2b632; color: #fff; font: 800 18px/1 system-ui, -apple-system, "Segoe UI", sans-serif; box-shadow: 0 4px 16px rgba(0,0,0,.3); cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
   #next[hidden] { display: none; }
   /* A trial board's label (main.ts, ?trial=). */
-  #trial { position: absolute; left: 12px; bottom: 12px; padding: 6px 12px; border-radius: 8px; background: rgba(29, 29, 31, 0.82); color: #f3f2ee; font: 600 15px/1.4 system-ui, sans-serif; pointer-events: none !important; }
+  #trial { position: absolute; left: calc(12px + var(--safe-left)); bottom: calc(12px + var(--safe-bottom)); padding: 6px 12px; border-radius: 8px; background: rgba(29, 29, 31, 0.82); color: #f3f2ee; font: 600 15px/1.4 system-ui, sans-serif; pointer-events: none !important; }
   #trial[hidden] { display: none; }
+  /* The whole screen, following Safari's bars as they come and go (main.ts sizes the drawing
+     to innerWidth x innerHeight on each resize, which matches). */
   canvas { display: block; width: 100vw; height: 100dvh; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 </style>
 </head>

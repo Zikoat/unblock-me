@@ -1927,11 +1927,25 @@ canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 // Telegram's in-app browser on iPhone takes swipes right and down to close itself unless the
 // page blocks the touch's moves (telegram-test.html showed touch-action alone is not enough).
 canvas.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
-addEventListener("resize", () => {
-  resize(scene, innerWidth, innerHeight - (inspector?.open ? inspector.height() : 0));
+/** The notch's, rounded corners' and home bar's insets (index.html --safe-*), for the pins and
+ * the toolbar; the board itself fills the whole screen. */
+function readSafe(): void {
+  const css = getComputedStyle(document.documentElement);
+  const px = (side: string) => parseFloat(css.getPropertyValue(`--safe-${side}`)) || 0;
+  scene.safe = { top: px("top"), right: px("right"), bottom: px("bottom"), left: px("left") };
+}
+readSafe();
+function resized(): void {
+  readSafe();
+  const width = innerWidth, height = innerHeight - (inspector?.open ? inspector.height() : 0);
+  if (width === scene.width && height === scene.height && !inspector?.open) return redraw();
+  resize(scene, width, height);
   if (inspector?.open) inspector.show();
   else redraw();
-});
+}
+addEventListener("resize", resized);
+// Safari's bars sliding in and out change the visual viewport; not always with a window resize.
+visualViewport?.addEventListener("resize", resized);
 
 // On the testbed: the animation inspector, replaying the tap on the red block and its finish.
 /** Everything a replay changes (copied in and out whole). */

@@ -1061,8 +1061,12 @@ function edgeArrow(scene: Scene, target: ScreenRect): EdgeArrow | null {
   if (target.right > view.x && target.left < view.x + view.width && target.bottom > view.y && target.top < view.y + view.height) return null;
   const cx = view.x + view.width / 2, cy = view.y + view.height / 2;
   const dx = (target.left + target.right) / 2 - cx, dy = (target.top + target.bottom) / 2 - cy;
-  const margin = 26;
-  const k = Math.min(Math.abs((view.width / 2 - margin) / dx || Infinity), Math.abs((view.height / 2 - margin) / dy || Infinity));
+  // The pin's middle stays `margin` in from the view's edge, and from a notch or home bar.
+  const margin = 26, s = scene.safe;
+  const x0 = Math.max(view.x, s?.left ?? 0) + margin, x1 = Math.min(view.x + view.width, scene.width - (s?.right ?? 0)) - margin;
+  const y0 = Math.max(view.y, s?.top ?? 0) + margin, y1 = Math.min(view.y + view.height, scene.height - (s?.bottom ?? 0)) - margin;
+  const reach = (d: number, lo: number, hi: number, c: number) => (d > 0 ? (hi - c) / d : d < 0 ? (lo - c) / d : Infinity);
+  const k = Math.max(0, Math.min(reach(dx, x0, x1, cx), reach(dy, y0, y1, cy)));
   return { x: cx + dx * k, y: cy + dy * k, angle: Math.atan2(dy, dx) };
 }
 
