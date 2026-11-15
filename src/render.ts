@@ -9,6 +9,7 @@ import { timed } from "./perf";
 import { cinemaOverlay, dance, glitch, glitchShift, lit, overMore, tilt } from "./finish-fx2";
 import { onBlock, over, punch, quake, screenFlash, soul as drawSoul, SOUL, soulFlash, squash, type SoulStyle, timeWarp, under, wave, type Fx } from "./finish-fx";
 import { borderOnScreen, latticeRect, quickPush, uiToolbar, visibleBlocks, whereIs, type Scene } from "./scene";
+import { blocksIn } from "./rules";
 
 export const COLORS = {
   background: "#f3f2ee",
@@ -130,9 +131,9 @@ export function draw(
     /** Collects the finishing goal's icons as drawn (the animation inspector). */
     trace?: TraceEntry[];
     /** A tapped edge arrow, throbbing since `born`. */
-    pinThrob?: { pin: "red" | "ui"; born: number; at?: { x: number; y: number } | null } | null;
+    pinThrob?: { pin: string; born: number; at?: { x: number; y: number } | null } | null;
     /** An edge arrow held down. */
-    pinHeld?: "red" | "ui" | null;
+    pinHeld?: string | null;
     /** Moves made on the current goal so far, for its score track. */
     used?: number;
     /** The goal just reached, and when: its score track plays the finish. An island square's
@@ -349,7 +350,10 @@ export function draw(
   const numbered: { block: Block; at: DOMMatrix }[] = [];
   timed(ctx, "blocks", () => {
     // On an island square its walls are the colour of the surface round it.
-    drawWalls(ctx, blocks.filter((b) => b.wall), scene.locked ? COLORS.outside : COLORS.wall);
+    // (With the walls just out of view too: a wall joined to one past the edge stays joined,
+    // not rounded off where the view cuts it.)
+    const near = { x: inView.x - 1, y: inView.y - 1, width: inView.width + 2, height: inView.height + 2 };
+    drawWalls(ctx, blocksIn(scene.layout, near, scene).filter((b) => b.wall), scene.locked ? COLORS.outside : COLORS.wall);
     for (const shown of blocks) {
       if (shown.wall) continue;
       if (shown.ui && scene.locked) continue; // over the island's surface instead (below)
@@ -571,18 +575,16 @@ export function draw(
   const bandIn = !cue || !goal || cue.id !== goal.id ? 1 : cue.born < 0 ? 0 : Math.max(0, Math.min(1, (now - cue.born - CUE_DELAY) / CUE_GROW));
   if (band && bandIn > 0) drawBand(ctx, { ...band, alpha: band.alpha * bandIn }, dpr);
   const toUi = uiArrow(scene);
-  const pinBeat = (pin: "red" | "ui") => (pinHeld === pin ? 0.85 : pinThrob?.pin === pin ? 1 + 2 * (throbScale((now - pinThrob.born) / THROB_MS) - 1) : 1);
+  const pinBeat = (pin: string) => (pinHeld === pin ? 0.85 : pinThrob?.pin === pin ? 1 + 2 * (throbScale((now - pinThrob.born) / THROB_MS) - 1) : 1);
   if (toUi) drawPin(ctx, toUi, COLORS.ui, 16 * pinBeat("ui"), dpr, true);
-  const toRed = redArrow(scene);
-  if (toRed) drawPin(ctx, toRed, COLORS.goal, 13 * pinBeat("red"), dpr);
-  for (const a of openArrows(scene)) drawPin(ctx, a, COLORS.goal, 9, dpr);
+  for (const a of redArrows(scene)) drawPin(ctx, a, COLORS.goal, 13 * pinBeat(redPin(a.id)), dpr);
   // A tapped arrow's ripple, where it was tapped (it stays as the view goes).
   if (pinThrob?.at && pinThrob.born >= 0) {
     const k = (now - pinThrob.born) / THROB_MS;
     if (k < 1) {
       const out = 1 - Math.pow(1 - k, 3);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.strokeStyle = pinThrob.pin === "red" ? COLORS.goal : COLORS.ui;
+      ctx.strokeStyle = pinThrob.pin === "ui" ? COLORS.ui : COLORS.goal;
       ctx.globalAlpha = 0.6 * (1 - k);
       ctx.lineWidth = 3 * (1 - k) + 1;
       ctx.beginPath();
@@ -1128,11 +1130,13 @@ function edgeArrow(scene: Scene, target: ScreenRect): EdgeArrow | null {
   return { x: cx + dx * k, y: cy + dy * k, angle: Math.atan2(dy, dx) };
 }
 
-/** Both edge pins; when they would overlap, they step apart along the edge they sit on. */
-function pins(scene: Scene): { ui: EdgeArrow | null; red: EdgeArrow | null } {
-  if (scene.locked) return { ui: null, red: null };
+/** The edge pins: the home pin and a pin for each red block in play out of view. Red pins
+ * close together show as one, the nearest red block's (the rest are hidden); the home pin and a
+ * red pin that would overlap step apart along the edge they sit on. */
+function pins(scene: Scene): { ui: EdgeArrow | null; reds: RedArrow[] } {
+  if (scene.locked) return { ui: null, reds: [] };
   const both = pinsApart(scene);
-  return { ui: clearOf(scene, both.ui), red: clearOf(scene, both.red) };
+  return { ui: clearOf(scene, both.ui), reds: both.reds.map((a) => ({ ...a, ...clearOf(scene, a)! })) };
 }
 
 /** A pin moved out from under the screen's label (scene.keepOut), the shorter way: down below
@@ -1144,18 +1148,22 @@ function clearOf(scene: Scene, a: EdgeArrow | null): EdgeArrow | null {
   return down <= left ? { ...a, y: a.y + down } : { ...a, x: a.x - left };
 }
 
-function pinsApart(scene: Scene): { ui: EdgeArrow | null; red: EdgeArrow | null } {
-  const ui = uiArrowAlone(scene), red = redArrowAlone(scene);
-  if (!ui || !red) return { ui, red };
-  const apart = 40;
-  if (Math.hypot(ui.x - red.x, ui.y - red.y) >= apart) return { ui, red };
+const PINS_APART = 40;
+function pinsApart(scene: Scene): { ui: EdgeArrow | null; reds: RedArrow[] } {
+  let ui = uiArrowAlone(scene);
+  const reds = redArrowsAlone(scene);
+  const k = ui ? reds.findIndex((r) => Math.hypot(ui!.x - r.x, ui!.y - r.y) < PINS_APART) : -1;
+  if (!ui || k < 0) return { ui, reds };
+  const red = reds[k]!, apart = PINS_APART;
   const view = borderOnScreen(scene);
   const midX = (ui.x + red.x) / 2, midY = (ui.y + red.y) / 2;
   // On the top or bottom edge they move sideways; on the left or right one, up and down.
   const flat = Math.min(Math.abs(midY - view.y), Math.abs(midY - view.y - view.height)) < Math.min(Math.abs(midX - view.x), Math.abs(midX - view.x - view.width));
   const first = flat ? ui.x <= red.x : ui.y <= red.y; // keep their order
   const step = (s: number) => (flat ? { x: midX + s * apart / 2, y: midY } : { x: midX, y: midY + s * apart / 2 });
-  return { ui: { ...ui, ...step(first ? -1 : 1) }, red: { ...red, ...step(first ? 1 : -1) } };
+  ui = { ...ui, ...step(first ? -1 : 1) };
+  reds[k] = { ...red, ...step(first ? 1 : -1) };
+  return { ui, reds };
 }
 
 type Cells = { x: number; y: number; w: number; h: number };
@@ -1166,27 +1174,32 @@ function targetCells(scene: Scene, goal: Goal): Cells | null {
   return red ? { ...goal.target, w: red.w, h: red.h } : null;
 }
 
-/** The arrow to the red block, when it is out of view (tapping it goes there). */
-export function redArrow(scene: Scene): EdgeArrow | null {
-  return pins(scene).red;
+export type RedArrow = EdgeArrow & { id: string };
+/** The pin's name, for which one is pressed or throbs (main.ts pinHeld, pinThrob). */
+export const redPin = (id: string) => `red ${id}`;
+/** The arrows to the red blocks in play out of view (tapping one goes there), nearest first. */
+export function redArrows(scene: Scene): RedArrow[] {
+  return pins(scene).reds;
 }
-function redArrowAlone(scene: Scene): EdgeArrow | null {
-  const goal = scene.goal;
-  const red = goal && scene.layout.byId(goal.id);
-  const at = goal && whereIs(scene, goal.id);
-  if (!red || !at) return null;
-  return edgeArrow(scene, onScreen(scene, { x: at.x, y: at.y, width: red.w, height: red.h }));
+/** The arrow to the goal being played's red block, if it shows (or the nearest shown). */
+export function redArrow(scene: Scene): RedArrow | null {
+  const reds = redArrows(scene);
+  return reds.find((a) => a.id === scene.goal?.id) ?? reds[0] ?? null;
 }
-
-/** Arrows to the other goals' red blocks in play, when out of view: smaller pins. */
-export function openArrows(scene: Scene): EdgeArrow[] {
-  const arrows: EdgeArrow[] = [];
-  for (const goal of scene.open ?? []) {
-    const red = scene.layout.byId(goal.id), at = whereIs(scene, goal.id);
-    const a = red && at && edgeArrow(scene, onScreen(scene, { x: at.x, y: at.y, width: red.w, height: red.h }));
-    if (a) arrows.push(a);
+function redArrowsAlone(scene: Scene): RedArrow[] {
+  const view = borderOnScreen(scene), cx = view.x + view.width / 2, cy = view.y + view.height / 2;
+  const all: (RedArrow & { far: number })[] = [];
+  for (const goal of [scene.goal, ...(scene.open ?? [])]) {
+    const red = goal && scene.layout.byId(goal.id), at = goal && whereIs(scene, goal.id);
+    if (!goal || !red || !at) continue;
+    const r = onScreen(scene, { x: at.x, y: at.y, width: red.w, height: red.h });
+    const a = edgeArrow(scene, r);
+    if (a) all.push({ ...a, id: goal.id, far: Math.hypot((r.left + r.right) / 2 - cx, (r.top + r.bottom) / 2 - cy) });
   }
-  return arrows;
+  all.sort((a, b) => a.far - b.far);
+  const kept: RedArrow[] = [];
+  for (const { far: _, ...a } of all) if (!kept.some((k) => Math.hypot(k.x - a.x, k.y - a.y) < PINS_APART)) kept.push(a);
+  return kept;
 }
 
 export type Band = { side: "left" | "right" | "top" | "bottom"; x: number; y: number; width: number; height: number; alpha: number };

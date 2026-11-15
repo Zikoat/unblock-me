@@ -1161,6 +1161,20 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
   await page.close();
 }
 
+// --- Two walls side by side, the view's edge cutting exactly between them: the one in view
+// stays joined to the one past the edge (it once showed rounded off, a gap at the edge).
+{
+  const page = await browser.newPage({ viewport: { width: 400, height: 400 } });
+  await page.goto(url);
+  await frame(page);
+  await page.evaluate(() => unblock.place([{ id: "wa", x: 0, y: 0, w: 1, h: 1, wall: true }, { id: "wb", x: 1, y: 0, w: 1, h: 1, wall: true }]));
+  // Cell 1 starts at the screen's left edge, cell 0 just past it.
+  await page.evaluate((UNIT) => { unblock.scene.camera = { scale: 1, offsetX: -UNIT, offsetY: 200 - UNIT / 2 }; unblock.redraw(); }, UNIT);
+  await frame(page);
+  await expectColor(page, [1, 200], "wall", "the joined wall reaches the view's edge");
+  await page.close();
+}
+
 // --- Several goals at once (the default; ?multi=0 turns it off): after the first world goal the soul splits, two goals
 // in play, each with its own red block; a move on the other's ground makes it the one played
 // (and counts only for it); later the soul merges onto a red block already in play.
@@ -1172,7 +1186,7 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
   await frame(page);
   const goals = () => page.evaluate(() => unblock.playLog.filter((e) => e.e === "goal"));
   let switched = null;
-  for (let k = 0; k < 6; k++) {
+  for (let k = 0; k < 9; k++) {
     await page.evaluate(() => unblock.goalReady());
     for (let t = 0; t < 20 && k === 1 && !(await page.evaluate(() => unblock.open().length)); t++) await pass(page, 500);
     // Once two are in play, the other one is played first.
@@ -1191,6 +1205,8 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
   const merged = await page.evaluate(() => unblock.playLog.find((e) => e.e === "merged"));
   check(!!merged && (await page.evaluate((m) => unblock.scene.done.some((d) => d.id === m.to) || unblock.scene.goal?.id === m.to, merged)), `later the soul merged onto a red block in play (${JSON.stringify(merged)})`);
   check(await page.evaluate(() => !unblock.playLog.some((e) => e.e === "error" || e.e === "stuck")), "no errors and never stuck");
+  const broken = await page.evaluate(() => unblock.playLog.filter((e) => e.e === "proofBroken"));
+  check(!broken.length, `every goal in play stayed solvable by its proof, once its own moves are undone (${JSON.stringify(broken)})`);
   await page.close();
 }
 
@@ -1267,9 +1283,9 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
 // asked for the quick way.
 {
   const page = await clocked(await browser.newPage({ viewport: { width: 1280, height: 800 } }));
-  await page.goto(url);
+  await page.goto(url + "&multi=0");
   await page.evaluate(() => { unblock.forget(); localStorage.setItem("unblock-me:v13:seed", "20261108"); });
-  await page.goto(url);
+  await page.goto(url + "&multi=0");
   await frame(page);
   await page.evaluate(() => unblock.goalReady());
   // Each move dragged with the view centred between its ends.

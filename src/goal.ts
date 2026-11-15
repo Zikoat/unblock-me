@@ -31,6 +31,8 @@ export type Goal = {
   used?: number;
   /** With several goals at once: the moves made on its ground since it showed (main.ts routeMoves). */
   count?: number;
+  /** Its proof was found broken (main.ts checkProof; a bug): checked no more. */
+  broken?: boolean;
   /** How many had been made when it was reached. */
   ended?: number;
   /** Whether a move was undone while it was the goal (no medal then). */

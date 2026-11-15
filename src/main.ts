@@ -28,7 +28,7 @@ import { isRoom, type Room } from "./room";
 import { dist, pace as roomPace, type Screen, stampReach, TRAVEL_AIM } from "./rooms";
 import { bayReached, GATE, GATE_GONE, inIsland, isWorldGoal, worldNumbers, ISLAND_KEEP_OUT, opensGate, isLast, islandCamera, islandGoals, islandRects, nextIslandGoal, squareAt, squareMiddle, squareOf } from "./island";
 import { fixedLayout, type Layout, MAX_TRIES, MAX_WALLS, MIN_TRIES, randomLayout, TRIES, UNIT, uiArea, WALLS, type Placed, type Stamp, type Ui } from "./layout";
-import { CARD, CUE_MS, draw, fading, islandCardRect, resetFades, RIPPLE_MS, SHAKE_MS, THROB_MS, redArrow, uiArrow, type Sparkle } from "./render";
+import { CARD, CUE_MS, draw, fading, islandCardRect, resetFades, RIPPLE_MS, SHAKE_MS, THROB_MS, redArrow, redArrows, redPin, uiArrow, type Sparkle } from "./render";
 import { ease, slideDuration } from "./slide";
 import { blockAt, blocksIn, slideRange, type Changes, type Move } from "./rules";
 import { carryFromUrl, dropIdFromUrl, showIdInUrl, type Carried } from "./carry";
@@ -93,9 +93,19 @@ const TESTBED = {
 // ?island=0 leaves the island out: the generated world from the start, as before it (for
 // tests of the world itself).
 const withIsland = new URLSearchParams(location.search).get("island") !== "0";
-// World goals are rooms (src/rooms.ts) for everyone; ?rooms=0 leaves them out, for tests of
-// the maker on the plain world.
-const withRooms = new URLSearchParams(location.search).get("rooms") !== "0";
+/** World goals as rooms (src/rooms.ts); off with ?rooms=0 (kept until ?rooms=1), the maker's
+ * goals instead, made near the last red block as before rooms (src/goal-search.ts). */
+const ROOMS_OFF_KEY = "unblock-me:rooms-off";
+const withRooms = (() => {
+  const q = new URLSearchParams(location.search).get("rooms");
+  try {
+    if (q === "0") localStorage.setItem(ROOMS_OFF_KEY, "1");
+    if (q === "1") localStorage.removeItem(ROOMS_OFF_KEY);
+    return localStorage.getItem(ROOMS_OFF_KEY) !== "1";
+  } catch {
+    return q !== "0";
+  }
+})();
 /** Several goals at once (on unless turned off with ?multi=0, kept until ?multi=1): a reached
  * goal's soul sometimes splits to two goals and the player picks which to play; sometimes it
  * goes to a red block already in play instead of a new one (a merge). */
@@ -113,7 +123,7 @@ const multi = (() => {
 /** When the soul splits and merges, by the count of world goals reached (m): a split after
  * goal m when m % SPLIT_EVERY is SPLIT_AT (while fewer than MAX_OPEN other goals are in play),
  * a merge when m % MERGE_EVERY is MERGE_AT (and another goal is in play). */
-const MULTI = { SPLIT_EVERY: 3, SPLIT_AT: 1, MERGE_EVERY: 5, MERGE_AT: 4, MAX_OPEN: 2 };
+const MULTI = { SPLIT_EVERY: 3, SPLIT_AT: 1, MERGE_EVERY: 9, MERGE_AT: 7, MAX_OPEN: 4 };
 /** A soul style to always use (`?soul=`, reports/soul.html), or each picked as it goes. */
 const forcedSoul = SOUL_STYLES.find((st) => st === new URLSearchParams(location.search).get("soul")) ?? null;
 /** How many world goals have to be reached before souls may be flames or glints, not only
@@ -256,6 +266,7 @@ type LogEvent =
   | { e: "focus"; id: string }
   | { e: "merged"; from: string; to: string; d: number }
   | { e: "extraDropped"; why: string }
+  | { e: "proofBroken"; id: string; why: string }
   | { e: "reset"; goal: string | null }
   // The page hidden (another tab, the phone locked) and shown again: time away is not thinking.
   | { e: "hide" | "show" }
@@ -729,6 +740,8 @@ function roomsPart(n: number, near: Point): Pick<GoalRequest, "rooms" | "roomsOn
   const keepOut = [...(withIsland ? ISLAND_KEEP_OUT : []), ...(ui ? [ui] : []), { x: -2, y: -2, width: 5, height: 5 }];
   const v = viewRect();
   keepOut.push(grow(v, VIEW_MARGIN), grow({ x: near.x + 1 - v.width / 2, y: near.y + 0.5 - v.height / 2, width: v.width, height: v.height }, VIEW_MARGIN));
+  // (Nor on the ground of another goal in play: its moves would change that goal's board.)
+  for (const g of scene.open ?? []) keepOut.push(grow(groundOf(g), 1));
   // (A room held back HELD_MAX times running: the maker's goal, which changes no cell.)
   return { rooms: stamps, ...(withRooms && !placed && held < HELD_MAX && { roomsOn: { made: made.rooms, n, keepOut, screen } }) };
 }
@@ -1225,9 +1238,52 @@ function routeMoves(): void {
       ?? (scene.goal && touched.includes(scene.goal) && (moves(scene.goal) || !touched.some((g) => g !== scene.goal && moves(g))) ? undefined : (touched.find((g) => g !== scene.goal && moves(g)) ?? touched.find((g) => g !== scene.goal)));
     if (pick) focusOn(pick);
   }
+  // (World goals only: an island square's later goals' proofs follow its earlier ones', not the
+  // player's own way; nor on a placed board.)
+  if (!placed) for (const g of [scene.goal, ...(scene.open ?? [])]) if (g && !g.broken && squareOf(g) === null) checkProof(g);
   // Another goal's red block put on its target: that is the goal reached.
   const solved = scene.open?.find((g) => { const at = whereIs(scene, g.id); return !!at && at.x === g.target.x && at.y === g.target.y; });
   if (solved) focusOn(solved);
+}
+/** An assertion (a failure is a bug, logged as `proofBroken`, once a goal): a goal in play can
+ * always be solved by its proof once the moves made on its ground since it showed are undone
+ * (every move of each block that touched it, last first), whatever was moved elsewhere for
+ * other goals. */
+function checkProof(goal: Goal): void {
+  const why = proofBreaks(goal);
+  if (!why) return;
+  goal.broken = true;
+  log({ e: "proofBroken", id: goal.id, why });
+  console.error(`Goal ${goal.id}: its proof no longer holds (${why})`);
+}
+function proofBreaks(goal: Goal): string | null {
+  const since = scene.history.slice(goal.begun ?? scene.history.length);
+  const ground = groundOf(goal);
+  const inGround = (m: Move, b: { w: number; h: number }) => [m.from, m.to].some((p) => p.x < ground.x + ground.width && p.x + b.w > ground.x && p.y < ground.y + ground.height && p.y + b.h > ground.y);
+  const touched = new Set<string>();
+  for (const m of since) {
+    const b = scene.layout.byId(m.id);
+    if (b && (m.id === goal.id || goal.solution.some((x) => x.id === m.id) || inGround(m, b))) touched.add(m.id);
+  }
+  const board: Changes = { moved: new Map(scene.moved) };
+  const moved = board.moved as Map<string, Point>;
+  const legal = (m: Move) => {
+    const b = scene.layout.byId(m.id), at = b && (moved.get(m.id) ?? { x: b.x, y: b.y });
+    if (!b || !at || at.x !== m.from.x || at.y !== m.from.y) return false;
+    const horizontal = b.w > b.h;
+    if (horizontal ? m.to.y !== at.y : m.to.x !== at.x) return false;
+    const { lo, hi } = slideRange(scene.layout, { ...b, ...at }, board), along = horizontal ? m.to.x : m.to.y;
+    if (along < lo || along > hi) return false;
+    moved.set(m.id, m.to);
+    return true;
+  };
+  for (let i = since.length - 1; i >= 0; i--) {
+    const m = since[i]!;
+    if (touched.has(m.id) && !legal({ id: m.id, from: m.to, to: m.from })) return `undoing ${m.id} ${m.to.x},${m.to.y} -> ${m.from.x},${m.from.y}`;
+  }
+  for (const [k, m] of goal.solution.entries()) if (!legal(m)) return `proof move ${k + 1} (${m.id})`;
+  const end = moved.get(goal.id);
+  return end && end.x === goal.target.x && end.y === goal.target.y ? null : "red block not on its target";
 }
 /** Make another goal in play the one being played. */
 function focusOn(g: Goal): void {
@@ -1241,6 +1297,10 @@ function focusOn(g: Goal): void {
  * block already in play (a merge). */
 function nextAfter(goal: Goal): void {
   splitFrom = null;
+  // A travel goal in play (leading to a spike's room) and another goal reached: the soul goes to
+  // the travel goal, not to a second one leading the same way.
+  const travel = multi && !goal.travel ? scene.open?.find((g) => g.travel) : undefined;
+  if (travel) return mergeTo(goal, travel);
   if (multi && isWorldGoal(goal) && !trek && !placed) {
     const m = worldGoals(), open = scene.open ?? [];
     if (open.length && m % MULTI.MERGE_EVERY === MULTI.MERGE_AT) return mergeTo(goal);
@@ -1248,11 +1308,11 @@ function nextAfter(goal: Goal): void {
   }
   requestGoal(goal.target, true);
 }
-/** The soul goes from a reached goal to the nearest red block already in play. */
-function mergeTo(from: Goal): void {
+/** The soul goes from a reached goal to the nearest red block already in play (or `onto`). */
+function mergeTo(from: Goal, onto?: Goal): void {
   const open = scene.open ?? [];
   const far = (g: Goal) => dist(from.target, whereIs(scene, g.id) ?? g.target);
-  const to = open.reduce((a, b) => (far(a) <= far(b) ? a : b));
+  const to = onto ?? open.reduce((a, b) => (far(a) <= far(b) ? a : b));
   scene.open = open.filter((g) => g !== to);
   log({ e: "merged", from: from.id, to: to.id, d: Math.round(far(to) * 10) / 10 });
   job++; // (nothing else is coming)
@@ -1301,6 +1361,7 @@ function requestExtra(from: Goal): void {
   }
   const near = from.target, others = [scene.goal, ...(scene.open ?? [])].filter((g): g is Goal => !!g);
   const request = nowRequest(near, ++extra.job);
+  if (request.roomsOn && scene.goal) request.roomsOn = { ...request.roomsOn, keepOut: [...request.roomsOn.keepOut, grow(groundOf(scene.goal), 1)] };
   request.exclude = [...scene.done, ...others].map((g) => g.id);
   request.avoid = targetsOf([...scene.done, ...others]);
   extra.asked = { request: asRequest(request, [...scene.done, ...others]), near, level: 0 };
@@ -1588,7 +1649,7 @@ Object.assign(window, {
     /** The soul in flight, if one is (when it set off: -1 until its first frame). */
     soul: () => soul,
     /** The edge arrows, where drawn (screen px), or null. */
-    pins: () => ({ red: redArrow(scene), ui: uiArrow(scene) }),
+    pins: () => ({ red: redArrow(scene), reds: redArrows(scene), ui: uiArrow(scene) }),
     /** The adaptive detail step (0 full; see pace). */
     detailStep: () => detailStep,
     undo: () => takeBack(),
@@ -2221,23 +2282,23 @@ function hoverAt(e: PointerEvent): void {
 let onArrow: number | null = null;
 /** Where tapping the edge arrow under the pointer goes (lattice units), and which arrow it
  * is, or null. (The goal's glow is not tappable: it was hit by accident.) */
-function markerAt(e: PointerEvent): (Point & { pin: "red" | "ui" }) | null {
+/** The pin under a press, if any: where it leads (the middle of its block), the block, and the
+ * pin's name and place on screen. */
+function markerAt(e: PointerEvent): (Point & { pin: string; id: string; on: Point }) | null {
   const near = (a: { x: number; y: number } | null) => !!a && Math.hypot(e.offsetX - a.x, e.offsetY - a.y) <= 24;
-  // The red arrow first: when pins overlap, it is on top.
-  const goal = scene.goal;
-  const red = goal && scene.layout.byId(goal.id);
-  if (goal && red) {
-    const at = whereIs(scene, goal.id)!;
-    if (near(redArrow(scene))) return { x: at.x + red.w / 2, y: at.y + red.h / 2, pin: "red" };
+  // The red arrows first: when pins overlap, they are on top.
+  for (const a of redArrows(scene)) {
+    const red = scene.layout.byId(a.id), at = whereIs(scene, a.id);
+    if (red && at && near(a)) return { x: at.x + red.w / 2, y: at.y + red.h / 2, pin: redPin(a.id), id: a.id, on: { x: a.x, y: a.y } };
   }
-  const home = scene.layout.byId("fullscreen");
-  if (home && near(uiArrow(scene))) return { x: home.x + 0.5, y: home.y + 0.5, pin: "ui" };
+  const home = scene.layout.byId("fullscreen"), ui = uiArrow(scene);
+  if (home && ui && near(ui)) return { x: home.x + 0.5, y: home.y + 0.5, pin: "ui", id: "fullscreen", on: { x: ui.x, y: ui.y } };
   return null;
 }
 const hitsArrow = (e: PointerEvent) => markerAt(e) !== null;
 // A pressed arrow sinks; let go, it pops and the view hops there at once.
-let pinThrob: { pin: "red" | "ui"; born: number; at?: { x: number; y: number } | null } | null = null;
-let pinHeld: "red" | "ui" | null = null;
+let pinThrob: { pin: string; born: number; at?: { x: number; y: number } | null } | null = null;
+let pinHeld: string | null = null;
 
 // Sound can start only from a touch (some iPhones: only one that ends), a click or a key, and
 // starts again after the page was in the background: every one tries. It is let go when the
@@ -2282,9 +2343,8 @@ canvas.addEventListener("pointerup", (e) => {
     pinHeld = null;
     const to = markerAt(e);
     if (to) {
-      const at = (to.pin === "red" ? redArrow : uiArrow)(scene);
-      pinThrob = { pin: to.pin, born: -1, at: at && { x: at.x, y: at.y } };
-      hopTo(to, to.pin === "red" ? scene.goal!.id : "fullscreen");
+      pinThrob = { pin: to.pin, born: -1, at: to.on };
+      hopTo(to, to.id);
     }
     redraw();
     return;
