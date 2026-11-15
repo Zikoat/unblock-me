@@ -38,6 +38,22 @@ export function starPoints(rect: { x: number; y: number; width: number; height: 
   return [...lines, end].filter((at, i) => i === lines.length || used <= at).map((at) => (vertical ? { x: rect.x + T / 2, y: rect.y + rect.height - at * w } : { x: rect.x + at * w, y: rect.y + T / 2 }));
 }
 
+/** The row a finished goal's icons rest in, over `rect` (world px), in order: the medal (if
+ * won), the stars not won, then the stars won (as drawScoreTrack lays it out; `room` as there). */
+export function starRow(rect: { x: number; y: number; width: number; height: number }, fewest: number, used: number, room = 14): { kind: "medal" | "lost" | "won"; x: number; y: number }[] {
+  const vertical = rect.height > rect.width;
+  const L = vertical ? rect.height : rect.width, T = vertical ? rect.width : rect.height;
+  const { lines, end } = scoreTrack(fewest);
+  const ats = [...lines, end];
+  const won = ats.filter((at, i) => i === lines.length || used <= at).length;
+  const kinds = [...(finishTimes(fewest, used).medalAt !== null ? ["medal" as const] : []), ...Array<"lost">(ats.length - won).fill("lost"), ...Array<"won">(won).fill("won")];
+  const sf = Math.min(T * 0.55, (L - 2 * room) / ((kinds.length - 1) * 1.2 + 1.2));
+  return kinds.map((kind, i) => {
+    const u = L / 2 + (i - (kinds.length - 1) / 2) * sf * 1.2;
+    return vertical ? { kind, x: rect.x + T / 2, y: rect.y + rect.height - u } : { kind, x: rect.x + u, y: rect.y + T / 2 };
+  });
+}
+
 /** One icon as drawn: which, where along the track (world px), its size and opacity (for the
  * animation inspector's curves). */
 export type TraceEntry = { name: string; along: number; scale: number; opacity: number };

@@ -2,7 +2,7 @@
 // camera transform, so it all zooms and pans together.
 import { worldRect, type Rect } from "./camera";
 import { intersects, UNIT, type Block } from "./layout";
-import { drawScoreTrack, FINISH, finishTimes, starPoints, type TraceEntry } from "./score-track";
+import { drawScoreTrack, FINISH, finishTimes, starPoints, starRow, type TraceEntry } from "./score-track";
 import { bestKnown, shownUsed, type Goal } from "./goal";
 import { islandSide, redId, squareOf } from "./island";
 import { timed } from "./perf";
@@ -80,7 +80,7 @@ const NUMBER_MIN_PX = 9;
 /** A reached world goal's number on its red block: centred, in the game's font, as tall as
  * half its short side (less if it would not fit across), white with a dark gold edge so it
  * reads over the row of stars on its target; left out when too small to read. */
-function drawNumber(ctx: CanvasRenderingContext2D, block: Block, n: number, at: DOMMatrix): void {
+function drawNumber(ctx: CanvasRenderingContext2D, block: Block, n: number, at: DOMMatrix, spot?: { x: number; y: number }): void {
   const text = String(n), w = block.w * UNIT - 2 * GAP, h = block.h * UNIT - 2 * GAP;
   const font = (px: number) => `800 ${px}px system-ui, -apple-system, "Segoe UI", sans-serif`;
   let size = Math.min(w, h) * 0.5;
@@ -97,7 +97,7 @@ function drawNumber(ctx: CanvasRenderingContext2D, block: Block, n: number, at: 
   ctx.font = font(size);
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  const x = (block.x + block.w / 2) * UNIT, y = (block.y + block.h / 2) * UNIT + size * 0.04;
+  const x = spot?.x ?? (block.x + block.w / 2) * UNIT, y = (spot?.y ?? (block.y + block.h / 2) * UNIT) + size * 0.04;
   ctx.lineJoin = "round";
   ctx.lineWidth = size * 0.22;
   ctx.strokeStyle = COLORS.numberEdge;
@@ -476,15 +476,27 @@ export function draw(
       else if (g.used !== undefined && !g.step && !(finish?.island && finish.id === g.id)) drawScoreTrack(ctx, trackRect(cells), fewestOf(g), shownUsed(g)!, { t: finish?.id === g.id ? (finishClock(scene, finish, now) ?? Infinity) : Infinity, undone: g.undone, trace: finish?.id === g.id ? trace : undefined, detail });
     }
   });
-  for (const { block, at } of numbered) drawNumber(ctx, block, numbers!.get(block.id)!, at);
+  // Each number over its row of stars: on a star not won, nearest the middle, so no won star
+  // is hidden (all five won: the middle one, the count still plain).
+  for (const { block, at } of numbered) {
+    const g = scene.done.find((d) => d.id === block.id), cells = g && targetCells(scene, g);
+    let spot: { x: number; y: number } | undefined;
+    if (g && cells && g.used !== undefined && cells.x === block.x && cells.y === block.y) {
+      const r = trackRect(cells), mx = r.x + r.width / 2, my = r.y + r.height / 2;
+      const lost = starRow(r, fewestOf(g), shownUsed(g)!).filter((p) => p.kind === "lost");
+      spot = lost.sort((a, b) => Math.hypot(a.x - mx, a.y - my) - Math.hypot(b.x - mx, b.y - my))[0];
+    }
+    drawNumber(ctx, block, numbers!.get(block.id)!, at, spot);
+  }
   timed(ctx, "sparkles", () => sparkles.forEach((s) => sparkle(ctx, s, now)));
-  // The next goal still being made: three small red dots just under the last red block (its
+  // The next goal still being made: three small white dots inside the last red block (its
   // soul sets off once it comes), swelling in turn, the way a chat shows someone typing.
   const waitOn = loading ? blocks.find((b) => b.id === loading.id) : null;
   if (loading && waitOn) {
-    const cx = (waitOn.x + waitOn.w / 2) * UNIT, cy = (waitOn.y + waitOn.h) * UNIT + UNIT * 0.2;
+    // (Inside the block, white, near its bottom edge; over a number or stars if they are there.)
+    const cx = (waitOn.x + waitOn.w / 2) * UNIT, cy = (waitOn.y + waitOn.h) * UNIT - GAP - UNIT * 0.16;
     ctx.save();
-    ctx.fillStyle = COLORS.goal;
+    ctx.fillStyle = "#ffffff";
     for (let i = 0; i < 3; i++) {
       const beat = 0.5 + 0.5 * Math.sin((now / LOADING_TURN_MS) * Math.PI * 2 - i * 0.9);
       ctx.globalAlpha = loading.k * (0.35 + 0.6 * beat);
