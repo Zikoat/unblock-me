@@ -54,6 +54,8 @@ const OLD_SEEN_KEY = "unblock-me:v13:seen";
 // there is still the same (a world that changes on reload is a bug).
 const VIEW_CHECK_KEY = "unblock-me:view-check";
 const BORDER_KEY = "unblock-me:border";
+/** Whether moved blocks are drawn green (the debug UI's green block; off by default). */
+const GREEN_KEY = "unblock-me:green";
 const FPS_KEY = "unblock-me:fps"; // whether the fps counter shows
 const TRIES_KEY = "unblock-me:tries";
 const WALLS_KEY = "unblock-me:walls";
@@ -373,6 +375,7 @@ function save(): void {
   try {
     localStorage.setItem(SEED_KEY, JSON.stringify(seed));
     localStorage.setItem(BORDER_KEY, JSON.stringify(scene.border));
+    localStorage.setItem(GREEN_KEY, JSON.stringify(greenMoved));
     localStorage.setItem(FPS_KEY, JSON.stringify(showingFps));
     localStorage.setItem(TRIES_KEY, JSON.stringify(tries));
     localStorage.setItem(WALLS_KEY, JSON.stringify(walls));
@@ -394,6 +397,8 @@ const seed = load<number>(SEED_KEY, Math.floor(Math.random() * 2 ** 32));
 let tries = load<number>(TRIES_KEY, TRIES);
 let walls = load<number>(WALLS_KEY, hadSeed ? 0 : WALLS);
 const debug = load<boolean>(DEBUG_KEY, false);
+/** Moved blocks drawn green (the green debug block; off by default). */
+let greenMoved = load<boolean>(GREEN_KEY, false);
 // The fullscreen block shows only where the browser can go full screen (not iPhone Safari).
 const canFullscreen = !!(document.fullscreenEnabled || (document as unknown as { webkitFullscreenEnabled?: boolean }).webkitFullscreenEnabled);
 const shownUi = { debug, fullscreen: canFullscreen, island: withIsland };
@@ -1528,6 +1533,9 @@ const gestures = new Gestures(scene, {
     } else if (ui === "border") {
       scene.border = !scene.border;
       save();
+    } else if (ui === "green") {
+      greenMoved = !greenMoved;
+      save();
     } else if (ui === "fullscreen") {
       toggleFullscreen();
     } else if (ui === "home") {
@@ -2078,6 +2086,7 @@ function paint(now: number, moving: ReturnType<typeof sliding>, to: HTMLCanvasEl
         shake,
         pinThrob,
         pinHeld,
+        greenMoved,
         used: scene.goal ? movesOn(scene.goal) : 0,
         finish,
         soul,
@@ -2135,6 +2144,7 @@ const point = (e: PointerEvent | WheelEvent) => ({ x: e.offsetX, y: e.offsetY })
 function tooltip(ui: Ui): string | null {
   switch (ui) {
     case "border": return "Debug: Make the viewport smaller to test frustum culling.";
+    case "green": return "Debug: Show moved blocks in green.";
     case "reset": return "Reset";
     case "fps": return "Debug: Show or hide the fps counter";
     case "reports": return "Reports";

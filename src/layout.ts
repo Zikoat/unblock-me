@@ -3,7 +3,7 @@ import { ISLAND_KEEP_OUT, islandBlocks } from "./island";
 import { cellKinds, type Room } from "./room";
 
 /** A 1x1 control on the board: it never slides, a tap runs it. */
-export type Ui = "home" | "reset" | "fullscreen" | "reports" | "density" | "walls" | "border" | "upload" | "fps" | "testbed" | "levels";
+export type Ui = "home" | "reset" | "fullscreen" | "reports" | "density" | "walls" | "border" | "upload" | "fps" | "testbed" | "levels" | "green";
 
 /** A block on the lattice, in lattice units: 2x1 slides horizontally, 1x2 vertically.
  * UI blocks and walls never slide. */
@@ -58,6 +58,7 @@ export const GAME_UI: Placed[] = [
 export const DEBUG_UI: Placed[] = [
   // (In the fullscreen block's row, inside the area kept free already: no block moves.)
   { id: "levels", x: -1, y: 0, w: 1, h: 1, ui: "levels" },
+  { id: "green", x: 0, y: 0, w: 1, h: 1, ui: "green" },
   { id: "density", x: -1, y: 2, w: 1, h: 1, ui: "density" },
   { id: "border", x: 0, y: 2, w: 1, h: 1, ui: "border" },
   { id: "upload", x: 1, y: 2, w: 1, h: 1, ui: "upload" },

@@ -110,7 +110,7 @@ function drawNumber(ctx: CanvasRenderingContext2D, block: Block, n: number, at: 
 export function draw(
   canvas: HTMLCanvasElement,
   scene: Scene,
-  { fullscreen, density, walls = 0, fps = true, sliding, sparkles = [], throb = null, cue = null, ripples = [], shake = null, pinThrob = null, pinHeld = null, used = 0, trace, finish = null, soul = null, souls = [], loading = null, waiting = false, appear = 1, stillRed = null, detail = 1, now = 0, hud = null, surface = null, labels = [], numbers = null }: {
+  { fullscreen, density, walls = 0, fps = true, sliding, sparkles = [], throb = null, cue = null, ripples = [], shake = null, pinThrob = null, pinHeld = null, greenMoved = false, used = 0, trace, finish = null, soul = null, souls = [], loading = null, waiting = false, appear = 1, stillRed = null, detail = 1, now = 0, hud = null, surface = null, labels = [], numbers = null }: {
     fullscreen: boolean;
     density: number;
     /** The walls slider's position, 0..1. */
@@ -134,6 +134,8 @@ export function draw(
     pinThrob?: { pin: string; born: number; at?: { x: number; y: number } | null } | null;
     /** An edge arrow held down. */
     pinHeld?: string | null;
+    /** Moved blocks drawn green (the debug UI's green block; off: the colour of the rest). */
+    greenMoved?: boolean;
     /** Moves made on the current goal so far, for its score track. */
     used?: number;
     /** The goal just reached, and when: its score track plays the finish. An island square's
@@ -341,6 +343,7 @@ export function draw(
     else if (block.ui === "testbed") testbedIcon(ctx, block);
     else if (block.ui === "levels") levelsIcon(ctx, block);
     else if (block.ui === "fps") fpsIcon(ctx, block, fps);
+    else if (block.ui === "green") greenIcon(ctx, block, greenMoved);
     else if (block.ui === "density") densityIcon(ctx, block, density);
     else if (block.ui === "walls") wallsIcon(ctx, block, walls);
     else if (block.ui === "home") homeIcon(ctx, block);
@@ -367,10 +370,10 @@ export function draw(
         : block.wall ? COLORS.wall
         : block.id === scene.dragging?.id ? COLORS.dragging
         : block.id === scene.stuckId ? COLORS.stuck
-        : isGoal ? (waiting ? mix(block.moved ? COLORS.moved : COLORS.block, COLORS.goalWaiting, appear) : soulK < SOUL.TRAVEL_MS && block.id === soul?.toId ? COLORS.goalWaiting : block.id === soul?.toId && soulFlash(soulK) > 0 ? mix(COLORS.goal, "#ffffff", soulFlash(soulK)) : COLORS.goal)
+        : isGoal ? (waiting ? mix(block.moved && greenMoved ? COLORS.moved : COLORS.block, COLORS.goalWaiting, appear) : soulK < SOUL.TRAVEL_MS && block.id === soul?.toId ? COLORS.goalWaiting : block.id === soul?.toId && soulFlash(soulK) > 0 ? mix(COLORS.goal, "#ffffff", soulFlash(soulK)) : COLORS.goal)
         : isOpen ? (extraSoul && (extraSoul.born < 0 || now - extraSoul.born < SOUL.TRAVEL_MS) ? COLORS.goalWaiting : COLORS.goal)
         : wasGoal ? doneColor(block.id)
-        : block.moved ? COLORS.moved
+        : block.moved && greenMoved ? COLORS.moved
         : COLORS.block;
       const beat = throb?.id === block.id ? throbScale((now - throb.born) / THROB_MS) : 1;
       // A stuck block shakes along its axis, a few px each way, dying down.
@@ -1035,6 +1038,22 @@ function testbedIcon(ctx: CanvasRenderingContext2D, block: Block): void {
 }
 
 /** "fps" with a switch under it, like the border toggle's. */
+/** The green block: a small block, green while moved blocks are drawn green, with a switch. */
+function greenIcon(ctx: CanvasRenderingContext2D, block: Block, on: boolean): void {
+  const x = block.x * UNIT, y = block.y * UNIT;
+  ctx.beginPath();
+  ctx.roundRect(x + UNIT * 0.28, y + UNIT * 0.2, UNIT * 0.44, UNIT * 0.26, UNIT * 0.06);
+  ctx.fillStyle = on ? COLORS.moved : COLORS.block;
+  ctx.fill();
+  const w = UNIT * 0.36, h = UNIT * 0.18, left = x + (UNIT - w) / 2, top = y + UNIT * 0.58;
+  ctx.beginPath();
+  ctx.roundRect(left, top, w, h, h / 2);
+  ctx.fillStyle = on ? COLORS.icon : COLORS.ui;
+  ctx.fill();
+  ctx.strokeStyle = COLORS.icon;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+}
 function fpsIcon(ctx: CanvasRenderingContext2D, block: Block, on: boolean): void {
   const x = block.x * UNIT;
   const y = block.y * UNIT;

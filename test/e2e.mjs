@@ -130,7 +130,7 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
   await frame(page);
   await pass(page, 300);
   const uis = await page.evaluate(() => [unblock.visibleBlocks().filter((b) => b.ui).length, localStorage.getItem("unblock-me:debug")]);
-  check(uis[0] === 11 && uis[1] === "true", `and turn the debug UI on, reset among it (${uis})`);
+  check(uis[0] === 12 && uis[1] === "true", `and turn the debug UI on, reset among it (${uis})`);
 
   // Random layout with the UI blocks in the middle.
   await fresh();
@@ -211,6 +211,7 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
     "unblock-me:border": "false",
     "unblock-me:debug": "true",
     "unblock-me:fps": "false",
+    "unblock-me:green": "false",
     "unblock-me:tries": "12",
     "unblock-me:v13:history": "[]",
     "unblock-me:v13:moved": "[]",
@@ -366,8 +367,16 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
   });
   check(mid.y === 0 && mid.x > -2 && mid.x <= 0, `mid-drag the block stays in its row and before its neighbour (x ${mid.x.toFixed(2)})`);
   check((await block(page, "a")).x === 0, "it stops right in front of its neighbour");
-  await expectColor(page, cell(1, 0.5), "moved", "the moved block is green");
+  await expectColor(page, cell(1, 0.5), "block", "the moved block keeps the colour of the rest (green is off by default)");
   await expectColor(page, cell(2.5, 0.5), "block", "the neighbour did not move");
+  // The green debug block turns moved blocks green, and is kept.
+  await fresh();
+  await tap(cell(0.5, 0.5));
+  check(await page.evaluate(() => localStorage.getItem("unblock-me:green") === "true"), "tapping the green debug block turns green on (stored)");
+  await place([H("a", -2, 0), H("b", 2, 0)]);
+  await gesture([cell(-1, 0.5)], [cell(3, 0.5)]);
+  await expectColor(page, cell(1, 0.5), "moved", "then a moved block is green");
+  await fresh();
 
   await place([V("v", 0, -2)]);
   await gesture([cell(0.5, -1)], [cell(2, 1.3)]); // 2.3 down, 1.5 right
@@ -396,7 +405,7 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
   await tap(cell(0, 4.5));
   check((await block(page, "a")).x === 1, "a tap slides a free block right to the wall");
   await pass(page, 450); // the slide is animated
-  await expectColor(page, cell(2, 4.5), "moved", "and it is drawn there");
+  await expectColor(page, cell(2, 4.5), "block", "and it is drawn there");
   check(await page.evaluate(() => unblock.scene.circle === null), "a tap on a block does not move the circle");
   await tap(cell(2, 4.5));
   check((await block(page, "a")).x === -1, "against the wall, a tap sends it all the way back");
@@ -412,7 +421,7 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
       const f = unblock.frames?.at(-1);
       if (f && f.x > -1 && f.x < 1 && !seen.some(([x]) => x === f.x)) {
         const px = c.getContext("2d").getImageData(Math.round((170 + (f.x + 1) * 60) * d), Math.round((370 + 4.5 * 60) * d), 1, 1).data;
-        seen.push([f.x, px[1] > 140 && px[0] < 100]); // the moved block's green
+        seen.push([f.x, px[0] < 110 && px[2] > 120]); // a block's blue (moved blocks aren't green by default)
       }
       if (++ticks < 40) requestAnimationFrame(look); else resolve(seen);
     };
@@ -489,7 +498,7 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
       // Screen x 375 (lattice 3.42) is past the border (x 360) and still on the canvas.
       if (f && f.x > 1.5 && f.x < 3.4 && !seen.some(([x]) => x === f.x)) {
         const px = c.getContext("2d").getImageData(Math.round(375 * d), Math.round((370 + 4.5 * 60) * d), 1, 1).data;
-        seen.push([f.x, px[1] > 140 && px[0] < 100]); // green: the moved block's colour
+        seen.push([f.x, px[0] < 110 && px[2] > 120]); // a block's blue (moved blocks aren't green by default)
       }
       if (++ticks < 60 && seen.length < 3) requestAnimationFrame(look); else resolve(seen);
     };

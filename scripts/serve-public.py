@@ -25,7 +25,7 @@ MAX_TOTAL = 200_000_000  # bytes kept
 # of the device's last upload (isProgressKey there), and only for a well-formed existing id.
 # Anyone with the link gets that progress and play log; the id is a random UUID.
 PLAYER_ID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
-PROGRESS_KEY = re.compile(r"unblock-me:(v\d+:(seed|moved|history|goal|rooms|seen)|tries|walls|camera|rooms-made|detail|log|debug|fps|border)")
+PROGRESS_KEY = re.compile(r"unblock-me:(v\d+:(seed|moved|history|goal|rooms|seen)|tries|walls|camera|rooms-made|detail|log|debug|fps|border|green)")
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
