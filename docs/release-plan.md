@@ -29,6 +29,7 @@ The end goal is the game released on every platform: web, itch.io, Android, iOS 
 - Ads (Unity Ads, AdMob and others). They need consent dialogs and a different integration on each platform, and pay little at a small player count.
 - A coin shop, skins and hats.
 - God levels, the bot-solved levels (docs/grim-god.md). They are a side mode for programmers.
+- Cutscenes (docs/cutscenes.md).
 - Loose goals, shapes and the daily board. The daily board is small and could come back if there is time.
 
 ## Open: earning money, or not
