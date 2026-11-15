@@ -73,15 +73,15 @@ describe("random layout", () => {
       for (const b of plain) if (!b.ui) for (const c of cells(b)) expect(c).not.toBe("1,0");
       expect(randomLayout(seed, { fullscreen: false }).blocksIn({ x: -5, y: -5, width: 10, height: 10 }).some((b) => b.ui)).toBe(false);
       // With it: both rows, nothing generated in the rectangle round them and the gap.
-      const near = randomLayout(seed, { debug: true }).blocksIn({ x: -5, y: -5, width: 10, height: 10 });
+      const near = randomLayout(seed, { debug: true }).blocksIn({ x: -5, y: -5, width: 10, height: 12 });
       expect(near.filter((b) => b.ui).map((b) => [b.ui, b.x, b.y, b.w, b.h])).toEqual([
         ["fullscreen", 1, 0, 1, 1],
-        ["levels", -1, 0, 1, 1], ["green", 0, 0, 1, 1],
-        ["density", -1, 2, 1, 1], ["border", 0, 2, 1, 1], ["upload", 1, 2, 1, 1], ["fps", -1, 3, 1, 1], ["reports", 0, 3, 1, 1], ["home", 1, 3, 1, 1], ["reset", -1, 4, 1, 1], ["testbed", 0, 4, 1, 1], ["walls", 1, 4, 1, 1],
+        ["levels", -1, 0, 1, 1],
+        ["density", -1, 2, 1, 1], ["border", 0, 2, 1, 1], ["upload", 1, 2, 1, 1], ["fps", -1, 3, 1, 1], ["reports", 0, 3, 1, 1], ["home", 1, 3, 1, 1], ["reset", -1, 4, 1, 1], ["testbed", 0, 4, 1, 1], ["walls", 1, 4, 1, 1], ["green", -1, 5, 1, 1],
       ]);
       for (const b of near) if (!b.ui) for (const c of cells(b)) {
         const [x, y] = c.split(",").map(Number) as [number, number];
-        expect(x >= -1 && x <= 1 && y >= 0 && y <= 4).toBe(false);
+        expect(x >= -1 && x <= 1 && y >= 0 && y <= 5).toBe(false);
       }
     }
   });

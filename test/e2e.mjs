@@ -117,8 +117,9 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
   await fresh({ debug: false });
   check((await page.evaluate(() => unblock.visibleBlocks().filter((b) => b.ui).map((b) => b.ui).join())) === "fullscreen", "only the fullscreen block shows at first");
   // With the red block stuck: tapping the empty board, then the red block (it shakes), five
-  // times over turns the debug UI on (and resets). A slip starts it over.
+  // times over turns the debug UI on, keeping the progress. A slip starts it over.
   await place([Wall(-1, 4), H("r", 0, 4), Wall(2, 4)], { id: "r", target: { x: 4, y: 4 }, solution: [] });
+  const seedOnce = await page.evaluate(() => unblock.seed());
   const debugReload = page.waitForEvent("load", { timeout: 8000 }).then(() => true, () => false);
   await tap(cell(0.5, 2.5)); // a tap, then a second tap where the red block should be: starts over
   for (let i = 0; i < 5; i++) {
@@ -126,11 +127,12 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
     await tap(cell(1, 4.5));
     if (i === 3) check(await page.evaluate(() => localStorage.getItem("unblock-me:debug")) === null, "four rounds are not enough");
   }
-  check(await debugReload, "five rounds of empty board then the stuck red block reset the game");
+  check(await debugReload, "five rounds of empty board then the stuck red block reload the game");
   await frame(page);
   await pass(page, 300);
   const uis = await page.evaluate(() => [unblock.visibleBlocks().filter((b) => b.ui).length, localStorage.getItem("unblock-me:debug")]);
   check(uis[0] === 12 && uis[1] === "true", `and turn the debug UI on, reset among it (${uis})`);
+  check((await page.evaluate(() => unblock.seed())) === seedOnce, "the world is the same one: turning the debug UI on keeps the progress");
 
   // Random layout with the UI blocks in the middle.
   await fresh();
@@ -371,7 +373,7 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
   await expectColor(page, cell(2.5, 0.5), "block", "the neighbour did not move");
   // The green debug block turns moved blocks green, and is kept.
   await fresh();
-  await tap(cell(0.5, 0.5));
+  await tap(cell(-0.5, 5.5));
   check(await page.evaluate(() => localStorage.getItem("unblock-me:green") === "true"), "tapping the green debug block turns green on (stored)");
   await place([H("a", -2, 0), H("b", 2, 0)]);
   await gesture([cell(-1, 0.5)], [cell(3, 0.5)]);

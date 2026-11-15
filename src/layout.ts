@@ -51,14 +51,13 @@ export function fixedLayout(placed: Placed[]): Layout {
 
 /** The UI blocks in the middle of the random layout: the fullscreen block (where the
  * browser can go full screen); with the debug UI on, an empty row and the debug blocks in
- * a square-ish 3 by 3 below it (home and reset among them). */
+ * rows of 3 below it (home and reset among them, the green block alone in the last). */
 export const GAME_UI: Placed[] = [
   { id: "fullscreen", x: 1, y: 0, w: 1, h: 1, ui: "fullscreen" },
 ];
 export const DEBUG_UI: Placed[] = [
   // (In the fullscreen block's row, inside the area kept free already: no block moves.)
   { id: "levels", x: -1, y: 0, w: 1, h: 1, ui: "levels" },
-  { id: "green", x: 0, y: 0, w: 1, h: 1, ui: "green" },
   { id: "density", x: -1, y: 2, w: 1, h: 1, ui: "density" },
   { id: "border", x: 0, y: 2, w: 1, h: 1, ui: "border" },
   { id: "upload", x: 1, y: 2, w: 1, h: 1, ui: "upload" },
@@ -68,6 +67,7 @@ export const DEBUG_UI: Placed[] = [
   { id: "reset", x: -1, y: 4, w: 1, h: 1, ui: "reset" },
   { id: "testbed", x: 0, y: 4, w: 1, h: 1, ui: "testbed" },
   { id: "walls", x: 1, y: 4, w: 1, h: 1, ui: "walls" },
+  { id: "green", x: -1, y: 5, w: 1, h: 1, ui: "green" },
 ];
 export const UI_BLOCKS: Placed[] = [...GAME_UI, ...DEBUG_UI];
 /** `island`: the handcrafted squares right of the start (src/island.ts). */
@@ -77,7 +77,7 @@ export type UiShown = { debug?: boolean; fullscreen?: boolean; island?: boolean 
 export function uiBlocks({ debug = false, fullscreen = true }: UiShown): Placed[] {
   return [...(fullscreen ? GAME_UI : []), ...(debug ? DEBUG_UI : [])];
 }
-export const uiArea = ({ debug = false, fullscreen = true }: UiShown) => (debug ? { x: -1, y: 0, width: 3, height: 5 } : fullscreen ? { x: 1, y: 0, width: 1, height: 1 } : null);
+export const uiArea = ({ debug = false, fullscreen = true }: UiShown) => (debug ? { x: -1, y: 0, width: 3, height: 6 } : fullscreen ? { x: 1, y: 0, width: 1, height: 1 } : null);
 
 /** The lattice is cut into chunks of CHUNK x CHUNK cells. Each chunk tries `tries` random
  * blocks and keeps those that fit, so blocks stay inside their chunk and never overlap.

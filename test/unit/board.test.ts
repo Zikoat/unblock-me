@@ -405,8 +405,8 @@ describe("UI blocks", () => {
   test("they are 1x1: a row for the game, a gap, and a row of debug blocks", () => {
     expect(ui().map((b) => [b.id, b.x, b.y, b.w, b.h])).toEqual([
       ["fullscreen", 1, 0, 1, 1],
-      ["levels", -1, 0, 1, 1], ["green", 0, 0, 1, 1],
-      ["density", -1, 2, 1, 1], ["border", 0, 2, 1, 1], ["upload", 1, 2, 1, 1], ["fps", -1, 3, 1, 1], ["reports", 0, 3, 1, 1], ["home", 1, 3, 1, 1], ["reset", -1, 4, 1, 1], ["testbed", 0, 4, 1, 1], ["walls", 1, 4, 1, 1],
+      ["levels", -1, 0, 1, 1],
+      ["density", -1, 2, 1, 1], ["border", 0, 2, 1, 1], ["upload", 1, 2, 1, 1], ["fps", -1, 3, 1, 1], ["reports", 0, 3, 1, 1], ["home", 1, 3, 1, 1], ["reset", -1, 4, 1, 1], ["testbed", 0, 4, 1, 1], ["walls", 1, 4, 1, 1], ["green", -1, 5, 1, 1],
     ]);
   });
 

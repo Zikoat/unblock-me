@@ -445,6 +445,19 @@ const scene = newScene(innerWidth, innerHeight, {
   done: goalsFit ? (storedGoal.done ?? []) : [],
 });
 scene.open = goalsFit ? (storedGoal.open ?? []) : [];
+// The debug UI turned on with progress kept: a block moved onto its area goes back to where it
+// started, if that is free (the area is kept clear of the world's own blocks).
+{
+  const area = uiArea(shownUi);
+  const cellsOf = (x: number, y: number, w: number, h: number) => Array.from({ length: w * h }, (_, i) => `${x + (i % w)},${y + Math.floor(i / w)}`);
+  const inArea = (x: number, y: number, w: number, h: number) => !!area && x < area.x + area.width && x + w > area.x && y < area.y + area.height && y + h > area.y;
+  for (const [id, p] of [...scene.moved]) {
+    const b = scene.layout.byId(id);
+    if (!b || !inArea(p.x, p.y, b.w, b.h) || inArea(b.x, b.y, b.w, b.h)) continue;
+    const taken = new Set(blocksIn(scene.layout, { x: b.x - 3, y: b.y - 3, width: b.w + 6, height: b.h + 6 }, scene).filter((o) => o.id !== id).flatMap((o) => cellsOf(o.x, o.y, o.w, o.h)));
+    if (cellsOf(b.x, b.y, b.w, b.h).every((c) => !taken.has(c))) scene.moved.delete(id);
+  }
+}
 // Several goals at once (see routeMoves). (Up here: the first goal shows before the
 // code further down runs.)
 /** More souls, each to another goal that came at the same time (a split): waiting (born -1)
@@ -1461,24 +1474,17 @@ function takeBack(): void {
  * which turns the debug UI on (and starts over). With the debug UI on, the same sequence
  * turns it off again (debugOff), keeping the progress. */
 let debugSteps = 0;
-function debugCode(step: "tap" | "red" | null): boolean {
+function debugCode(step: "tap" | "red" | null): void {
   const want = debugSteps % 2 === 0 ? "tap" : "red";
   debugSteps = step === want ? debugSteps + 1 : step === "tap" ? 1 : 0;
-  if (debugSteps < DEBUG_ROUNDS * 2) return false;
+  if (debugSteps < DEBUG_ROUNDS * 2) return;
   debugSteps = 0;
   try {
     localStorage.setItem(DEBUG_KEY, debug ? "false" : "true");
   } catch {
-    return false; // no storage: no debug UI
+    return; // no storage: no debug UI
   }
-  if (debug) {
-    debugOff();
-    return false;
-  }
-  return true;
-}
-/** The debug sequence done with the debug UI on: it goes off, the progress stays. */
-function debugOff(): void {
+  // The debug UI goes on or off; the progress stays (it once reset the game going on).
   save();
   location.reload();
 }
@@ -1522,7 +1528,7 @@ const gestures = new Gestures(scene, {
   onPanAfterPush: (ms) => log({ e: "panAfterPush", ms }),
   onStuck: (id) => {
     sfx.play("stuck", performance.now());
-    if (debugCode(id === scene.goal?.id ? "red" : null)) forgetEverything();
+    debugCode(id === scene.goal?.id ? "red" : null);
     shake = { id, born: -1 };
     redraw();
   },
@@ -2366,7 +2372,7 @@ canvas.addEventListener("pointerup", (e) => {
   gestures.up(e.pointerId, point(e));
   if (scene.circle && scene.circle !== tapped) {
     ripples.push({ at: scene.circle, born: -1 }); // a tap on the background
-    if (debugCode("tap")) forgetEverything();
+    debugCode("tap");
   }
   redraw();
 });
