@@ -161,9 +161,11 @@ await full.evaluate(() => {
   const s = document.documentElement.style;
   s.setProperty("--safe-top", "62px");
   s.setProperty("--safe-bottom", "34px");
-  localStorage.setItem("unblock-me:fps", "true");
   dispatchEvent(new Event("resize"));
 });
+// (Set as the page loads: set before the reload, the page's own save, as its first goal came,
+// could write it back to false first.)
+await full.addInitScript(() => localStorage.setItem("unblock-me:fps", "true"));
 await full.reload();
 await full.waitForFunction(() => window.unblock?.scene);
 await full.evaluate(() => {
