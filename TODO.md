@@ -16,7 +16,7 @@ Release (the end goal; what goes in before release and what is cut: docs/release
 - A link to GitHub in the game; waits on you picking where it goes.
 - Settings as slidable blocks in a pre-made area near the island's exit: music and sound effects on/off or volume as a slider, username, soul style (sign-in and multiplayer settings cut until after release); waits on you picking it.
 - Sounds for every interaction that has none, and a theme song, maybe from a designer on Fiverr or an Opus or Fable agent, with a debug block to download and upload a sound pack, a sound reel video, a maximalist and a balanced pack (docs/audio-plan.md); waits on you picking it.
-- Grim levels (a grim reaper icon) and god levels (a black void orb), extra hard at a branch's end, god ones solved by a typed move sequence (docs/grim-god.md; god levels cut until after release in the plan); waits on you picking it.
+- Grim levels (a grim reaper icon) and god levels (a black void orb), extra hard at a branch's end, god ones solved by a typed move sequence, the last built from logic gadgets that defeat plain search (docs/grim-god.md); grim waits on you picking it, god on the release (maybe behind a supporter badge).
 
 
 - In play, a goal the Referee rejects is asked for again once at another effort level (rejected again, none found); the spec asks the maker again with the next seed; waits on a maker that takes a seed.

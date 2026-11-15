@@ -32,6 +32,22 @@ So large that a human can't really finish it by hand; the player may write a bot
 3. **(Not specified.)** You list a first, second and fourth. Is there a third, or is the fourth the third?
 4. **Medium difficulty,** open to the endless world.
 
+### The last god level
+
+- **The red block travels 1 cell to its goal.** All the difficulty lies in clearing the way.
+- **It is built from building blocks** (gadgets):
+  - AND gates and OR gates;
+  - signal lines;
+  - complex sub-levels with one or more inputs and outputs;
+  - sub-levels that trip up particular algorithms, such as depth-first, breadth-first and others from the literature (research/), and common heuristics.
+- **Only a smart solver finishes it:** an algorithm without these optimizations would run too long to return a solution in practical time.
+- **Background:** sliding-block puzzles are known to be PSPACE-complete through such gadgets (Hearn and Demaine's Nondeterministic Constraint Logic: AND, protected OR and latch gadgets, with Rush Hour versions transcribed in the lab's research/cleaned/hearn2005 and hearn2006). Their gadgets are a starting point.
+
+## When
+
+- Deferred until after release.
+- It could sit behind a supporter badge.
+
 ## Open questions
 
 - The ASCII format and the move syntax. For example, one line per move: `<block id> <direction> <cells>`, or `<block id> <x>,<y>`.
