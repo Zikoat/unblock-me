@@ -96,6 +96,24 @@ const withIsland = new URLSearchParams(location.search).get("island") !== "0";
 // World goals are rooms (src/rooms.ts) for everyone; ?rooms=0 leaves them out, for tests of
 // the maker on the plain world.
 const withRooms = new URLSearchParams(location.search).get("rooms") !== "0";
+/** Several goals at once (?multi=1, kept until ?multi=0): a reached goal's soul sometimes
+ * splits to two goals and the player picks which to play; sometimes it goes to a red block
+ * already in play instead of a new one (a merge). */
+const MULTI_KEY = "unblock-me:multi";
+const multi = (() => {
+  const q = new URLSearchParams(location.search).get("multi");
+  try {
+    if (q === "1") localStorage.setItem(MULTI_KEY, "1");
+    if (q === "0") localStorage.removeItem(MULTI_KEY);
+    return localStorage.getItem(MULTI_KEY) === "1";
+  } catch {
+    return q === "1";
+  }
+})();
+/** When the soul splits and merges, by the count of world goals reached (m): a split after
+ * goal m when m % SPLIT_EVERY is SPLIT_AT (while fewer than MAX_OPEN other goals are in play),
+ * a merge when m % MERGE_EVERY is MERGE_AT (and another goal is in play). */
+const MULTI = { SPLIT_EVERY: 3, SPLIT_AT: 1, MERGE_EVERY: 5, MERGE_AT: 4, MAX_OPEN: 2 };
 /** A soul style to always use (`?soul=`, reports/soul.html), or each picked as it goes. */
 const forcedSoul = SOUL_STYLES.find((st) => st === new URLSearchParams(location.search).get("soul")) ?? null;
 /** How many world goals have to be reached before souls may be flames or glints, not only
@@ -202,7 +220,7 @@ type LogEvent =
   // `hop`: cells from the last red block's end (its target) to this one's start, so we can see
   // the next goal stays close. A travel goal (src/travel.ts) says which room it leads to and how
   // far that room's red block is from its target (`travel`); the first one stamps the room.
-  | { e: "goal"; commit: string; id: string; target: Point; start?: Point; tries: number; walls?: number; seed: number; solution: number; proof?: [string, number, number, number, number][]; moved: [string, number, number][]; wait?: number; judge?: Terms; how?: "room" | "maker" | "island" | "trial" | "travel"; via?: Via; n?: number; hop?: number; room?: Goal["room"]; travel?: Goal["travel"]; stamp?: { k: number; x: number; y: number; W: number; H: number; fill: boolean | string[] }; view?: View }
+  | { e: "goal"; commit: string; id: string; target: Point; start?: Point; tries: number; walls?: number; seed: number; solution: number; proof?: [string, number, number, number, number][]; moved: [string, number, number][]; wait?: number; judge?: Terms; how?: "room" | "maker" | "island" | "trial" | "travel"; via?: Via; after?: string; n?: number; hop?: number; room?: Goal["room"]; travel?: Goal["travel"]; stamp?: { k: number; x: number; y: number; W: number; H: number; fill: boolean | string[] }; view?: View }
   // The room travel goals led to could not be given (something moved into it, or its proof no
   // longer holds): the next goal is made as usual.
   | { e: "travelDropped"; k: number; why: string }
@@ -235,6 +253,9 @@ type LogEvent =
   // held back running, and whether the room maker was busy. The maker's goal is asked for.
   | { e: "stuck"; ms: number; times: number; maker: string; pending: number; ahead: { busy: boolean; for: string; wanted: boolean; room: boolean; ready: "goal" | "rejected" | "none" | null }; held: number; rooms: boolean }
   | { e: "reached"; id: string; used: number }
+  | { e: "focus"; id: string }
+  | { e: "merged"; from: string; to: string; d: number }
+  | { e: "extraDropped"; why: string }
   | { e: "reset"; goal: string | null }
   // The page hidden (another tab, the phone locked) and shown again: time away is not thinking.
   | { e: "hide" | "show" }
@@ -347,7 +368,7 @@ function save(): void {
     localStorage.setItem(MOVED_KEY, JSON.stringify([...scene.moved].map(([id, p]) => [id, p.x, p.y])));
     localStorage.setItem(HISTORY_KEY, JSON.stringify(scene.history));
     // A goal belongs to one seed and density (and wall share).
-    localStorage.setItem(GOAL_KEY, JSON.stringify({ seed, tries, walls, goal: scene.goal, done: scene.done }));
+    localStorage.setItem(GOAL_KEY, JSON.stringify({ seed, tries, walls, goal: scene.goal, open: scene.open, done: scene.done }));
     localStorage.setItem(ROOMS_KEY, JSON.stringify({ seed, tries, walls, stamps, ...(trek && { trek }) }));
     localStorage.setItem(LOG_KEY, JSON.stringify(playLog));
   } catch {
@@ -366,7 +387,7 @@ const debug = load<boolean>(DEBUG_KEY, false);
 const canFullscreen = !!(document.fullscreenEnabled || (document as unknown as { webkitFullscreenEnabled?: boolean }).webkitFullscreenEnabled);
 const shownUi = { debug, fullscreen: canFullscreen, island: withIsland };
 const moved = load<[string, number, number][]>(MOVED_KEY, []);
-const storedGoal = load<{ seed: number; tries: number; walls?: number; goal: Goal | null; done?: Goal[] } | null>(GOAL_KEY, null);
+const storedGoal = load<{ seed: number; tries: number; walls?: number; goal: Goal | null; open?: Goal[]; done?: Goal[] } | null>(GOAL_KEY, null);
 // (An island goal fits only a page with the island.)
 const goalsFit = storedGoal?.seed === seed && storedGoal.tries === tries && (storedGoal.walls ?? 0) === walls && (withIsland || squareOf(storedGoal.goal) === null);
 const storedRooms = load<{ seed: number; tries: number; walls: number; stamps: Stamp[]; trek?: Goal } | null>(ROOMS_KEY, null);
@@ -407,6 +428,18 @@ const scene = newScene(innerWidth, innerHeight, {
   goal: goalsFit ? storedGoal.goal : null,
   done: goalsFit ? (storedGoal.done ?? []) : [],
 });
+scene.open = goalsFit ? (storedGoal.open ?? []) : [];
+// Several goals at once (?multi=1; see routeMoves). (Up here: the first goal shows before the
+// code further down runs.)
+/** More souls, each to another goal that came at the same time (a split): waiting (born -1)
+ * while the finish plays, then flying with the first. */
+let souls: { from: { id: string; x: number; y: number; width: number; height: number }; toId: string; born: number; style: SoulStyle }[] = [];
+/** Each goal's ground, worked out once (groundOf). */
+const grounds = new WeakMap<Goal, Rect>();
+/** History entries already counted for the goals. */
+let routed = scene.history.length;
+/** A split's reached goal, whose second goal is asked for once the first shows. */
+let splitFrom: Goal | null = null;
 // The stored history was logged before this page loaded; log only what comes after it.
 logged = scene.history.length;
 // Each page load starts a stretch of play on one build.
@@ -605,7 +638,7 @@ function requestGoal(near: Point = viewCentre(scene.camera, scene.width, scene.h
   // Past the last square, the world's first goal is made just out of its open bay (the
   // search looks only round `near`, and no island block may be the red block).
   if (withIsland) while (inIsland(near)) near = { x: near.x + 1, y: near.y };
-  const exclude = scene.done.map((g) => g.id);
+  const exclude = inPlay().map((g) => g.id);
   // Travel goals have led the player to within a screen of their room: its goal, if it still holds.
   if (trek && trekNext(near)) {
     const goal = trek, why = trekBroken(goal, near);
@@ -623,7 +656,7 @@ function requestGoal(near: Point = viewCentre(scene.camera, scene.width, scene.h
   // board as it is now. The maker's fits only the board it was made on.)
   const ready = ahead.ready, exact = !!ready && (ready.key === key || ready.key === first);
   const usable = !!ready?.goal && !ready.rejected && (ready.goal.stamp
-    ? ready.for === follows && roomFits(ready.goal) && (exact || !!checked(ready.goal, { request: asRequest(nowRequest(near, job), scene.done), near, level: 2 }, true).goal)
+    ? ready.for === follows && roomFits(ready.goal) && (exact || !!checked(ready.goal, { request: asRequest(nowRequest(near, job), inPlay()), near, level: 2 }, true).goal)
     : exact);
   if (usable) {
     if (first !== null) log({ e: "prefetched" });
@@ -646,7 +679,7 @@ function requestGoal(near: Point = viewCentre(scene.camera, scene.width, scene.h
   via = held >= HELD_MAX && stuckTimes ? "stuck" : "now";
   const request = nowRequest(near, ++job);
   sent = request;
-  asked = { request: asRequest(request, scene.done), near, level: 0 };
+  asked = { request: asRequest(request, inPlay()), near, level: 0 };
   asking(0, worker, request);
 }
 /** Whether the room travel goals lead to is the goal after one reached at `near`. */
@@ -661,17 +694,20 @@ function trekBroken(goal: Goal, near: Point): string | null {
     const b = scene.layout.byId(id);
     if (b) for (const at of [b, p]) if (at.x < r.x + r.width && at.x + b.w > r.x && at.y < r.y + r.height && at.y + b.h > r.y) return `${id} moved in its room`;
   }
-  const made = checked(goal, { request: asRequest(nowRequest(near, job), scene.done), near, level: 2 }, true);
+  const made = checked(goal, { request: asRequest(nowRequest(near, job), inPlay()), near, level: 2 }, true);
   return made.goal ? null : `rule ${made.rule}`;
 }
+/** The goals reached and the others in play (?multi=1): no new goal takes their red blocks or
+ * targets. */
+const inPlay = () => [...scene.done, ...(scene.open ?? [])];
 /** The quick way's request for a goal near `near` on the board as it is now. */
 function nowRequest(near: Point, job: number): GoalRequest {
-  return { job, seed, tries, walls, ui: shownUi, placed, near, moved: [...scene.moved], level: 0, exclude: scene.done.map((g) => g.id), avoid: targetsOf(scene.done), target: rampTarget(worldGoals()), ...roomsPart(worldGoals(), near) };
+  return { job, seed, tries, walls, ui: shownUi, placed, near, moved: [...scene.moved], level: 0, exclude: inPlay().map((g) => g.id), avoid: targetsOf(inPlay()), target: rampTarget(worldGoals()), ...roomsPart(worldGoals(), near) };
 }
 /** How the goal about to show was got, for its log entry: an island square's; the room travel
  * goals led to; made ahead while the goal before was played (ready, or waited for); made then
  * while the player waited (again: after a rejected one); or after the game was stuck. */
-type Via = "island" | "trek" | "ahead" | "aheadWaited" | "now" | "nowAgain" | "stuck";
+type Via = "island" | "trek" | "ahead" | "aheadWaited" | "now" | "nowAgain" | "stuck" | "extra";
 let via: Via = "now";
 /** The request the worker was last sent, to ask again if its goal is rejected. */
 let sent: GoalRequest | null = null;
@@ -799,20 +835,17 @@ function showGoal(goal: Goal | null): void {
   if (goal) cutToGoal = false;
   // A room's goal stamps its room into the world (on ground nobody has touched, so no move
   // changes): from now on it is part of the world.
-  const stamp = goal?.stamp;
-  if (goal && stamp) {
-    delete goal.stamp;
-    const before = scene.layout;
-    stamps = [...stamps, stamp];
-    scene.layout = worldOf();
-    worldChanged("stamp", before, scene.layout, stampReach(stamp));
-  }
+  const stamp = goal ? stampIn(goal) : undefined;
   // A travel goal that stamped a room leads to it: the room's goal comes once the player is
   // within a screen of it (requestGoal).
   if (goal?.then) {
     trek = goal.then;
     delete goal.then;
   }
+  // (Several goals at once: no goal came, and others are in play: the soul goes to one of them.
+  // One the player took up while this one was made goes back among the others.)
+  if (multi && !goal && !scene.goal && scene.open?.length && scene.done.length) return mergeTo(scene.done.at(-1)!);
+  if (multi && goal && scene.goal && scene.goal !== goal) scene.open = [...(scene.open ?? []), scene.goal];
   scene.goal = goal;
   goalShownAt = performance.now();
   const wait = reachedAt >= 0 ? Math.round(goalShownAt - reachedAt) : undefined;
@@ -824,15 +857,22 @@ function showGoal(goal: Goal | null): void {
     // while it sparkled are its.)
     const before = squareOf(goal) === null ? undefined : scene.done.filter((d) => squareOf(d) === squareOf(goal)).at(-1);
     goal.begun = before?.ended ?? scene.history.length;
+    if (multi) goal.count = 0;
     // A snapshot of the board, so the goal can be measured again later.
     const how = trial || testbed ? "trial" : squareOf(goal) !== null ? "island" : goal.room ? "room" : goal.travel ? "travel" : "maker";
     const last = scene.done.at(-1), hop = last && goal.start ? Math.round(dist(last.target, goal.start) * 10) / 10 : undefined;
-    log({ e: "goal", commit: __COMMIT__, id: goal.id, target: goal.target, start: goal.start, tries, walls, seed, solution: goal.solution.length, ...(how !== "trial" && { via }), proof: goal.solution.map((m) => [m.id, m.from.x, m.from.y, m.to.x, m.to.y]), moved: [...scene.moved].map(([id, p]) => [id, p.x, p.y]), ...(wait !== undefined && { wait }), ...(goal.judged && { judge: goal.judged }), how, ...(how !== "island" && how !== "trial" && { n: worldGoals() }), ...(hop !== undefined && { hop }), ...(goal.room && { room: goal.room }), ...(goal.travel && { travel: goal.travel }), ...(stamp && { stamp: { k: stamp.k, x: stamp.x, y: stamp.y, W: stamp.room.W, H: stamp.room.H, fill: stamp.fill } }), view: viewNow() });
+    log({ e: "goal", commit: __COMMIT__, id: goal.id, target: goal.target, start: goal.start, tries, walls, seed, solution: goal.solution.length, ...(how !== "trial" && { via }), ...(scene.done.length && { after: scene.done.at(-1)!.id }), proof: goal.solution.map((m) => [m.id, m.from.x, m.from.y, m.to.x, m.to.y]), moved: [...scene.moved].map(([id, p]) => [id, p.x, p.y]), ...(wait !== undefined && { wait }), ...(goal.judged && { judge: goal.judged }), how, ...(how !== "island" && how !== "trial" && { n: worldGoals() }), ...(hop !== undefined && { hop }), ...(goal.room && { room: goal.room }), ...(goal.travel && { travel: goal.travel }), ...(stamp && { stamp: { k: stamp.k, x: stamp.x, y: stamp.y, W: stamp.room.W, H: stamp.room.H, fill: stamp.fill } }), view: viewNow() });
   }
   // The last red block's soul flies to the new one, once its finish is over (none found: it
   // goes nowhere).
   if (!goal) soulFrom = null;
   else if (!finish) sendSoul();
+  // A split: a second goal comes from the same reached red block (not while travel goals lead on).
+  if (goal && splitFrom) {
+    const from = splitFrom;
+    splitFrom = null;
+    if (!trek && !goal.travel) requestExtra(from);
+  }
   // The new red block throbs once; its clock starts at the first frame drawn (after the soul
   // gets there).
   if (scene.goal) throb = { id: scene.goal.id, born: -1 };
@@ -929,7 +969,7 @@ function lookAhead(): void {
   // (The room travel goals led to comes next: nothing to make.)
   if (trekNext(goal.target)) return;
   const moved = new Map(scene.moved).set(goal.id, goal.target);
-  const exclude = [...scene.done.map((g) => g.id), goal.id];
+  const exclude = [...inPlay().map((g) => g.id), goal.id];
   const key = boardKey(moved, exclude, goal.target), follows = followKey(goal), ready = ahead.ready;
   if (ready?.for === follows) {
     if (ready.key === key || (ready.goal && !ready.rejected && roomFits(ready.goal))) return;
@@ -941,8 +981,8 @@ function lookAhead(): void {
   }
   ahead.asked = key;
   ahead.for = follows;
-  const request: GoalRequest = { job: ++ahead.job, seed, tries, walls, ui: shownUi, placed, near: goal.target, moved: [...moved], level: 2, exclude, avoid: targetsOf([...scene.done, goal]), target: rampTarget(worldGoals() + (goal.travel ? 0 : 1)), ...roomsPart(worldGoals() + (goal.travel ? 0 : 1), goal.target) };
-  ahead.contract = { request: asRequest(request, [...scene.done, goal]), near: goal.target, level: 2 };
+  const request: GoalRequest = { job: ++ahead.job, seed, tries, walls, ui: shownUi, placed, near: goal.target, moved: [...moved], level: 2, exclude, avoid: targetsOf([...inPlay(), goal]), target: rampTarget(worldGoals() + (goal.travel ? 0 : 1)), ...roomsPart(worldGoals() + (goal.travel ? 0 : 1), goal.target) };
+  ahead.contract = { request: asRequest(request, [...inPlay(), goal]), near: goal.target, level: 2 };
   ahead.busy = true;
   ahead.room = !!request.roomsOn;
   asking(1, ahead.worker, request);
@@ -1123,6 +1163,7 @@ let soul: { from: WorldRect & { id: string }; toId: string; born: number; style:
 /** The last red block's soul flies to the new one (shown already, muted, while the finish
  * played), the view following it there; on the island to the square's middle, at its zoom. */
 function sendSoul(): void {
+  for (const x of souls) if (x.born < 0) x.born = performance.now();
   const goal = scene.goal, red = goal && scene.layout.byId(goal.id), at = goal && whereIs(scene, goal.id);
   // (The next goal still being made: the soul waits for it, and sets off as it shows. It had
   // been dropped here, so a finish skipped or over before the goal came had no soul, and the
@@ -1137,6 +1178,153 @@ function sendSoul(): void {
   }
   soulFrom = null;
 }
+
+// --- Several goals at once (?multi=1). The goal being played is scene.goal, the others are
+// scene.open. A move counts for every goal whose ground it touches (where grounds overlap, only
+// for those whose proof moves that block; moves elsewhere count for the one being played), so a
+// goal left for later doesn't collect the moves made for another; touching another goal's
+// ground (or moving its red block) makes it the one being played.
+/** How many moves a goal has used so far. */
+const movesOn = (g: Goal) => (multi && g.count !== undefined ? g.count : movesSince(g.begun ?? 0));
+/** A goal's ground: the cells its proof's blocks and its red block cover, before and after, and
+ * its room's reach, a cell round. */
+function groundOf(goal: Goal): Rect {
+  const known = grounds.get(goal);
+  if (known) return known;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  const cover = (x: number, y: number, w: number, h: number) => ((x0 = Math.min(x0, x)), (y0 = Math.min(y0, y)), (x1 = Math.max(x1, x + w)), (y1 = Math.max(y1, y + h)));
+  const red = scene.layout.byId(goal.id);
+  for (const m of goal.solution) {
+    const b = scene.layout.byId(m.id);
+    if (b) (cover(m.from.x, m.from.y, b.w, b.h), cover(m.to.x, m.to.y, b.w, b.h));
+  }
+  if (red) for (const p of [goal.start, goal.target]) if (p) cover(p.x, p.y, red.w, red.h);
+  const st = goal.room && stamps.find((x) => x.k === goal.room!.k);
+  if (st) {
+    const r = stampReach(st);
+    cover(r.x, r.y, r.width, r.height);
+  }
+  const ground = { x: x0 - 1, y: y0 - 1, width: x1 - x0 + 2, height: y1 - y0 + 2 };
+  grounds.set(goal, ground);
+  return ground;
+}
+function routeMoves(): void {
+  if (!multi) return;
+  routed = Math.min(routed, scene.history.length);
+  for (; routed < scene.history.length; routed++) {
+    const m = scene.history[routed]!, b = scene.layout.byId(m.id);
+    if (!b) continue;
+    const all = [scene.goal, ...(scene.open ?? [])].filter((g): g is Goal => !!g);
+    const hits = (g: Goal) => g.id === m.id || [m.from, m.to].some((p) => { const r = groundOf(g); return p.x < r.x + r.width && p.x + b.w > r.x && p.y < r.y + r.height && p.y + b.h > r.y; });
+    const touched = all.filter(hits);
+    // (Grounds side by side can overlap: then the goal whose proof moves this block.)
+    const moves = (g: Goal) => g.id === m.id || g.solution.some((x) => x.id === m.id);
+    const owners = touched.filter(moves);
+    for (const g of owners.length ? owners : touched.length ? touched : scene.goal ? [scene.goal] : []) g.count = (g.count ?? 0) + 1;
+    const pick = scene.open?.find((g) => g.id === m.id)
+      ?? (scene.goal && touched.includes(scene.goal) && (moves(scene.goal) || !touched.some((g) => g !== scene.goal && moves(g))) ? undefined : (touched.find((g) => g !== scene.goal && moves(g)) ?? touched.find((g) => g !== scene.goal)));
+    if (pick) focusOn(pick);
+  }
+  // Another goal's red block put on its target: that is the goal reached.
+  const solved = scene.open?.find((g) => { const at = whereIs(scene, g.id); return !!at && at.x === g.target.x && at.y === g.target.y; });
+  if (solved) focusOn(solved);
+}
+/** Make another goal in play the one being played. */
+function focusOn(g: Goal): void {
+  if (g === scene.goal) return;
+  scene.open = (scene.open ?? []).filter((x) => x !== g);
+  if (scene.goal) scene.open.push(scene.goal);
+  scene.goal = g;
+  log({ e: "focus", id: g.id });
+}
+/** After a goal is reached: the next goal, two (a split), or none, the soul going to a red
+ * block already in play (a merge). */
+function nextAfter(goal: Goal): void {
+  splitFrom = null;
+  if (multi && isWorldGoal(goal) && !trek) {
+    const m = worldGoals(), open = scene.open ?? [];
+    if (open.length && m % MULTI.MERGE_EVERY === MULTI.MERGE_AT) return mergeTo(goal);
+    if (open.length < MULTI.MAX_OPEN && m % MULTI.SPLIT_EVERY === MULTI.SPLIT_AT) splitFrom = goal;
+  }
+  requestGoal(goal.target, true);
+}
+/** The soul goes from a reached goal to the nearest red block already in play. */
+function mergeTo(from: Goal): void {
+  const open = scene.open ?? [];
+  const far = (g: Goal) => dist(from.target, whereIs(scene, g.id) ?? g.target);
+  const to = open.reduce((a, b) => (far(a) <= far(b) ? a : b));
+  scene.open = open.filter((g) => g !== to);
+  log({ e: "merged", from: from.id, to: to.id, d: Math.round(far(to) * 10) / 10 });
+  job++; // (nothing else is coming)
+  reachedAt = -1;
+  scene.goal = to;
+  goalShownAt = performance.now();
+  if (!finish) sendSoul();
+  throb = { id: to.id, born: -1 };
+  cue = { id: to.id, born: -1 };
+  save();
+  redraw();
+  goalWaiters.forEach((resolve) => resolve());
+  goalWaiters = [];
+}
+/** A room's goal stamps its room into the world (on ground nobody has touched, so no move
+ * changes): from now on it is part of the world. */
+function stampIn(goal: Goal): Stamp | undefined {
+  const stamp = goal.stamp;
+  if (!stamp) return undefined;
+  delete goal.stamp;
+  const before = scene.layout;
+  stamps = [...stamps, stamp];
+  scene.layout = worldOf();
+  worldChanged("stamp", before, scene.layout, stampReach(stamp));
+  return stamp;
+}
+/** The split's second goal: made the quick way on a worker of its own, near the reached goal,
+ * never with a red block or target of a goal in play. */
+const extra = { worker: null as Worker | null, job: 0, asked: null as Asked | null, from: null as Goal | null };
+function requestExtra(from: Goal): void {
+  if (!extra.worker) {
+    const w = (extra.worker = new Worker("goal-worker.js"));
+    w.onmessage = (event: MessageEvent<Reply>) => {
+      if ("difficulty" in event.data) return measured(event.data);
+      if (event.data.job !== extra.job || !extra.from) return;
+      const made = checked(event.data.goal, extra.asked), by = extra.from;
+      extra.from = null;
+      if (made.goal) addOpen(made.goal, by);
+      else log({ e: "extraDropped", why: made.rule !== undefined ? `rule ${made.rule}` : "none found" });
+    };
+    w.onerror = (e: ErrorEvent) => {
+      e.preventDefault();
+      log({ e: "error", message: `extra: ${String(e.message).slice(0, 280)}`, where: `${e.filename?.split("/").pop()}:${e.lineno}:${e.colno}` });
+      extra.from = null;
+    };
+  }
+  const near = from.target, others = [scene.goal, ...(scene.open ?? [])].filter((g): g is Goal => !!g);
+  const request = nowRequest(near, ++extra.job);
+  request.exclude = [...scene.done, ...others].map((g) => g.id);
+  request.avoid = targetsOf([...scene.done, ...others]);
+  extra.asked = { request: asRequest(request, [...scene.done, ...others]), near, level: 0 };
+  extra.from = from;
+  extra.worker.postMessage(request);
+}
+/** The split's second goal arrived: in play beside the first, its soul flying from the same
+ * reached red block. (Not a travel goal, nor a room that would show as it is stamped.) */
+function addOpen(goal: Goal, from: Goal): void {
+  if (goal.travel || goal.then) return log({ e: "extraDropped", why: "travel" });
+  if (goal.stamp && stampShows(goal.stamp)) return log({ e: "extraDropped", why: "stamp in view" });
+  const stamp = stampIn(goal);
+  goal.tries = tries;
+  goal.begun = scene.history.length;
+  goal.count = 0;
+  scene.open = [...(scene.open ?? []), goal];
+  const how = goal.room ? "room" : "maker", hop = goal.start ? Math.round(dist(from.target, goal.start) * 10) / 10 : undefined;
+  log({ e: "goal", commit: __COMMIT__, id: goal.id, target: goal.target, start: goal.start, tries, walls, seed, solution: goal.solution.length, via: "extra", after: from.id, proof: goal.solution.map((m) => [m.id, m.from.x, m.from.y, m.to.x, m.to.y]), moved: [...scene.moved].map(([id, p]) => [id, p.x, p.y]), ...(goal.judged && { judge: goal.judged }), how, n: worldGoals(), ...(hop !== undefined && { hop }), ...(goal.room && { room: goal.room }), ...(stamp && { stamp: { k: stamp.k, x: stamp.x, y: stamp.y, W: stamp.room.W, H: stamp.room.H, fill: stamp.fill } }), view: viewNow() });
+  const red = scene.layout.byId(from.id), at = whereIs(scene, from.id);
+  if (red && at) souls.push({ from: { id: from.id, x: at.x * UNIT + 3, y: at.y * UNIT + 3, width: red.w * UNIT - 6, height: red.h * UNIT - 6 }, toId: goal.id, born: finish || soulFrom ? -1 : performance.now(), style: "comet" });
+  save();
+  redraw();
+}
+
 /** The next red block shows while the last one's finish plays: its soul is yet to come. */
 const soulWaits = () => !!scene.goal && !!finish && !finish.island;
 function reachGoal(now: number): void {
@@ -1148,7 +1336,7 @@ function reachGoal(now: number): void {
   // The last square's goals inside done: the wall across its exit goes, the way out open.
   if (GATE && opensGate(goal)) scene.moved.set(GATE.id, GATE_GONE);
   // (An island square's last goal scores the moves of all its goals.)
-  goal.used = Math.max(1, goal.step || squareOf(goal) === null ? movesSince(goal.begun ?? 0) : squareMoves(squareOf(goal)!));
+  goal.used = Math.max(1, goal.step || squareOf(goal) === null ? movesOn(goal) : squareMoves(squareOf(goal)!));
   logMoves();
   log({ e: "reached", id: goal.id, used: goal.used });
   // A playlist trial goes on to the next board once the finish has played (its log is sent on
@@ -1185,7 +1373,7 @@ function reachGoal(now: number): void {
   // The next goal shows at once (its red block muted until the soul gets there).
   reachedAt = now;
   soulFrom = { id: goal.id, x: at.x * UNIT + 3, y: at.y * UNIT + 3, width: red.w * UNIT - 6, height: red.h * UNIT - 6 };
-  requestGoal(goal.target, true);
+  nextAfter(goal);
   save();
 }
 
@@ -1251,11 +1439,13 @@ function pushed(move: Move): void {
 const gestures = new Gestures(scene, {
   onChange: () => {
     debugCode(null);
+    routeMoves();
     save();
     reachGoal(performance.now()); // a drag lands at once; a tap's slide reaches it at its end
   },
   onPush: (move) => {
     debugCode(null);
+    routeMoves();
     pushed(move);
   },
   // The view stops following the soul (or anything gliding it) as the player takes it.
@@ -1390,6 +1580,8 @@ Object.assign(window, {
     slideRange: (id: string) => slideRange(scene.layout, visibleBlocks(scene).find((b) => b.id === id)!, scene),
     redraw: () => redraw(),
     /** What the maker ahead is doing (for tests and debugging). */
+    /** The other goals in play (?multi=1). */
+    open: () => scene.open ?? [],
     ahead: () => ({ asked: ahead.asked, for: ahead.for, busy: ahead.busy, room: ahead.room, wanted: ahead.wanted, ready: ahead.ready && { key: ahead.ready.key, for: ahead.ready.for, id: ahead.ready.goal?.id, rejected: ahead.ready.rejected } }),
     /** Whether the waiting dots show (the next goal still being made, the player waiting). */
     loading: () => waitFrom !== null && performance.now() - waitFrom > LOADING_DELAY,
@@ -1402,15 +1594,21 @@ Object.assign(window, {
     undo: () => takeBack(),
     /** Make a move as a drag would, the view centred on it first, as a player looks at what
      * they move (for bots playing goals' proofs; the move must be legal). */
-    play: (move: Move) => {
-      const b = scene.layout.byId(move.id)!, s = scene.camera.scale;
+    play: (move: Move): boolean => {
+      const at = whereIs(scene, move.id), b = scene.layout.byId(move.id);
+      if (!b || !at || at.x !== move.from.x || at.y !== move.from.y) return false;
+      const { lo, hi } = slideRange(scene.layout, { ...b, ...at }, scene), along = b.w > b.h ? move.to.x : move.to.y;
+      if ((b.w > b.h ? move.to.y !== at.y : move.to.x !== at.x) || along < lo || along > hi) return false;
+      const s = scene.camera.scale;
       const x = (move.from.x + move.to.x + b.w) / 2, y = (move.from.y + move.to.y + b.h) / 2;
       scene.camera = { scale: s, offsetX: scene.width / 2 - x * UNIT * s, offsetY: scene.height / 2 - y * UNIT * s };
       flight = null;
       record(scene, move);
+      routeMoves();
       save();
       reachGoal(performance.now());
       redraw();
+      return true;
     },
     /** The numbers shown on reached world goals' red blocks ([id, n]), or null off the world. */
     numbers: () => { const n = numbersShown(); return n && [...n]; },
@@ -1436,6 +1634,7 @@ Object.assign(window, {
       // (And a finish still playing, its soul and the view's flight with it, are the old board's.)
       finish = null;
       soul = soulFrom = flight = null;
+      souls = [];
       reachedAt = -1;
       goalShownAt = -Infinity; // (a placed goal shows at once)
       ahead.wanted = null;
@@ -1666,7 +1865,7 @@ function redraw(): void {
     pace(now);
     const moving = advance(now);
     paint(now, moving);
-    if (animation || sparkles.length || flight || throb || cue || ripples.length || shake || finish || soul || pinThrob || waitFrom !== null || fading() || now < goalShownAt + APPEAR_MS) redraw();
+    if (animation || sparkles.length || flight || throb || cue || ripples.length || shake || finish || soul || souls.length || pinThrob || waitFrom !== null || fading() || now < goalShownAt + APPEAR_MS) redraw();
   });
 }
 
@@ -1730,6 +1929,7 @@ function advance(now: number): ReturnType<typeof sliding> {
       sfx.play("soul", now);
     }
     if (soul && now > soul.born + SOUL.TRAVEL_MS + SOUL.BURST_MS) soul = null;
+    if (souls.length) souls = souls.filter((x) => x.born < 0 || now <= x.born + SOUL.TRAVEL_MS + SOUL.BURST_MS);
     const arrived = !soulWaits() && (!soul || now >= soul.born + SOUL.TRAVEL_MS);
     if (throb && throb.born < 0 && arrived) throb.born = now;
     if (throb && throb.born >= 0 && now > throb.born + THROB_MS) throb = null;
@@ -1817,9 +2017,10 @@ function paint(now: number, moving: ReturnType<typeof sliding>, to: HTMLCanvasEl
         shake,
         pinThrob,
         pinHeld,
-        used: scene.goal ? movesSince(scene.goal.begun ?? 0) : 0,
+        used: scene.goal ? movesOn(scene.goal) : 0,
         finish,
         soul,
+        souls,
         loading: waitFrom !== null && now - waitFrom > LOADING_DELAY ? { id: scene.done.at(-1)!.id, k: Math.min(1, (now - waitFrom - LOADING_DELAY) / LOADING_FADE) } : null,
         waiting: soulWaits(),
         appear: Math.min(1, (now - goalShownAt) / APPEAR_MS),

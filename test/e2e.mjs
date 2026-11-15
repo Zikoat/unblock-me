@@ -1161,6 +1161,39 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
   await page.close();
 }
 
+// --- Several goals at once (?multi=1): after the first world goal the soul splits, two goals
+// in play, each with its own red block; a move on the other's ground makes it the one played
+// (and counts only for it); later the soul merges onto a red block already in play.
+{
+  const page = await clocked(await browser.newPage({ viewport: { width: 412, height: 915 } }));
+  await page.goto(url + "&multi=1");
+  await page.evaluate(() => { unblock.forget(); localStorage.setItem("unblock-me:v13:seed", "20261115"); });
+  await page.goto(url + "&multi=1");
+  await frame(page);
+  const goals = () => page.evaluate(() => unblock.playLog.filter((e) => e.e === "goal"));
+  let switched = null;
+  for (let k = 0; k < 6; k++) {
+    await page.evaluate(() => unblock.goalReady());
+    for (let t = 0; t < 20 && k === 1 && !(await page.evaluate(() => unblock.open().length)); t++) await pass(page, 500);
+    // Once two are in play, the other one is played first.
+    const g = await page.evaluate(() => unblock.open().at(-1) ?? unblock.scene.goal);
+    const was = await page.evaluate(() => unblock.scene.goal.id);
+    for (const [i, m] of g.solution.entries()) {
+      check(await page.evaluate((m) => unblock.play(m), m), `goal ${k + 1}'s move ${i + 1} is legal`);
+      if (i === 0 && g.id !== was) switched ??= await page.evaluate(([id, was]) => ({ now: unblock.scene.goal.id, id, was, other: unblock.open().find((o) => o.id === was)?.count, mine: unblock.scene.goal.count }), [g.id, was]);
+    }
+    await pass(page, 12000);
+  }
+  const log = await goals(), extra = log.find((e) => e.via === "extra");
+  check(!!extra && extra.after === log.find((e) => e.id === extra.after && e.how === "room")?.id && log.filter((e) => e.after === extra.after).length === 2, `the soul split after a goal: two goals came after it (${extra?.id}, after ${extra?.after})`);
+  check(new Set(log.map((e) => e.id)).size === log.length, "every goal has its own red block");
+  check(switched?.now === switched?.id && switched?.mine === 1 && switched?.other === 0, `a move on the other goal's ground makes it the one played, and counts only for it (${JSON.stringify(switched)})`);
+  const merged = await page.evaluate(() => unblock.playLog.find((e) => e.e === "merged"));
+  check(!!merged && (await page.evaluate((m) => unblock.scene.done.some((d) => d.id === m.to) || unblock.scene.goal?.id === m.to, merged)), `later the soul merged onto a red block in play (${JSON.stringify(merged)})`);
+  check(await page.evaluate(() => !unblock.playLog.some((e) => e.e === "error" || e.e === "stuck")), "no errors and never stuck");
+  await page.close();
+}
+
 // --- A reached world goal's red block shows the player's count of world goals (island goals
 // and travel goals not counted), worked out from the stored done list: a save from before
 // (the stuck player's, past the island) with 26 world goals and a travel goal done, then a

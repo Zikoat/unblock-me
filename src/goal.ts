@@ -29,6 +29,8 @@ export type Goal = {
    * many it took once reached. */
   begun?: number;
   used?: number;
+  /** With several goals at once (?multi=1): the moves made on its ground since it showed (main.ts routeMoves). */
+  count?: number;
   /** How many had been made when it was reached. */
   ended?: number;
   /** Whether a move was undone while it was the goal (no medal then). */

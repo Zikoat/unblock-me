@@ -109,7 +109,7 @@ function drawNumber(ctx: CanvasRenderingContext2D, block: Block, n: number, at: 
 export function draw(
   canvas: HTMLCanvasElement,
   scene: Scene,
-  { fullscreen, density, walls = 0, fps = true, sliding, sparkles = [], throb = null, cue = null, ripples = [], shake = null, pinThrob = null, pinHeld = null, used = 0, trace, finish = null, soul = null, loading = null, waiting = false, appear = 1, stillRed = null, detail = 1, now = 0, hud = null, surface = null, labels = [], numbers = null }: {
+  { fullscreen, density, walls = 0, fps = true, sliding, sparkles = [], throb = null, cue = null, ripples = [], shake = null, pinThrob = null, pinHeld = null, used = 0, trace, finish = null, soul = null, souls = [], loading = null, waiting = false, appear = 1, stillRed = null, detail = 1, now = 0, hud = null, surface = null, labels = [], numbers = null }: {
     fullscreen: boolean;
     density: number;
     /** The walls slider's position, 0..1. */
@@ -158,6 +158,8 @@ export function draw(
     stillRed?: string | null;
     /** The last red block's soul flying to the new one (world px), and when it set off. */
     soul?: { from: { x: number; y: number; width: number; height: number }; toId: string; born: number; style: SoulStyle } | null;
+    /** More souls, each flying to another goal that came at once (?multi=1), from when they set off. */
+    souls?: { from: { x: number; y: number; width: number; height: number }; toId: string; born: number; style: SoulStyle }[];
     /** The next goal is still being made, the player waiting (main.ts LOADING_DELAY): under the
      * last red block (`id`), shown `k` of the way in (0..1). */
     loading?: { id: string; k: number } | null;
@@ -199,7 +201,8 @@ export function draw(
   // Targets, the reached ones and the current one: a pale area a little larger than the red
   // block, so it still shows around the block on it. Culled like blocks.
   const inView = latticeRect(scene, borderOnScreen(scene));
-  const targets = [...scene.done, ...(goal ? [goal] : [])]
+  const open = scene.open ?? [];
+  const targets = [...scene.done, ...open, ...(goal ? [goal] : [])]
     .map((g) => ({ goal: g, cells: targetCells(scene, g) }))
     .filter((t): t is { goal: Goal; cells: Cells } => !!t.cells && intersects(t.cells, inView));
   const onTarget = (x: number, y: number) => targets.some(({ cells: c }) => x >= c.x * UNIT - TARGET_MARGIN && x <= (c.x + c.w) * UNIT + TARGET_MARGIN && y >= c.y * UNIT - TARGET_MARGIN && y <= (c.y + c.h) * UNIT + TARGET_MARGIN);
@@ -257,7 +260,7 @@ export function draw(
   // A reached one: a pale gold area with an outline, faded out while its block stands on it
   // (no ring round the block).
   const drawReached = () => {
-    const shown = targets.filter((t) => t.goal !== goal).map((t) => ({ cells: t.cells, a: areaShown(t.goal, now) })).filter((t) => t.a > 0);
+    const shown = targets.filter((t) => t.goal !== goal && !open.includes(t.goal)).map((t) => ({ cells: t.cells, a: areaShown(t.goal, now) })).filter((t) => t.a > 0);
     ctx.save();
     ctx.strokeStyle = COLORS.doneLine;
     ctx.lineWidth = 2;
@@ -353,12 +356,15 @@ export function draw(
       const block = shown.id === sliding?.id ? { ...shown, x: sliding.x, y: sliding.y } : shown;
       // Red blocks stay red after their goal is reached, a darker red.
       const isGoal = block.id === goal?.id;
+      const extraSoul = souls.find((x) => x.toId === block.id);
+      const isOpen = !isGoal && open.some((g) => g.id === block.id);
       const wasGoal = !isGoal && scene.done.some((g) => g.id === block.id);
       ctx.fillStyle = block.ui ? COLORS.ui
         : block.wall ? COLORS.wall
         : block.id === scene.dragging?.id ? COLORS.dragging
         : block.id === scene.stuckId ? COLORS.stuck
         : isGoal ? (waiting ? mix(block.moved ? COLORS.moved : COLORS.block, COLORS.goalWaiting, appear) : soulK < SOUL.TRAVEL_MS && block.id === soul?.toId ? COLORS.goalWaiting : block.id === soul?.toId && soulFlash(soulK) > 0 ? mix(COLORS.goal, "#ffffff", soulFlash(soulK)) : COLORS.goal)
+        : isOpen ? (extraSoul && (extraSoul.born < 0 || now - extraSoul.born < SOUL.TRAVEL_MS) ? COLORS.goalWaiting : COLORS.goal)
         : wasGoal ? doneColor(block.id)
         : block.moved ? COLORS.moved
         : COLORS.block;
@@ -413,6 +419,13 @@ export function draw(
     const to = scene.layout.byId(soul.toId), at = whereIs(scene, soul.toId);
     if (to && at) drawSoul(ctx, soul.from, { x: at.x * UNIT + GAP, y: at.y * UNIT + GAP, width: to.w * UNIT - 2 * GAP, height: to.h * UNIT - 2 * GAP }, soulK, camera.scale, soul.style, "under");
   }
+  const drawSouls = (layer: "under" | "over") => {
+    for (const x of souls) {
+      const k = now - x.born, to = scene.layout.byId(x.toId), at = whereIs(scene, x.toId);
+      if (x.born >= 0 && k >= 0 && to && at) drawSoul(ctx, x.from, { x: at.x * UNIT + GAP, y: at.y * UNIT + GAP, width: to.w * UNIT - 2 * GAP, height: to.h * UNIT - 2 * GAP }, k, camera.scale, x.style, layer);
+    }
+  };
+  drawSouls("under");
 
   // The new red block's way to its target: a red trail growing from it along its lane,
   // over the blocks in the way.
@@ -439,6 +452,7 @@ export function draw(
   ctx.save();
   ctx.globalAlpha = appear;
   targets.forEach((t, i) => t.goal === goal && drawTarget(i));
+  targets.forEach((t, i) => open.includes(t.goal) && drawTarget(i));
   ctx.restore();
 
   // Each target's score track, over the blocks: the current goal's as it is played, a
@@ -521,6 +535,7 @@ export function draw(
     const to = scene.layout.byId(soul.toId), at = whereIs(scene, soul.toId);
     if (to && at) drawSoul(ctx, soul.from, { x: at.x * UNIT + GAP, y: at.y * UNIT + GAP, width: to.w * UNIT - 2 * GAP, height: to.h * UNIT - 2 * GAP }, soulK, camera.scale, soul.style, "over");
   }
+  drawSouls("over");
 
   // A tap on the background: one small yellow ring spreading out and fading, like a drop
   // landing in water. Nothing stays.
@@ -560,6 +575,7 @@ export function draw(
   if (toUi) drawPin(ctx, toUi, COLORS.ui, 16 * pinBeat("ui"), dpr, true);
   const toRed = redArrow(scene);
   if (toRed) drawPin(ctx, toRed, COLORS.goal, 13 * pinBeat("red"), dpr);
+  for (const a of openArrows(scene)) drawPin(ctx, a, COLORS.goal, 9, dpr);
   // A tapped arrow's ripple, where it was tapped (it stays as the view goes).
   if (pinThrob?.at && pinThrob.born >= 0) {
     const k = (now - pinThrob.born) / THROB_MS;
@@ -1160,6 +1176,17 @@ function redArrowAlone(scene: Scene): EdgeArrow | null {
   const at = goal && whereIs(scene, goal.id);
   if (!red || !at) return null;
   return edgeArrow(scene, onScreen(scene, { x: at.x, y: at.y, width: red.w, height: red.h }));
+}
+
+/** Arrows to the other goals' red blocks in play (?multi=1), when out of view: smaller pins. */
+export function openArrows(scene: Scene): EdgeArrow[] {
+  const arrows: EdgeArrow[] = [];
+  for (const goal of scene.open ?? []) {
+    const red = scene.layout.byId(goal.id), at = whereIs(scene, goal.id);
+    const a = red && at && edgeArrow(scene, onScreen(scene, { x: at.x, y: at.y, width: red.w, height: red.h }));
+    if (a) arrows.push(a);
+  }
+  return arrows;
 }
 
 export type Band = { side: "left" | "right" | "top" | "bottom"; x: number; y: number; width: number; height: number; alpha: number };

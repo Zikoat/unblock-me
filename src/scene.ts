@@ -24,6 +24,9 @@ export type Scene = {
   history: Move[];
   /** The red block and its target, once one has been made for this layout. */
   goal: Goal | null;
+  /** Other goals in play at once (?multi=1): their red blocks and targets show too; `goal` is
+   * the one being played (the last whose ground a move touched). */
+  open?: Goal[];
   /** Goals already reached, oldest first: their targets keep a check. */
   done: Goal[];
   /** The block under a resting mouse, whose tap destination is hinted. */
@@ -80,6 +83,7 @@ export function relayout(scene: Scene, layout: Layout): void {
   scene.moved.clear();
   scene.history.length = 0;
   scene.goal = null;
+  scene.open = [];
   scene.done = [];
   scene.dragging = null;
 }
@@ -118,7 +122,7 @@ export function quickPush(scene: Scene, block: Block): Point | null {
   if (lo === pos && hi === pos) return null;
   // The red block (or a reached goal's block) goes towards its target first, and stops on
   // it. Others go up or right first (up is towards lower y, right towards higher x).
-  const goal = scene.goal?.id === block.id ? scene.goal : (scene.done.find((g) => g.id === block.id) ?? null);
+  const goal = scene.goal?.id === block.id ? scene.goal : (scene.open?.find((g) => g.id === block.id) ?? scene.done.find((g) => g.id === block.id) ?? null);
   const target = goal && (isHorizontal(block) ? (goal.target.y === block.y ? goal.target.x : null) : goal.target.x === block.x ? goal.target.y : null);
   // Its own last move (other blocks' moves since don't matter): pushed onto its target, it
   // goes on the way it was going, not back; a reached goal's block just moved off its target
@@ -127,7 +131,7 @@ export function quickPush(scene: Scene, block: Block): Point | null {
   for (let i = scene.history.length - 1; i >= 0 && !own; i--) if (scene.history[i]!.id === block.id) own = scene.history[i];
   const from = own && (isHorizontal(block) ? own.from.x : own.from.y);
   const arrived = target !== null && target === pos && from !== undefined ? from : null;
-  const past = target !== null && target !== pos && from === target && goal !== scene.goal;
+  const past = target !== null && target !== pos && from === target && goal !== scene.goal && !scene.open?.includes(goal!);
   const preferLow = target !== null && target !== pos ? target < pos : arrived !== null && arrived !== pos ? arrived > pos : !isHorizontal(block);
   const toLow = preferLow ? lo !== pos : hi === pos;
   let to = toLow ? lo : hi;

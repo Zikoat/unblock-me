@@ -261,7 +261,7 @@ export class Gestures {
     this.onSound("release");
     const goal = this.scene.goal, horizontal = block.w > block.h;
     const along = (p: Point) => (horizontal ? p.x : p.y);
-    const target = goal?.id === block.id ? goal.target : null;
+    const target = goal?.id === block.id ? goal.target : (this.scene.open?.find((g) => g.id === block.id)?.target ?? null);
     const partly = target && (horizontal ? target.y === dropped.y : target.x === dropped.x) && along(target) >= lo && along(target) <= hi
       && along(dropped) !== along(target) && Math.abs(along(dropped) - along(target)) < (horizontal ? block.w : block.h);
     const at = partly ? target : dropped;
