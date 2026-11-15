@@ -158,7 +158,7 @@ export function draw(
     stillRed?: string | null;
     /** The last red block's soul flying to the new one (world px), and when it set off. */
     soul?: { from: { x: number; y: number; width: number; height: number }; toId: string; born: number; style: SoulStyle } | null;
-    /** More souls, each flying to another goal that came at once (?multi=1), from when they set off. */
+    /** More souls, each flying to another goal that came at once, from when they set off. */
     souls?: { from: { x: number; y: number; width: number; height: number }; toId: string; born: number; style: SoulStyle }[];
     /** The next goal is still being made, the player waiting (main.ts LOADING_DELAY): under the
      * last red block (`id`), shown `k` of the way in (0..1). */
@@ -1178,7 +1178,7 @@ function redArrowAlone(scene: Scene): EdgeArrow | null {
   return edgeArrow(scene, onScreen(scene, { x: at.x, y: at.y, width: red.w, height: red.h }));
 }
 
-/** Arrows to the other goals' red blocks in play (?multi=1), when out of view: smaller pins. */
+/** Arrows to the other goals' red blocks in play, when out of view: smaller pins. */
 export function openArrows(scene: Scene): EdgeArrow[] {
   const arrows: EdgeArrow[] = [];
   for (const goal of scene.open ?? []) {

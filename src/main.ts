@@ -96,18 +96,18 @@ const withIsland = new URLSearchParams(location.search).get("island") !== "0";
 // World goals are rooms (src/rooms.ts) for everyone; ?rooms=0 leaves them out, for tests of
 // the maker on the plain world.
 const withRooms = new URLSearchParams(location.search).get("rooms") !== "0";
-/** Several goals at once (?multi=1, kept until ?multi=0): a reached goal's soul sometimes
- * splits to two goals and the player picks which to play; sometimes it goes to a red block
- * already in play instead of a new one (a merge). */
+/** Several goals at once (on unless turned off with ?multi=0, kept until ?multi=1): a reached
+ * goal's soul sometimes splits to two goals and the player picks which to play; sometimes it
+ * goes to a red block already in play instead of a new one (a merge). */
 const MULTI_KEY = "unblock-me:multi";
 const multi = (() => {
   const q = new URLSearchParams(location.search).get("multi");
   try {
-    if (q === "1") localStorage.setItem(MULTI_KEY, "1");
-    if (q === "0") localStorage.removeItem(MULTI_KEY);
-    return localStorage.getItem(MULTI_KEY) === "1";
+    if (q === "0") localStorage.setItem(MULTI_KEY, "0");
+    if (q === "1") localStorage.removeItem(MULTI_KEY);
+    return localStorage.getItem(MULTI_KEY) !== "0";
   } catch {
-    return q === "1";
+    return q !== "0";
   }
 })();
 /** When the soul splits and merges, by the count of world goals reached (m): a split after
@@ -429,7 +429,7 @@ const scene = newScene(innerWidth, innerHeight, {
   done: goalsFit ? (storedGoal.done ?? []) : [],
 });
 scene.open = goalsFit ? (storedGoal.open ?? []) : [];
-// Several goals at once (?multi=1; see routeMoves). (Up here: the first goal shows before the
+// Several goals at once (see routeMoves). (Up here: the first goal shows before the
 // code further down runs.)
 /** More souls, each to another goal that came at the same time (a split): waiting (born -1)
  * while the finish plays, then flying with the first. */
@@ -697,7 +697,7 @@ function trekBroken(goal: Goal, near: Point): string | null {
   const made = checked(goal, { request: asRequest(nowRequest(near, job), inPlay()), near, level: 2 }, true);
   return made.goal ? null : `rule ${made.rule}`;
 }
-/** The goals reached and the others in play (?multi=1): no new goal takes their red blocks or
+/** The goals reached and the others in play: no new goal takes their red blocks or
  * targets. */
 const inPlay = () => [...scene.done, ...(scene.open ?? [])];
 /** The quick way's request for a goal near `near` on the board as it is now. */
@@ -1179,7 +1179,7 @@ function sendSoul(): void {
   soulFrom = null;
 }
 
-// --- Several goals at once (?multi=1). The goal being played is scene.goal, the others are
+// --- Several goals at once (on unless ?multi=0). The goal being played is scene.goal, the others are
 // scene.open. A move counts for every goal whose ground it touches (where grounds overlap, only
 // for those whose proof moves that block; moves elsewhere count for the one being played), so a
 // goal left for later doesn't collect the moves made for another; touching another goal's
@@ -1241,7 +1241,7 @@ function focusOn(g: Goal): void {
  * block already in play (a merge). */
 function nextAfter(goal: Goal): void {
   splitFrom = null;
-  if (multi && isWorldGoal(goal) && !trek) {
+  if (multi && isWorldGoal(goal) && !trek && !placed) {
     const m = worldGoals(), open = scene.open ?? [];
     if (open.length && m % MULTI.MERGE_EVERY === MULTI.MERGE_AT) return mergeTo(goal);
     if (open.length < MULTI.MAX_OPEN && m % MULTI.SPLIT_EVERY === MULTI.SPLIT_AT) splitFrom = goal;
@@ -1580,7 +1580,7 @@ Object.assign(window, {
     slideRange: (id: string) => slideRange(scene.layout, visibleBlocks(scene).find((b) => b.id === id)!, scene),
     redraw: () => redraw(),
     /** What the maker ahead is doing (for tests and debugging). */
-    /** The other goals in play (?multi=1). */
+    /** The other goals in play. */
     open: () => scene.open ?? [],
     ahead: () => ({ asked: ahead.asked, for: ahead.for, busy: ahead.busy, room: ahead.room, wanted: ahead.wanted, ready: ahead.ready && { key: ahead.ready.key, for: ahead.ready.for, id: ahead.ready.goal?.id, rejected: ahead.ready.rejected } }),
     /** Whether the waiting dots show (the next goal still being made, the player waiting). */

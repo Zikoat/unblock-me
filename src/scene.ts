@@ -24,7 +24,7 @@ export type Scene = {
   history: Move[];
   /** The red block and its target, once one has been made for this layout. */
   goal: Goal | null;
-  /** Other goals in play at once (?multi=1): their red blocks and targets show too; `goal` is
+  /** Other goals in play at once: their red blocks and targets show too; `goal` is
    * the one being played (the last whose ground a move touched). */
   open?: Goal[];
   /** Goals already reached, oldest first: their targets keep a check. */

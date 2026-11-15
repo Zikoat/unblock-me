@@ -1161,7 +1161,7 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
   await page.close();
 }
 
-// --- Several goals at once (?multi=1): after the first world goal the soul splits, two goals
+// --- Several goals at once (the default; ?multi=0 turns it off): after the first world goal the soul splits, two goals
 // in play, each with its own red block; a move on the other's ground makes it the one played
 // (and counts only for it); later the soul merges onto a red block already in play.
 {

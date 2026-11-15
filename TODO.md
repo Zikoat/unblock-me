@@ -16,7 +16,7 @@ In approximate priority order, highest first; the middle ones are not ordered am
 - Uploads are about 1 MB, mostly each goal's saved board snapshots: trim or send only what's new; waits on you picking it.
 - Two teaching walkthroughs from for-the-user.md (stuck means far from the goal, not trapped; why a room's count holds in the world); waits on you asking for them.
 - Phones got hot after playing (3 of 4 testers, 2026-11-13), probably the background room worker still making rooms: measure it and stop it when idle or hidden; waits on you picking it.
-- Several goals at once (your design): **started** behind ?multi=1 (splits, merges, up to 3 in play, moves counted per goal's ground); open: make it the default, tapping a small pin to go to that goal, and stars when another goal's moves changed this one's board; waits on you playing it.
+- Several goals at once (your design): in the game by default (?multi=0 turns it off): splits, merges, up to 3 in play, moves counted per goal's ground; open: tapping a small pin to go to that goal, and stars when another goal's moves changed this one's board; waits on you playing it.
 - Player names for the leaderboard (asked in play, players in one room wanted to compete): ask for a name in the game, and rework the leaderboard you're not yet happy with; waits on you picking it.
 - A share button that sends the game to friends (tester's suggestion); waits on you picking it.
 - Block skins or hats bought with coins earned per goal, maybe coins for real money (tester's suggestion); waits on you picking it.
