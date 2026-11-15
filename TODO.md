@@ -12,13 +12,15 @@ In approximate priority order, highest first; the middle ones are not ordered am
 - Tuner runs: effort 0 is at quality worst 5% 0.3 to 0.4 (Gate 0.8; it misses goals only effort 2's wider search finds: aim off by one, track blocks, far reach), and effort 1 and 2 are untuned; the Bench's cases have no walls while the game now starts at 4%; waits on cases with walls.
 - Medals on long goals: the measure stops at its board budget and the proof's length stands as the fewest, so a player who finds a shorter way wins a medal the game should not give (most medals in play, test/experiments/medals.ts); a deeper search, or shorter proofs; waits on you picking it.
 - Island squares that teach tap-push and a half-way drag (a tap-push can't solve it; none turned up in a 5x5 search, a tap stops the red block on its target), and squares with several goals that are rated (the card scores only the last goal); subject a and b never learnt one or the other; waits on you playing the teaching squares.
+- Does Telegram on iOS pass ?p= on to Safari: the iPhone check (unblock-me-lab research/identity-test.md); waits on a friend's iPhone.
+- Uploads are about 1 MB, mostly each goal's saved board snapshots: trim or send only what's new; waits on you picking it.
+- Two teaching walkthroughs from for-the-user.md (stuck means far from the goal, not trapped; why a room's count holds in the world); waits on you asking for them.
 - Rooms made on a device differ by device, so two devices with the same seed can be given different rooms once one has made its own (the shipped library is the same everywhere; each world is stored with its stamps); a fixed schedule of which device room a goal may use; waits on shared seeds (a daily board) needing it.
 - Filling a room's swept cells with the world mostly jams it (about a third of stamped rooms keep all or part of that fill; the rest clear those cells, logged as `room.fill`); a check over a window round the room, not just its box; waits on the play logs showing whether it matters.
 - Taps that move a block when the player meant to pan (subject b): fast swipes as pans, or similar; the log now has the data; waits on you picking it.
 - Playing far zoomed out (subject a, play data: phones at scale 0.2-0.6): cap the zoom, disable moves far out, or show it; waits on you picking it.
 - Stars: many 1-star results (a zen mode, stars shown only after a while, or hidden at 1 star); waits on a brainstorm.
 - "Why is it green?": rethink a moved block's colour (or tint every block slightly differently); waits on you picking it.
-- Log each goal's proof and measured difficulty, and page hides; waits on you picking it.
 - Undo a reached goal: rewind to where its moves started counting and replay it for a better score; waits on you picking it.
 - Undo during a goal (or undoing the goal) loses the medal (shown faded) and is stored with the goal; waits on you picking it.
 - The multiplayer server, the home and offline islands (reports/one-engine.html); waits on the features settling.
@@ -40,7 +42,7 @@ Notes from play tests (not AI generated): issues, observations and ideas, many w
 - **Done**: Telegram's browser slid left and up, making most things hard.
 - **Done**: a red block that had moved away from its goal ran past it instead of stopping on it.
 - Played very zoomed out: blocks hard to see, hunched over the phone, easy misclicks. Ideas: limit max zoom out, or keep it but disable dragging/pushing blocks there, or show that you are too far out. Knows how to zoom but chooses to stay out.
-- Progress resets when going from Telegram's browser to the real browser (also seen going computer to phone).
+- **Done** (Android; iOS unchecked): progress resets when going from Telegram's browser to the real browser (also seen going computer to phone). The player's id now rides in the URL (?p=).
 - First level: didn't know the red block should go to the red goal; moved lots of blocks out of the way before noticing the goal.
 - Mostly used push. Idea: early puzzles that need a half-way move (forcing drag), then in-game guidance that a tap pushes, maybe an objective like "push 10 blocks" if they haven't pushed yet.
 - Observation: "after a while the red block goes further and further away from the starting area, and the other goals".
