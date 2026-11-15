@@ -1251,7 +1251,11 @@ function routeMoves(): void {
     // (Grounds side by side can overlap: then the goal whose proof moves this block.)
     const moves = (g: Goal) => g.id === m.id || g.solution.some((x) => x.id === m.id);
     const owners = touched.filter(moves);
-    for (const g of owners.length ? owners : touched.length ? touched : scene.goal ? [scene.goal] : []) g.count = (g.count ?? 0) + 1;
+    // (The same block moved again right after counts once, as movesSince counts.)
+    for (const g of owners.length ? owners : touched.length ? touched : scene.goal ? [scene.goal] : []) {
+      if (!(g.countedAt === routed - 1 && scene.history[routed - 1]?.id === m.id)) g.count = (g.count ?? 0) + 1;
+      g.countedAt = routed;
+    }
     const pick = scene.open?.find((g) => g.id === m.id)
       ?? (scene.goal && touched.includes(scene.goal) && (moves(scene.goal) || !touched.some((g) => g !== scene.goal && moves(g))) ? undefined : (touched.find((g) => g !== scene.goal && moves(g)) ?? touched.find((g) => g !== scene.goal)));
     if (pick) focusOn(pick);

@@ -31,6 +31,8 @@ export type Goal = {
   used?: number;
   /** With several goals at once: the moves made on its ground since it showed (main.ts routeMoves). */
   count?: number;
+  /** The history entry last counted for it (a block moved again right after counts once). */
+  countedAt?: number;
   /** Its proof was found broken (main.ts checkProof; a bug): checked no more. */
   broken?: boolean;
   /** How many had been made when it was reached. */

@@ -1203,6 +1203,12 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
     // Once two are in play, the other one is played first.
     const g = await page.evaluate(() => unblock.open().at(-1) ?? unblock.scene.goal);
     const was = await page.evaluate(() => unblock.scene.goal.id);
+    // A block moved there and back counts as one move.
+    if (k === 0) {
+      const m = g.solution[0];
+      await page.evaluate((m) => { unblock.play(m); unblock.play({ id: m.id, from: m.to, to: m.from }); }, m);
+      check(await page.evaluate(() => unblock.scene.goal.count) === 1, "a block moved twice in a row counts as one move");
+    }
     for (const [i, m] of g.solution.entries()) {
       check(await page.evaluate((m) => unblock.play(m), m), `goal ${k + 1}'s move ${i + 1} is legal`);
       if (i === 0 && g.id !== was) switched ??= await page.evaluate(([id, was]) => ({ now: unblock.scene.goal.id, id, was, other: unblock.open().find((o) => o.id === was)?.count, mine: unblock.scene.goal.count }), [g.id, was]);
