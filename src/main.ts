@@ -202,7 +202,7 @@ type LogEvent =
   // `hop`: cells from the last red block's end (its target) to this one's start, so we can see
   // the next goal stays close. A travel goal (src/travel.ts) says which room it leads to and how
   // far that room's red block is from its target (`travel`); the first one stamps the room.
-  | { e: "goal"; commit: string; id: string; target: Point; start?: Point; tries: number; walls?: number; seed: number; solution: number; proof?: [string, number, number, number, number][]; moved: [string, number, number][]; wait?: number; judge?: Terms; how?: "room" | "maker" | "island" | "trial" | "travel"; n?: number; hop?: number; room?: Goal["room"]; travel?: Goal["travel"]; stamp?: { k: number; x: number; y: number; W: number; H: number; fill: boolean | string[] }; view?: View }
+  | { e: "goal"; commit: string; id: string; target: Point; start?: Point; tries: number; walls?: number; seed: number; solution: number; proof?: [string, number, number, number, number][]; moved: [string, number, number][]; wait?: number; judge?: Terms; how?: "room" | "maker" | "island" | "trial" | "travel"; via?: Via; n?: number; hop?: number; room?: Goal["room"]; travel?: Goal["travel"]; stamp?: { k: number; x: number; y: number; W: number; H: number; fill: boolean | string[] }; view?: View }
   // The room travel goals led to could not be given (something moved into it, or its proof no
   // longer holds): the next goal is made as usual.
   | { e: "travelDropped"; k: number; why: string }
@@ -590,6 +590,8 @@ let job = 0;
 /** The exact board in play when tests place one; null for the random board. */
 let placed: Placed[] | null = null;
 let goalWaiters: (() => void)[] = [];
+/** Whether the player waits for the goal being made ahead (it shows as it comes). */
+let waitedAhead = false;
 /** Ask for a goal near `near` (the middle of the view by default), never with an earlier
  * red block. */
 function requestGoal(near: Point = viewCentre(scene.camera, scene.width, scene.height), patient = false): void {
@@ -599,7 +601,7 @@ function requestGoal(near: Point = viewCentre(scene.camera, scene.width, scene.h
   lastNear = near;
   // The island's squares come first, in turn.
   const square = withIsland ? nextIslandGoal(scene.done) : null;
-  if (square) return showGoal(square);
+  if (square) return (via = "island"), showGoal(square);
   // Past the last square, the world's first goal is made just out of its open bay (the
   // search looks only round `near`, and no island block may be the red block).
   if (withIsland) while (inIsland(near)) near = { x: near.x + 1, y: near.y };
@@ -608,7 +610,7 @@ function requestGoal(near: Point = viewCentre(scene.camera, scene.width, scene.h
   if (trek && trekNext(near)) {
     const goal = trek, why = trekBroken(goal, near);
     trek = null;
-    if (!why) return showGoal(goal);
+    if (!why) return (via = "trek"), showGoal(goal);
     log({ e: "travelDropped", k: goal.room?.k ?? -1, why });
   }
   // Made ahead while the goal before was played (or, the world's first, while the island
@@ -625,6 +627,8 @@ function requestGoal(near: Point = viewCentre(scene.camera, scene.width, scene.h
     : exact);
   if (usable) {
     if (first !== null) log({ e: "prefetched" });
+    via = waitedAhead ? "aheadWaited" : "ahead";
+    waitedAhead = false;
     showGoal(ready!.goal);
     return;
   }
@@ -634,9 +638,12 @@ function requestGoal(near: Point = viewCentre(scene.camera, scene.width, scene.h
   // made ahead is asked for the quick way once the finish is over).
   if (patient && ahead.busy && ahead.for === follows) {
     ahead.wanted = near;
+    waitedAhead = true;
     pauseRooms();
     return;
   }
+  waitedAhead = false;
+  via = held >= HELD_MAX && stuckTimes ? "stuck" : "now";
   const request = nowRequest(near, ++job);
   sent = request;
   asked = { request: asRequest(request, scene.done), near, level: 0 };
@@ -661,6 +668,11 @@ function trekBroken(goal: Goal, near: Point): string | null {
 function nowRequest(near: Point, job: number): GoalRequest {
   return { job, seed, tries, walls, ui: shownUi, placed, near, moved: [...scene.moved], level: 0, exclude: scene.done.map((g) => g.id), avoid: targetsOf(scene.done), target: rampTarget(worldGoals()), ...roomsPart(worldGoals(), near) };
 }
+/** How the goal about to show was got, for its log entry: an island square's; the room travel
+ * goals led to; made ahead while the goal before was played (ready, or waited for); made then
+ * while the player waited (again: after a rejected one); or after the game was stuck. */
+type Via = "island" | "trek" | "ahead" | "aheadWaited" | "now" | "nowAgain" | "stuck";
+let via: Via = "now";
 /** The request the worker was last sent, to ask again if its goal is rejected. */
 let sent: GoalRequest | null = null;
 /** What a worker was last asked, as the goal contract has it (src/contract.ts), so the goal
@@ -733,6 +745,7 @@ function madeNow(event: MessageEvent<Reply>): void {
   // again, it counts as none found.
   if (made.rule !== undefined && sent && asked && asked.level === 0) {
     sent = { ...sent, job: ++job, level: 1 };
+    via = "nowAgain";
     asked = { ...asked, level: 1 };
     return asking(0, worker, sent, made.rule);
   }
@@ -814,7 +827,7 @@ function showGoal(goal: Goal | null): void {
     // A snapshot of the board, so the goal can be measured again later.
     const how = trial || testbed ? "trial" : squareOf(goal) !== null ? "island" : goal.room ? "room" : goal.travel ? "travel" : "maker";
     const last = scene.done.at(-1), hop = last && goal.start ? Math.round(dist(last.target, goal.start) * 10) / 10 : undefined;
-    log({ e: "goal", commit: __COMMIT__, id: goal.id, target: goal.target, start: goal.start, tries, walls, seed, solution: goal.solution.length, proof: goal.solution.map((m) => [m.id, m.from.x, m.from.y, m.to.x, m.to.y]), moved: [...scene.moved].map(([id, p]) => [id, p.x, p.y]), ...(wait !== undefined && { wait }), ...(goal.judged && { judge: goal.judged }), how, ...(how !== "island" && how !== "trial" && { n: worldGoals() }), ...(hop !== undefined && { hop }), ...(goal.room && { room: goal.room }), ...(goal.travel && { travel: goal.travel }), ...(stamp && { stamp: { k: stamp.k, x: stamp.x, y: stamp.y, W: stamp.room.W, H: stamp.room.H, fill: stamp.fill } }), view: viewNow() });
+    log({ e: "goal", commit: __COMMIT__, id: goal.id, target: goal.target, start: goal.start, tries, walls, seed, solution: goal.solution.length, ...(how !== "trial" && { via }), proof: goal.solution.map((m) => [m.id, m.from.x, m.from.y, m.to.x, m.to.y]), moved: [...scene.moved].map(([id, p]) => [id, p.x, p.y]), ...(wait !== undefined && { wait }), ...(goal.judged && { judge: goal.judged }), how, ...(how !== "island" && how !== "trial" && { n: worldGoals() }), ...(hop !== undefined && { hop }), ...(goal.room && { room: goal.room }), ...(goal.travel && { travel: goal.travel }), ...(stamp && { stamp: { k: stamp.k, x: stamp.x, y: stamp.y, W: stamp.room.W, H: stamp.room.H, fill: stamp.fill } }), view: viewNow() });
   }
   // The last red block's soul flies to the new one, once its finish is over (none found: it
   // goes nowhere).
@@ -1387,6 +1400,18 @@ Object.assign(window, {
     /** The adaptive detail step (0 full; see pace). */
     detailStep: () => detailStep,
     undo: () => takeBack(),
+    /** Make a move as a drag would, the view centred on it first, as a player looks at what
+     * they move (for bots playing goals' proofs; the move must be legal). */
+    play: (move: Move) => {
+      const b = scene.layout.byId(move.id)!, s = scene.camera.scale;
+      const x = (move.from.x + move.to.x + b.w) / 2, y = (move.from.y + move.to.y + b.h) / 2;
+      scene.camera = { scale: s, offsetX: scene.width / 2 - x * UNIT * s, offsetY: scene.height / 2 - y * UNIT * s };
+      flight = null;
+      record(scene, move);
+      save();
+      reachGoal(performance.now());
+      redraw();
+    },
     /** The numbers shown on reached world goals' red blocks ([id, n]), or null off the world. */
     numbers: () => { const n = numbersShown(); return n && [...n]; },
     /** Forget everything stored, like the reset block but without reloading (for tests). */
