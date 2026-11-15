@@ -15,6 +15,12 @@ In approximate priority order, highest first; the middle ones are not ordered am
 - Does Telegram on iOS pass ?p= on to Safari: the iPhone check (unblock-me-lab research/identity-test.md); waits on a friend's iPhone.
 - Uploads are about 1 MB, mostly each goal's saved board snapshots: trim or send only what's new; waits on you picking it.
 - Two teaching walkthroughs from for-the-user.md (stuck means far from the goal, not trapped; why a room's count holds in the world); waits on you asking for them.
+- Phones got hot after playing (3 of 4 testers, 2026-11-13), probably the background room worker still making rooms: measure it and stop it when idle or hidden; waits on you picking it.
+- Several goals at once (your design): a finished goal's soul sometimes splits to 2 or more new goals and the player picks one; souls can merge onto an existing red block; open question: moves made for one goal also change the others, so maybe no stars or move count until a goal's own blocks are moved; waits on you picking it.
+- Player names for the leaderboard (asked in play, players in one room wanted to compete): ask for a name in the game, and rework the leaderboard you're not yet happy with; waits on you picking it.
+- A share button that sends the game to friends (tester's suggestion); waits on you picking it.
+- Block skins or hats bought with coins earned per goal, maybe coins for real money (tester's suggestion); waits on you picking it.
+- A domain for the game, e.g. infinite-unblock-me.com (your idea); waits on you picking a name.
 - Rooms made on a device differ by device, so two devices with the same seed can be given different rooms once one has made its own (the shipped library is the same everywhere; each world is stored with its stamps); a fixed schedule of which device room a goal may use; waits on shared seeds (a daily board) needing it.
 - Filling a room's swept cells with the world mostly jams it (about a third of stamped rooms keep all or part of that fill; the rest clear those cells, logged as `room.fill`); a check over a window round the room, not just its box; waits on the play logs showing whether it matters.
 - Taps that move a block when the player meant to pan (subject b): fast swipes as pans, or similar; the log now has the data; waits on you picking it.
@@ -60,6 +66,13 @@ Notes from play tests (not AI generated): issues, observations and ideas, many w
 - **Done**: more dopamine on finish (stars from the sides of the screen).
 - First level in Telegram's browser had no red block (maybe state left from earlier tests); then in Safari (also used for earlier tests) the first level had several blocks on the same track plus one on the goal. Question: reset on every change to world or block generation, on every update, or keep?
 - First question after moving a block: "why is it green?". Maybe remove the colour change on move; experiment: tint every block slightly differently instead.
+
+### Play test 2026-11-13 (4 players in one room)
+- Asked for a leaderboard: several people played in the same room at once and wanted to compete; needs players' names.
+- Wanted to see their goal count to compare how far they'd come. The number on a finished red block wasn't visible enough, as goals were far apart with the stamped rooms (maybe better with the travel goals; untested, no graph yet of the distance from one goal to the next). **Done**: a "Level N" label top right. Other ideas: show it on the red block during a level, or in the finish animation.
+- Suggested block skins or hats, coins per goal to buy them, and maybe real money for coins.
+- Suggested a share button to send the game to friends.
+- 3 of 4 said their phones got hot after they stopped playing; probably the background worker making rooms.
 
 ### Own observations
 - **Done**: possibly the same starting seed on several devices. Checked: a new random seed on first visit and every reset, all 21 uploaded seeds differ; kept as is.
