@@ -62,9 +62,17 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_error(413)
             return
         body = self.rfile.read(length)
+        if len(body) < length:
+            # Cut off: the phone closed the page mid-upload (a big upload goes by fetch as the
+            # page hides, and the browser may stop it). The last whole upload stays; nobody waits
+            # for an answer.
+            self.log_message("upload cut off: %d of %d bytes", len(body), length)
+            self.close_connection = True
+            return
         try:
             json.loads(body)
-        except ValueError:
+        except ValueError as e:
+            self.log_message("upload not JSON: %s", e)
             self.send_error(400)
             return
         PLAY_DATA.mkdir(exist_ok=True)
