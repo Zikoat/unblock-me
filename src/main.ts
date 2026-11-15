@@ -179,7 +179,7 @@ function placeView(): void {
 // view that was still (to the next goal, after a finish), so it doesn't lurch off.
 // `soft`: eased softly in and out (an edge arrow's); `arrive`: the block it goes to, which
 // throbs as it gets there.
-let flight: { from: { scale: number; offsetX: number; offsetY: number }; to: Point; start: number | null; delay: number; duration: number; scale?: number; gentle?: boolean; soft?: boolean; arrive?: string } | null = null;
+let flight: { from: { scale: number; offsetX: number; offsetY: number }; to: Point; start: number | null; delay: number; duration: number; scale?: number; gentle?: boolean; soft?: boolean; arrive?: string; focus?: Goal } | null = null;
 function flyTo(to: Point, delay = 0, duration = 350, scale?: number, gentle = false): void {
   flight = { from: { ...scene.camera }, to, start: null, delay, duration, scale, gentle };
 }
@@ -204,11 +204,23 @@ function flying(now: number): void {
     offsetX: flight.from.offsetX + (to.offsetX - flight.from.offsetX) * e,
     offsetY: flight.from.offsetY + (to.offsetY - flight.from.offsetY) * e,
   };
+  // Flown to another goal in play by its pin: it becomes the one played half way there, its
+  // target and score fading in.
+  if (t >= 0.5 && flight.focus) takeFocus(flight, now);
   if (t >= 0.8 && flight.arrive) {
     throb = { id: flight.arrive, born: now };
     flight.arrive = undefined;
   }
   if (t >= 1) flight = null;
+}
+
+function takeFocus(f: { focus?: Goal }, now = performance.now()): void {
+  const g = f.focus;
+  f.focus = undefined;
+  if (!g || !scene.open?.includes(g)) return;
+  focusOn(g);
+  goalShownAt = now;
+  save();
 }
 
 function load<T>(key: string, fallback: T): T {
@@ -1525,7 +1537,10 @@ const gestures = new Gestures(scene, {
     pushed(move);
   },
   // The view stops following the soul (or anything gliding it) as the player takes it.
-  onViewTaken: () => (flight = null),
+  onViewTaken: () => {
+    if (flight?.focus) takeFocus(flight); // (taken before half way: the goal is still the one played)
+    flight = null;
+  },
   onInput: (how) => (input = how),
   onSound: (sound) => sfx.play(sound, performance.now()),
   onSnap: (slide) => animate(slide),
@@ -2365,6 +2380,8 @@ canvas.addEventListener("pointerup", (e) => {
     if (to) {
       pinThrob = { pin: to.pin, born: -1, at: to.on };
       hopTo(to, to.id);
+      const other = scene.open?.find((g) => g.id === to.id);
+      if (other) flight!.focus = other;
     }
     redraw();
     return;

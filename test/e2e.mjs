@@ -1186,6 +1186,38 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
   await page.close();
 }
 
+// --- Several goals: tapping another goal's red pin flies there, and half way it becomes the
+// goal being played.
+{
+  const page = await clocked(await browser.newPage({ viewport: { width: 412, height: 915 } }));
+  await page.goto(url + "&multi=1");
+  await page.evaluate(() => { unblock.forget(); localStorage.setItem("unblock-me:v13:seed", "20261115"); });
+  await page.goto(url + "&multi=1");
+  await frame(page);
+  await page.evaluate(() => unblock.goalReady());
+  const g = await page.evaluate(() => unblock.scene.goal);
+  for (const m of g.solution) await page.evaluate((m) => unblock.play(m), m);
+  for (let t = 0; t < 40 && !(await page.evaluate(() => unblock.open().length)); t++) await pass(page, 500);
+  await pass(page, 12000);
+  // The view on the goal being played; the other is off screen, with its pin.
+  const other = await page.evaluate((UNIT) => {
+    const g = unblock.scene.goal, at = unblock.scene.moved.get(g.id) ?? unblock.scene.layout.byId(g.id);
+    unblock.scene.camera = { scale: 1, offsetX: 206 - (at.x + 1) * UNIT, offsetY: 457 - (at.y + 0.5) * UNIT };
+    unblock.redraw();
+    return unblock.open().at(-1).id;
+  }, UNIT);
+  await frame(page);
+  const pin = await page.evaluate((id) => unblock.pins().reds.find((a) => a.id === id), other);
+  check(!!pin, `the other goal has a red pin (${other})`);
+  if (pin) {
+    await page.mouse.click(pin.x, pin.y);
+    await pass(page, 1500);
+    await frame(page);
+    check(await page.evaluate((id) => unblock.scene.goal?.id === id && unblock.playLog.at(-1)?.e !== "proofBroken", other), "tapping it flies there and makes it the goal being played");
+  }
+  await page.close();
+}
+
 // --- Several goals at once (the default; ?multi=0 turns it off): after the first world goal the soul splits, two goals
 // in play, each with its own red block; a move on the other's ground makes it the one played
 // (and counts only for it); later the soul merges onto a red block already in play.
