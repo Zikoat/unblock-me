@@ -476,15 +476,18 @@ export function draw(
       else if (g.used !== undefined && !g.step && !(finish?.island && finish.id === g.id)) drawScoreTrack(ctx, trackRect(cells), fewestOf(g), shownUsed(g)!, { t: finish?.id === g.id ? (finishClock(scene, finish, now) ?? Infinity) : Infinity, undone: g.undone, trace: finish?.id === g.id ? trace : undefined, detail });
     }
   });
-  // Each number over its row of stars: on a star not won, nearest the middle, so no won star
-  // is hidden (all five won: the middle one, the count still plain).
+  // Each number over its row of stars, on the star nearest the middle that can be hidden
+  // without hiding how many were won.
   for (const { block, at } of numbered) {
     const g = scene.done.find((d) => d.id === block.id), cells = g && targetCells(scene, g);
     let spot: { x: number; y: number } | undefined;
     if (g && cells && g.used !== undefined && cells.x === block.x && cells.y === block.y) {
-      const r = trackRect(cells), mx = r.x + r.width / 2, my = r.y + r.height / 2;
-      const lost = starRow(r, fewestOf(g), shownUsed(g)!).filter((p) => p.kind === "lost");
-      spot = lost.sort((a, b) => Math.hypot(a.x - mx, a.y - my) - Math.hypot(b.x - mx, b.y - my))[0];
+      const row = starRow(trackRect(cells), fewestOf(g), shownUsed(g)!), mid = (row.length - 1) / 2;
+      // (The row is the stars not won, then those won: a hidden star still reads from its
+      // neighbours, won if the one before it is, not won if the one after it isn't. Only the
+      // two either side of where won begins can't be hidden.)
+      const reads = (i: number) => row[i - 1]?.kind === "won" || row[i + 1]?.kind === "lost" || (row[i]!.kind === "medal");
+      spot = row.map((p, i) => ({ ...p, i })).filter((p) => reads(p.i)).sort((a, b) => Math.abs(a.i - mid) - Math.abs(b.i - mid))[0];
     }
     drawNumber(ctx, block, numbers!.get(block.id)!, at, spot);
   }
