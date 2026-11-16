@@ -35,6 +35,7 @@ Release (the end goal; what goes in before release and what is cut: docs/release
 - A share button that sends the game to friends (tester's suggestion); waits on you picking it.
 - Block skins or hats bought with coins earned per goal, maybe coins for real money (tester's suggestion); waits on you picking it.
 - A domain for the game, e.g. infinite-unblock-me.com (your idea); waits on you picking a name.
+- After a reload, blocks in view sometimes differ from before it (3 of 224 page loads, all on your phone, up to 17 blocks; logged as visibleChange, cause reload); find which stamp or fill changes; waits on you picking it.
 - Rooms made on a device differ by device, so two devices with the same seed can be given different rooms once one has made its own (the shipped library is the same everywhere; each world is stored with its stamps); a fixed schedule of which device room a goal may use; waits on shared seeds (a daily board) needing it.
 - Filling a room's swept cells with the world mostly jams it (about a third of stamped rooms keep all or part of that fill; the rest clear those cells, logged as `room.fill`); a check over a window round the room, not just its box; waits on the play logs showing whether it matters.
 - Taps that move a block when the player meant to pan (subject b): fast swipes as pans, or similar; the log now has the data; waits on you picking it.
