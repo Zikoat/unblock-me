@@ -410,6 +410,9 @@ function save(): void {
   } catch {
     // Private mode or full storage: changes just don't survive a reload.
   }
+  // (The view check too, with every save: kept only as the page hid, a page closed without
+  // hiding left an older one, and the moves made since showed as the world changing.)
+  saveViewCheck();
   lookAhead();
 }
 
@@ -498,6 +501,17 @@ const grounds = new WeakMap<Goal, Rect>();
 let routed = scene.history.length;
 /** A split's reached goal, whose second goal is asked for once the first shows. */
 let splitFrom: Goal | null = null;
+// A goal shown while several goals were off has no count of its own: it starts from the moves
+// made on it so far (it had started from 0, so a goal finished with one move after the update
+// that turned several goals on scored 1). With them off, the counts go (they would go stale).
+for (const g of [scene.goal, ...scene.open]) {
+  if (!g || squareOf(g) !== null) continue;
+  if (!multi) delete g.count;
+  else if (g.count === undefined) {
+    g.count = movesSince(g.begun ?? scene.history.length);
+    g.countedAt = scene.history.length - 1; // (the same block moved again next counts once)
+  }
+}
 // The stored history was logged before this page loaded; log only what comes after it.
 logged = scene.history.length;
 // Each page load starts a stretch of play on one build.

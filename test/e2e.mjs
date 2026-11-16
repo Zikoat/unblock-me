@@ -198,7 +198,7 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
   check(await page.evaluate(() => unblock.scene.camera.offsetX === 170 && unblock.scene.camera.offsetY === 370 && unblock.scene.camera.scale === 1), "and the view centred");
   await page.evaluate(() => unblock.goalReady());
   const stored = await page.evaluate(() => Object.fromEntries(Object.keys(localStorage).sort().map((k) => [k, localStorage.getItem(k)])));
-  const { "unblock-me:v13:goal": storedGoal, "unblock-me:camera": storedCamera, "unblock-me:log": storedLog, "unblock-me:device": storedDevice, "unblock-me:v13:rooms": storedRooms, "unblock-me:rooms-made": storedMade, "unblock-me:v13:seen": storedSeen, "unblock-me:rooms-seen": roomsSeen, ...rest } = stored;
+  const { "unblock-me:v13:goal": storedGoal, "unblock-me:camera": storedCamera, "unblock-me:log": storedLog, "unblock-me:device": storedDevice, "unblock-me:v13:rooms": storedRooms, "unblock-me:rooms-made": storedMade, "unblock-me:v13:seen": storedSeen, "unblock-me:rooms-seen": roomsSeen, "unblock-me:view-check": _viewCheck, ...rest } = stored;
   check(Array.isArray(JSON.parse(roomsSeen ?? "null")), `the rooms played are kept through the reset (${roomsSeen})`);
   // (The first goal's room, stamped into the new world; the device's own rooms survive.)
   check(JSON.parse(storedRooms ?? "{}").seed === seedAfter && !!storedMade, `the rooms stamped belong to the new seed, the device's rooms are kept (${storedRooms?.slice(0, 40)})`);
@@ -1185,6 +1185,36 @@ const pass = (page, ms) => (fake ? page.clock.runFor(ms) : page.waitForTimeout(m
   await frame(page);
   await expectColor(page, [1, 200], "wall", "the joined wall reaches the view's edge");
   await page.close();
+}
+
+// --- A goal begun with several goals off and finished after a reload with them on counts all
+// its moves (it had counted only those after the reload: a 6-move goal scored 1).
+{
+  const page = await clocked(await browser.newPage({ viewport: { width: 412, height: 915 } }));
+  await page.goto(url + "&multi=0");
+  await page.evaluate(() => { unblock.forget(); localStorage.setItem("unblock-me:v13:seed", "20261115"); });
+  await page.goto(url + "&multi=0");
+  await page.evaluate(() => unblock.goalReady());
+  const g = await page.evaluate(() => unblock.scene.goal);
+  for (const m of g.solution.slice(0, -1)) await page.evaluate((m) => unblock.play(m), m);
+  await pass(page, 1000);
+  await page.goto(url + "&multi=1");
+  await frame(page);
+  await page.evaluate((m) => unblock.play(m), g.solution.at(-1));
+  await pass(page, 500);
+  const used = await page.evaluate((id) => unblock.scene.done.find((d) => d.id === id)?.used, g.id);
+  check(used === g.solution.length, `a goal finished across a reload that turned several goals on counts all its moves (${used} of ${g.solution.length})`);
+  // The page closed without hiding (as when a phone ends it): its moves are not taken for the
+  // world changing on the next load.
+  const stored = await page.evaluate(() => Object.fromEntries(Object.keys(localStorage).map((k) => [k, localStorage.getItem(k)])));
+  await page.close();
+  const again = await browser.newPage({ viewport: { width: 412, height: 915 } });
+  await again.addInitScript((st) => { if (sessionStorage.getItem("seeded")) return; sessionStorage.setItem("seeded", "1"); for (const [k, v] of Object.entries(st)) localStorage.setItem(k, v); }, stored);
+  await again.goto(url + "&multi=1");
+  await frame(again);
+  const changes = await again.evaluate(() => unblock.playLog.filter((e) => e.e === "visibleChange"));
+  check(!changes.length, `a page closed without hiding leaves its own moves out of the next load's check (${JSON.stringify(changes)})`);
+  await again.close();
 }
 
 // --- Several goals: tapping another goal's red pin flies there, and half way it becomes the
