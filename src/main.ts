@@ -295,6 +295,13 @@ type LogEvent =
 const LOG_MAX = 3000;
 // A trial keeps its own log, from empty and never stored: uploaded by itself, labelled with
 // the trial (trialData), apart from the player's progress and play log.
+/** Save once the move's slide is under way: saving (the log is long) took 50 to 100 ms on a
+ * phone, before the tapped block could start to move. (Leaving the page saves at once.) */
+let saveTimer: ReturnType<typeof setTimeout> | undefined;
+function saveSoon(): void {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(save, 300);
+}
 const playLog: (LogEvent & { t: number })[] = (() => {
   if (trial) return [];
   try {
@@ -355,6 +362,7 @@ const trialUrl = () => `play-data?device=${device}&trial=${trial!.label}&session
 // and the page there asks for this upload (src/carry.ts). A beacon holds 64 kB at most; a
 // bigger upload goes by fetch while the page still runs.
 function sendOnLeave(): void {
+  if (saveTimer !== undefined) save(); // (a save still waiting)
   if (trial && unsent) navigator.sendBeacon(trialUrl(), new Blob([JSON.stringify(trialData())], { type: "application/json" }));
   else if (unsent && !shared && !forgetting) {
     save();
@@ -381,6 +389,8 @@ function logMoves(): void {
 }
 
 function save(): void {
+  clearTimeout(saveTimer);
+  saveTimer = undefined;
   if (trial) return logMoves(); // a trial's moves go to its own log, nothing stored
   if (shared || forgetting) return;
   logMoves();
@@ -1253,6 +1263,7 @@ function groundOf(goal: Goal): Rect {
 }
 function routeMoves(): void {
   if (!multi) return;
+  const toCheck = new Set<Goal>();
   routed = Math.min(routed, scene.history.length);
   for (; routed < scene.history.length; routed++) {
     const m = scene.history[routed]!, b = scene.layout.byId(m.id);
@@ -1260,6 +1271,7 @@ function routeMoves(): void {
     const all = [scene.goal, ...(scene.open ?? [])].filter((g): g is Goal => !!g);
     const hits = (g: Goal) => g.id === m.id || [m.from, m.to].some((p) => { const r = groundOf(g); return p.x < r.x + r.width && p.x + b.w > r.x && p.y < r.y + r.height && p.y + b.h > r.y; });
     const touched = all.filter(hits);
+    for (const g of touched) toCheck.add(g);
     // (Grounds side by side can overlap: then the goal whose proof moves this block.)
     const moves = (g: Goal) => g.id === m.id || g.solution.some((x) => x.id === m.id);
     const owners = touched.filter(moves);
@@ -1273,11 +1285,30 @@ function routeMoves(): void {
     if (pick) focusOn(pick);
   }
   // (World goals only: an island square's later goals' proofs follow its earlier ones', not the
-  // player's own way; nor on a placed board.)
-  if (!placed) for (const g of [scene.goal, ...(scene.open ?? [])]) if (g && !g.broken && squareOf(g) === null) checkProof(g);
+  // player's own way; nor on a placed board. Only goals whose ground the moves touched, and
+  // later, when the page is idle: done at once, it held up the slide of the block tapped, by
+  // 0.2 s and up to 2 s on a phone.)
+  if (!placed) for (const g of toCheck) if (!g.broken && squareOf(g) === null) proofsDue.add(g);
+  if (proofsDue.size) checkProofsLater();
   // Another goal's red block put on its target: that is the goal reached.
   const solved = scene.open?.find((g) => { const at = whereIs(scene, g.id); return !!at && at.x === g.target.x && at.y === g.target.y; });
   if (solved) focusOn(solved);
+}
+/** Goals whose proofs are yet to be checked (checkProof), when the page is idle. */
+const proofsDue = new Set<Goal>();
+let proofsWait = false;
+function checkProofsLater(): void {
+  if (proofsWait) return;
+  proofsWait = true;
+  const run = () => {
+    proofsWait = false;
+    for (const g of [...proofsDue]) {
+      proofsDue.delete(g);
+      if (!g.broken && (g === scene.goal || scene.open?.includes(g))) checkProof(g);
+    }
+  };
+  if ("requestIdleCallback" in window) requestIdleCallback(run, { timeout: 2000 });
+  else setTimeout(run, 300);
 }
 /** An assertion (a failure is a bug, logged as `proofBroken`, once a goal): a goal in play can
  * always be solved by its proof once the moves made on its ground since it showed are undone
@@ -1299,15 +1330,33 @@ function proofBreaks(goal: Goal): string | null {
     const b = scene.layout.byId(m.id);
     if (b && (m.id === goal.id || goal.solution.some((x) => x.id === m.id) || inGround(m, b))) touched.add(m.id);
   }
-  const board: Changes = { moved: new Map(scene.moved) };
-  const moved = board.moved as Map<string, Point>;
+  // The cells round the goal and the moves replayed, looked up once: which block is on each
+  // (a lookup of the board per move had made each check take 0.1 to 0.3 s on a phone).
+  const moved = new Map(scene.moved);
+  let x0 = ground.x, y0 = ground.y, x1 = ground.x + ground.width, y1 = ground.y + ground.height;
+  for (const m of [...since.filter((m) => touched.has(m.id)), ...goal.solution]) {
+    const b = scene.layout.byId(m.id);
+    if (b) for (const p of [m.from, m.to]) ((x0 = Math.min(x0, p.x)), (y0 = Math.min(y0, p.y)), (x1 = Math.max(x1, p.x + b.w)), (y1 = Math.max(y1, p.y + b.h)));
+  }
+  const region = { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
+  const occupied = new Map<string, string>();
+  const cover = (id: string, x: number, y: number, w: number, h: number, on: boolean) => {
+    for (let i = 0; i < w; i++) for (let j = 0; j < h; j++) on ? occupied.set(`${x + i},${y + j}`, id) : occupied.delete(`${x + i},${y + j}`);
+  };
+  for (const b of blocksIn(scene.layout, region, scene)) cover(b.id, b.x, b.y, b.w, b.h, true);
   const legal = (m: Move) => {
     const b = scene.layout.byId(m.id), at = b && (moved.get(m.id) ?? { x: b.x, y: b.y });
     if (!b || !at || at.x !== m.from.x || at.y !== m.from.y) return false;
     const horizontal = b.w > b.h;
     if (horizontal ? m.to.y !== at.y : m.to.x !== at.x) return false;
-    const { lo, hi } = slideRange(scene.layout, { ...b, ...at }, board), along = horizontal ? m.to.x : m.to.y;
-    if (along < lo || along > hi) return false;
+    // Every cell it passes over free, but its own.
+    const sx = Math.min(at.x, m.to.x), sy = Math.min(at.y, m.to.y), ex = Math.max(at.x, m.to.x) + b.w, ey = Math.max(at.y, m.to.y) + b.h;
+    for (let x = sx; x < ex; x++) for (let y = sy; y < ey; y++) {
+      const on = occupied.get(`${x},${y}`);
+      if (on !== undefined && on !== m.id) return false;
+    }
+    cover(m.id, at.x, at.y, b.w, b.h, false);
+    cover(m.id, m.to.x, m.to.y, b.w, b.h, true);
     moved.set(m.id, m.to);
     return true;
   };
@@ -1528,7 +1577,7 @@ const gestures = new Gestures(scene, {
   onChange: () => {
     debugCode(null);
     routeMoves();
-    save();
+    saveSoon();
     reachGoal(performance.now()); // a drag lands at once; a tap's slide reaches it at its end
   },
   onPush: (move) => {
