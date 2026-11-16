@@ -27,7 +27,10 @@ import type { Move } from "./rules";
 
 export const LIBRARY = library as Room[];
 
-export const PACING = { AIM_FROM: 5, AIM_TO: 11, RISE: 30, EXTRA_TO: 3, SPIKE_EVERY: 7, SPIKE_FROM: 6, SPIKE: 14, SPIKE_EXTRA: 5, AFTER: 2, EASE: 3, EXTRA_WEIGHT: 1.5 };
+// SEEN: what a room the player has had before (in any world: `seen`) costs, so they get rooms
+// new to them first while any is near the aim (seeds hardly change which rooms are nearest it:
+// two worlds shared about 50 of their first 60 rooms).
+export const PACING = { AIM_FROM: 5, AIM_TO: 11, RISE: 30, EXTRA_TO: 3, SPIKE_EVERY: 7, SPIKE_FROM: 6, SPIKE: 14, SPIKE_EXTRA: 5, AFTER: 2, EASE: 3, EXTRA_WEIGHT: 1.5, SEEN: 4 };
 
 export type Pace = { fewest: number; extra: number; spike: boolean; easy: boolean };
 
@@ -52,7 +55,7 @@ export const baseId = (id: string) => id.split("/")[0]!;
 /** The rooms to try for the n-th world goal, best first (up to `count`): the device's own
  * rooms and the library's, those not used yet, nearest the aim; a spike takes only rooms that
  * reach it (else the hardest there are). Used ones come back only when all are used. */
-export function pickRooms(pool: readonly Room[], used: ReadonlySet<string>, n: number, seed: number, count = 4, P = PACING): Room[] {
+export function pickRooms(pool: readonly Room[], used: ReadonlySet<string>, n: number, seed: number, count = 4, P = PACING, seen: ReadonlySet<string> = new Set()): Room[] {
   const p = pace(n, P);
   let fresh = pool.filter((r) => !used.has(baseId(r.id)));
   if (fresh.length < count) fresh = [...pool];
@@ -61,7 +64,7 @@ export function pickRooms(pool: readonly Room[], used: ReadonlySet<string>, n: n
     return Math.abs(r.f - p.fewest) + P.EXTRA_WEIGHT * Math.abs(r.e - p.extra);
   };
   // (The device's own rooms first among equals: the library is the fallback.)
-  return fresh.map((r) => [r, cost(r) + 0.5 * hash(seed + n, r.id) - (r.id.startsWith("d") ? 0.75 : 0)] as const).sort((a, b) => a[1] - b[1]).slice(0, count).map((a) => a[0]);
+  return fresh.map((r) => [r, cost(r) + 0.5 * hash(seed + n, r.id) - (r.id.startsWith("d") ? 0.75 : 0) + (seen.has(baseId(r.id)) ? P.SEEN : 0)] as const).sort((a, b) => a[1] - b[1]).slice(0, count).map((a) => a[0]);
 }
 
 /** The states a stamp's fill checks may search in all (stampGoal): about 0.6 s on a slow phone
@@ -75,7 +78,8 @@ export type RoomGoal = { goal: Goal; stamp: Stamp; fill: string; states: number 
  * (where they started and where they are), of the cells `keepOut` covers (the island, the UI,
  * earlier targets, the view and a margin round it: a stamp there would change blocks before
  * the player's eyes), and of other rooms. */
-export type Ground = { moved: ReadonlyMap<string, Point>; layout: Layout; keepOut: readonly Rect[]; stamps: readonly Stamp[] };
+/** `seen`: the rooms the player has had in any world (by base id), new ones first. */
+export type Ground = { moved: ReadonlyMap<string, Point>; layout: Layout; keepOut: readonly Rect[]; stamps: readonly Stamp[]; seen?: ReadonlySet<string> };
 /** The cells a stamp can change: its box and a cell round it (a world block sticking into the
  * box goes, leaving its outside cell empty); nothing beyond (layout.ts stampParts). */
 export const stampReach = (s: { x: number; y: number; room: { W: number; H: number } }): Rect => ({ x: s.x - 1, y: s.y - 1, width: s.room.W + 2, height: s.room.H + 2 });
@@ -227,7 +231,7 @@ export function roomGoal(pool: readonly Room[], n: number, near: Point, g: Groun
   const taken = movedCells(g);
   if (screen && pace(n).spike) near = spikeSpot(near, n, world.seed, screen);
   let tried = 0;
-  for (const room of pickRooms(pool, used, n, world.seed)) {
+  for (const room of pickRooms(pool, used, n, world.seed, undefined, undefined, g.seen)) {
     const turns = [...Array(8).keys()].sort((a, b) => hash(world.seed + n, `${room.id}/${a}`) - hash(world.seed + n, `${room.id}/${b}`));
     for (const s of turns.slice(0, 4)) {
       tried++;

@@ -10,7 +10,7 @@ test("only well-formed ids are carried", () => {
 });
 
 test("progress keys are the world, the log and the player's debug settings, not the device id", () => {
-  for (const key of ["unblock-me:v13:goal", "unblock-me:v13:moved", "unblock-me:v14:seed", "unblock-me:log", "unblock-me:rooms-made", "unblock-me:camera", "unblock-me:fps", "unblock-me:debug", "unblock-me:border", "unblock-me:green"]) expect(isProgressKey(key)).toBe(true);
+  for (const key of ["unblock-me:v13:goal", "unblock-me:v13:moved", "unblock-me:v14:seed", "unblock-me:log", "unblock-me:rooms-made", "unblock-me:camera", "unblock-me:fps", "unblock-me:debug", "unblock-me:border", "unblock-me:green", "unblock-me:rooms-seen"]) expect(isProgressKey(key)).toBe(true);
   for (const key of ["unblock-me:device", "unblock-me:view-check", "other:v13:goal"]) expect(isProgressKey(key)).toBe(false);
 });
 

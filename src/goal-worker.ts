@@ -35,7 +35,7 @@ export type GoalRequest = {
   /** With rooms on: the rooms this device made (the library's are the worker's own), the
    * world goal's number (for the pacing), where no room may go (the island, the UI, the view
    * and a margin round it), and the screen's size (a room further, or a spike, is travelled to). */
-  roomsOn?: { made: Room[]; n: number; keepOut: Rect[]; screen?: Screen };
+  roomsOn?: { made: Room[]; n: number; keepOut: Rect[]; screen?: Screen; seen?: string[] };
   /** A travel goal towards room k's red block at `to` (src/travel.ts), the room stamped already. */
   travel?: { to: Point; k: number; room: string; screen: Screen };
 };
@@ -55,7 +55,7 @@ self.onmessage = (event: MessageEvent<GoalRequest>) => {
     }
   }
   if (roomsOn && !placed) {
-    const made = roomOrTravel([...roomsOn.made.filter(isRoom), ...LIBRARY], roomsOn.n, near, { moved: map, layout, keepOut: [...roomsOn.keepOut, ...avoid], stamps: rooms }, { seed, tries, walls, ui }, roomsOn.screen, { exclude: new Set(exclude), avoid });
+    const made = roomOrTravel([...roomsOn.made.filter(isRoom), ...LIBRARY], roomsOn.n, near, { moved: map, layout, keepOut: [...roomsOn.keepOut, ...avoid], stamps: rooms, seen: new Set(roomsOn.seen ?? []) }, { seed, tries, walls, ui }, roomsOn.screen, { exclude: new Set(exclude), avoid });
     if (made) {
       const { goal, difficulty } = made;
       postMessage({ job, goal });

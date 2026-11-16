@@ -25,7 +25,7 @@ import { OPEN_TRIALS_K } from "./trials-open-k";
 import { ROOM_TRIALS } from "./trials-rooms";
 import { DECOY_TRIALS } from "./trials-decoys";
 import { isRoom, type Room } from "./room";
-import { dist, pace as roomPace, type Screen, stampReach, TRAVEL_AIM } from "./rooms";
+import { baseId, dist, pace as roomPace, type Screen, stampReach, TRAVEL_AIM } from "./rooms";
 import { bayReached, GATE, GATE_GONE, inIsland, isWorldGoal, worldNumbers, ISLAND_KEEP_OUT, opensGate, isLast, islandCamera, islandGoals, islandRects, nextIslandGoal, squareAt, squareMiddle, squareOf } from "./island";
 import { fixedLayout, type Layout, MAX_TRIES, MAX_WALLS, MIN_TRIES, randomLayout, TRIES, UNIT, uiArea, WALLS, type Placed, type Stamp, type Ui } from "./layout";
 import { CARD, CUE_MS, draw, fading, islandCardRect, resetFades, RIPPLE_MS, SHAKE_MS, THROB_MS, redArrow, redArrows, redPin, uiArrow, type Sparkle } from "./render";
@@ -435,6 +435,13 @@ let stamps: Stamp[] = roomsFit ? storedRooms.stamps : [];
 /** The room's goal travel goals lead to (src/travel.ts), its room stamped already; null when
  * the player is not being led anywhere. */
 let trek: Goal | null = (roomsFit && storedRooms.trek) || null;
+/** The rooms the player has had, in this world and any before (a reset keeps them; carried
+ * with the progress), by base id: new rooms come first (rooms.ts PACING.SEEN). Also those
+ * named in the play log and the stamps, for saves from before it was kept. */
+const SEEN_KEY = "unblock-me:rooms-seen";
+const seenRooms = new Set<string>(load<string[]>(SEEN_KEY, []));
+for (const st of stamps) seenRooms.add(baseId(st.room.id));
+for (const e of load<{ e: string; room?: { id?: string } }[]>(LOG_KEY, [])) if (e.e === "goal" && e.room?.id) seenRooms.add(baseId(e.room.id));
 /** Rooms this device made in the background (src/room-worker.ts), and the next one's number. */
 const made = load<{ next: number; from?: number; rooms: Room[] }>(MADE_KEY, { next: 0, rooms: [] });
 // Uploads keep these rooms only by id and numbers, so progress carried from the server (?p=,
@@ -783,7 +790,7 @@ function roomsPart(n: number, near: Point): Pick<GoalRequest, "rooms" | "roomsOn
   // (Nor on the ground of another goal in play: its moves would change that goal's board.)
   for (const g of scene.open ?? []) keepOut.push(grow(groundOf(g), 1));
   // (A room held back HELD_MAX times running: the maker's goal, which changes no cell.)
-  return { rooms: stamps, ...(withRooms && !placed && held < HELD_MAX && { roomsOn: { made: made.rooms, n, keepOut, screen } }) };
+  return { rooms: stamps, ...(withRooms && !placed && held < HELD_MAX && { roomsOn: { made: made.rooms, n, keepOut, screen, seen: [...seenRooms] } }) };
 }
 /** For tests: a change made to the next goals a worker sends (this many; only the quick
  * way's, or only those made ahead, if `by` says), before they are checked. */
@@ -1418,6 +1425,12 @@ function stampIn(goal: Goal): Stamp | undefined {
   delete goal.stamp;
   const before = scene.layout;
   stamps = [...stamps, stamp];
+  seenRooms.add(baseId(stamp.room.id));
+  try {
+    if (!forgetting) localStorage.setItem(SEEN_KEY, JSON.stringify([...seenRooms]));
+  } catch {
+    // No storage: kept as long as the page.
+  }
   scene.layout = worldOf();
   worldChanged("stamp", before, scene.layout, stampReach(stamp));
   return stamp;
@@ -1677,6 +1690,7 @@ function forgetEverything(): void {
     localStorage.setItem(DEVICE_KEY, device);
     localStorage.setItem(DEBUG_KEY, JSON.stringify(debugOn));
     localStorage.setItem(MADE_KEY, JSON.stringify(made));
+    localStorage.setItem(SEEN_KEY, JSON.stringify([...seenRooms]));
   } catch {
     // No storage: nothing to keep.
   }

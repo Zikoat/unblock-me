@@ -269,3 +269,18 @@ test("a room with no ground within a screen is reached through travel goals", ()
   expect(dist(near, made.goal.then!.start!)).toBeGreaterThan(screen.far);
   travel(made, near, view);
 }, 60_000);
+
+test("rooms the player has had in earlier worlds come after new ones near the aim, so two worlds hardly repeat", () => {
+  const base = (id: string) => id.split("/")[0]!;
+  const world = (seed: number, seen: Set<string>) => {
+    const used = new Set<string>();
+    for (let n = 0; n < 30; n++) used.add(base(pickRooms(LIBRARY, used, n, seed, 4, undefined, seen)[0]!.id));
+    return used;
+  };
+  const first = world(1044539963, new Set());
+  // Without the memory another seed's world has mostly the same rooms; with it, few.
+  const again = [...world(2730398345, new Set())].filter((id) => first.has(id)).length;
+  const fresh = [...world(2730398345, first)].filter((id) => first.has(id)).length;
+  expect(again).toBeGreaterThan(20);
+  expect(fresh).toBeLessThan(5);
+});
