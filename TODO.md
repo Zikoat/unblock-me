@@ -4,46 +4,46 @@
 
 The research plan is research/roadmap.md; what we need from you is research/for-the-user.md.
 
-In approximate priority order, highest first; the middle ones are not ordered among themselves.
+Priority order is set in the groups below; within "Other items" the middle ones are not ordered among themselves.
 
-Release (the end goal; what goes in before release and what is cut: docs/release-plan.md):
-- Release on itch.io: as an HTML5 game first, then a portable executable; waits on the settings and sounds below.
-- Release as an Android app (a Trusted Web Activity or Capacitor); waits on the settings and sounds below.
-- Release as an iOS app (Capacitor; needs a Mac and an Apple developer account); waits on the Android release.
-- Release on Steam (desktop build, $100 fee, store page, trailer); waits on the trailer and the desktop build.
-- A trailer from gameplay recorded in the game, cut to the theme song; waits on the theme song.
-- Marketing, and whether to have ads at all (Unity Ads, AdMob or others; cut for the first release in the plan); waits on you deciding on money (docs/release-plan.md).
-- A link to GitHub in the game; waits on you picking where it goes.
-- Settings as slidable blocks in a pre-made area near the island's exit: music and sound effects on/off or volume as a slider, username, soul style (sign-in and multiplayer settings cut until after release); waits on you picking it.
-- Sounds for every interaction that has none, and a theme song, maybe from a designer on Fiverr or an Opus or Fable agent, with a debug block to download and upload a sound pack, a sound reel video, a maximalist and a balanced pack (docs/audio-plan.md); waits on you picking it.
-- Cutscenes: an action story in 3D block scenes with red as the hero (a party, a race, a train, a deathbed with the soul reborn), each with a level laid out to fit (docs/cutscenes.md); waits on the release.
-- Grim levels (a grim reaper icon) and god levels (a black void orb), extra hard at a branch's end, god ones solved by a typed move sequence, the last built from logic gadgets that defeat plain search (docs/grim-god.md); grim waits on you picking it, god on the release (maybe behind a supporter badge).
+Before release, in this order (your call, 2026-11-18; docs/release-plan.md):
+- A domain for the game, the most important, e.g. infinite-unblock-me.com (your idea); waits on you picking a name.
+- A rewrite in other technologies and languages: levels only pre-made or made on a server, a cross-platform renderer; it also ends the hot phones (3 of 4 testers, 2026-11-13, probably the background room worker) and the 1 MB uploads; waits on picking the stack.
+- Multiplayer: the server, the home and offline islands (reports/one-engine.html); waits on the rewrite.
+- Sign-in and a username, maybe needed before release; waits on multiplayer showing whether it is.
+- A "made with the help of AI" notice in the game (your idea); waits on you picking its wording and place.
+- Release on itch.io, Android, iOS and Steam from the cross-platform build (Steam: $100 fee, store page; iOS: a Mac and an Apple developer account); waits on the above.
+- Grim levels: mark the goals that are really hard with a grim reaper icon, rather than make a new kind (there are harder goals already); waits on you picking how hard counts.
 
+Marketing:
+- A trailer from gameplay recorded in the game, cut to music; waits on the release nearing.
+- Marketing, ads or not, and money (options in docs/release-plan.md); waits on you deciding on money.
 
+Not needed yet (after release, or when wanted):
+- Settings as slidable blocks (sound, music, username, soul style): players can mute for now, there is no music, soul style unsure; waits on a need.
+- A sound pack from a designer, with a debug block to load packs and a sound reel (docs/audio-plan.md): the sounds are decent, this is polish, and the pack tools only matter if a person is hired; waits on that.
+- Player names for the leaderboard, a share button and a GitHub link (testers asked for the first two): not important; waits on you picking them.
+- Cutscenes: an action story in 3D block scenes with red as the hero (docs/cutscenes.md); waits on the release.
+- God levels (a black void orb), solved by a typed move sequence, the last built from logic gadgets (docs/grim-god.md); waits on the release, maybe behind a supporter badge.
+
+Other items, roughly highest first:
 - In play, a goal the Referee rejects is asked for again once at another effort level (rejected again, none found); the spec asks the maker again with the next seed; waits on a maker that takes a seed.
 - The Gate's time is measured on the VM, the spec's is on a mid phone; waits on timing the maker on a phone.
 - The Reference is shallow (breadth first, about 5 moves at most), so it loses wherever a longer goal wins (ramp aims over 6, none); a deeper plain search; waits on the Tuner runs showing whether the records need it.
 - Tuner runs: effort 0 is at quality worst 5% 0.3 to 0.4 (Gate 0.8; it misses goals only effort 2's wider search finds: aim off by one, track blocks, far reach), and effort 1 and 2 are untuned; the Bench's cases have no walls while the game now starts at 4%; waits on cases with walls.
 - Medals on long goals: the measure stops at its board budget and the proof's length stands as the fewest, so a player who finds a shorter way wins a medal the game should not give (most medals in play, test/experiments/medals.ts); a deeper search, or shorter proofs; waits on you picking it.
-- Island squares that teach tap-push and a half-way drag (a tap-push can't solve it; none turned up in a 5x5 search, a tap stops the red block on its target), and squares with several goals that are rated (the card scores only the last goal); subject a and b never learnt one or the other; waits on you playing the teaching squares.
+- Island squares that teach tap-push and a half-way drag (a tap-push can't solve it; none turned up in a 5x5 search, a tap stops the red block on its target), and squares with several goals that are rated (the card scores only the last goal); subject a and b never learnt one or the other; about 6 players have been through the early squares; waits on reading their logs.
 - Does Telegram on iOS pass ?p= on to Safari: the iPhone check (unblock-me-lab research/identity-test.md); waits on a friend's iPhone.
-- Uploads are about 1 MB, mostly each goal's saved board snapshots: trim or send only what's new; waits on you picking it.
 - Two teaching walkthroughs from for-the-user.md (stuck means far from the goal, not trapped; why a room's count holds in the world); waits on you asking for them.
-- Phones got hot after playing (3 of 4 testers, 2026-11-13), probably the background room worker still making rooms: measure it and stop it when idle or hidden; waits on you picking it.
 - Several goals at once (your design): in the game by default (?multi=0 turns it off): splits, merges, up to 5 in play, moves counted per goal's ground, red pins for each (tap to go), an assertion that every goal stays solvable by its proof after undoing its own moves; open: whether stars need adjusting if that assertion ever fires; waits on the play logs (proofBroken).
-- Player names for the leaderboard (asked in play, players in one room wanted to compete): ask for a name in the game, and rework the leaderboard you're not yet happy with; waits on you picking it.
-- A share button that sends the game to friends (tester's suggestion); waits on you picking it.
 - Block skins or hats bought with coins earned per goal, maybe coins for real money (tester's suggestion); waits on you picking it.
-- A domain for the game, e.g. infinite-unblock-me.com (your idea); waits on you picking a name.
 - Rooms made on a device differ by device, so two devices with the same seed can be given different rooms once one has made its own (the shipped library is the same everywhere; each world is stored with its stamps); a fixed schedule of which device room a goal may use; waits on shared seeds (a daily board) needing it.
 - Filling a room's swept cells with the world mostly jams it (about a third of stamped rooms keep all or part of that fill; the rest clear those cells, logged as `room.fill`); a check over a window round the room, not just its box; waits on the play logs showing whether it matters.
-- Taps that move a block when the player meant to pan (subject b): fast swipes as pans, or similar; the log now has the data; waits on you picking it.
-- Playing far zoomed out (subject a, play data: phones at scale 0.2-0.6): cap the zoom, disable moves far out, or show it; waits on you picking it.
+- Taps that move a block when the player meant to pan (subject b): fast swipes as pans, or similar; the log now has the data; how to fix it is unclear; waits on an experiment.
 - Stars: many 1-star results (a zen mode, stars shown only after a while, or hidden at 1 star); waits on a brainstorm.
 - "Why is it green?": rethink a moved block's colour (or tint every block slightly differently); waits on you picking it.
 - Undo a reached goal: rewind to where its moves started counting and replay it for a better score; waits on you picking it.
 - Undo during a goal (or undoing the goal) loses the medal (shown faded) and is stored with the goal; waits on you picking it.
-- The multiplayer server, the home and offline islands (reports/one-engine.html); waits on the features settling.
 - Group picture puzzles in Telegram (your idea): a picture made of 2x1 blocks, scrambled by legal moves, solved together by a group, everyone seeing each other; waits on the multiplayer server and a Telegram mini app.
 - A block exactly on the goal rarer early on (subject b thought it impossible); mostly superseded by the teaching squares; waits on them.
 - Hovering a reached goal highlights the blocks its solution needed, and differently those moved without need; waits on you picking it.

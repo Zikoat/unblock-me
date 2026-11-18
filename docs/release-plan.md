@@ -1,36 +1,33 @@
 # Release plan
 
-The end goal is the game released on every platform: web, itch.io, Android, iOS and Steam. This page sorts the wanted features into what goes in before release and what is cut until after. The point is to keep the scope from growing. A feature not listed under "Before release" waits until the game is out.
+The end goal is the game released on every platform: web, itch.io, Android, iOS and Steam. This page sorts the wanted features into what goes in before release and what waits. A feature not listed under "Before release" waits until the game is out. Set by you on 2026-11-18.
 
-## Before release (small, and needed)
+## Before release, in order
 
-- **Settings as slidable blocks**, in a pre-made area near the island's exit:
-  - sound effects on/off (a block slid along a lane works as a volume slider);
-  - music on/off;
-  - username (the leaderboard needs it);
-  - soul style (the styles exist: comet, flame, glint).
-- **Sounds:**
-  - a sound for each interaction that has none;
-  - a theme song.
-  - Both can come from the audio designer's pack (docs/audio-plan.md).
-- **A link to GitHub** in the game.
-- **Platforms**, all from the one web build:
-  - itch.io as an HTML5 game: the smallest step, needing no wrapper;
-  - a desktop executable (Tauri or Electron) for itch.io and Steam;
-  - Android: a Trusted Web Activity or Capacitor wrapper;
-  - iOS: Capacitor, which needs a Mac and a paid Apple developer account;
-  - Steam: a $100 fee, the desktop build, a store page with capsule art and a trailer.
-- **A trailer:** gameplay recorded from the real game (the bot that plays goals can drive it), cut to the theme song.
+1. **A domain**, the most important (e.g. infinite-unblock-me.com).
+2. **A rewrite** in other technologies and languages:
+   - levels only pre-made, or made on a server, not on the phone (this also ends the hot phones);
+   - a renderer that runs on every platform.
+3. **Multiplayer**, built on the rewrite: the server, the home and offline islands (reports/one-engine.html).
+4. **Sign-in and a username**, maybe: multiplayer will show whether they're needed.
+5. **A "made with the help of AI" notice** in the game.
+6. **The releases**, all from the cross-platform build: itch.io, Android, iOS (needs a Mac and an Apple developer account) and Steam ($100 fee, a store page).
 
-## Cut until after release (a lot of work, not needed to ship)
+Open: **grim levels** may just be a grim reaper mark on goals that are really hard, since harder goals exist already. The open part is how hard counts.
 
-- Sign-in and accounts. The device id plus `?p=` carries progress well enough.
-- Multiplayer, the MMO server, offline and home islands, and group picture puzzles. The multiplayer setting goes with them.
-- Ads (Unity Ads, AdMob and others). They need consent dialogs and a different integration on each platform, and pay little at a small player count.
-- A coin shop, skins and hats.
-- God levels, the bot-solved levels (docs/grim-god.md). They are a side mode for programmers.
-- Cutscenes (docs/cutscenes.md).
-- Loose goals, shapes and the daily board. The daily board is small and could come back if there is time.
+## Marketing (not part of the release)
+
+- A trailer recorded from the game.
+- Marketing, and ads or not; it depends on the money choice below.
+
+## Not needed yet
+
+- Settings as slidable blocks: players can mute, there is no music yet, and soul style is unsure.
+- A sound pack from a designer (docs/audio-plan.md): the current sounds are decent; this is polish, and the pack tools only matter if a person is hired.
+- Player names on the leaderboard, a share button, a GitHub link.
+- God levels (docs/grim-god.md) and cutscenes (docs/cutscenes.md).
+- A coin shop, skins and hats; the daily board; loose goals.
+- Capping the zoom (not important).
 
 ## Open: earning money, or not
 
